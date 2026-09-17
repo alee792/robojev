@@ -127,7 +127,7 @@ def build_world(cfg: Config, arm: ArmSnapshot, entities: list[Entity], in_view_f
     else:
         gripper_state = "moving" if arm.gripper_goal is not None and abs(arm.gripper_goal - w_) > 0.006 else "partly open"
     nearest = min(views, key=lambda v: v.horizontal_m) if views else None
-    above = nearest.label if nearest and nearest.horizontal_m < 0.025 else None
+    above = nearest.label if nearest and nearest.horizontal_m < 0.045 else None   # 4.5 cm: a side grasp puts the tips 3 cm past the centre
     holding_label = None
     if arm.holding:
         # the held object is the one riding with the gripper (its track sits under the EE)
