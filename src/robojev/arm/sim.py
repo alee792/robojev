@@ -24,7 +24,7 @@ FOLLOWER_XML = SIM_DIR / "trossen_arm_mujoco/assets/wxai/wxai_follower.xml"
 TABLE_Z = -0.02   # table surface in base frame, like the real bay (base plate sits 2 cm proud)
 
 OBJECTS = [  # name, kind, xy, size, rgba
-    ("cup", "cylinder", (0.37, -0.07), (0.04, 0.055), (0.93, 0.90, 0.85, 1)),      # radius, half-height -> 11 cm tall
+    ("cup", "cylinder", (0.37, -0.07), (0.033, 0.055), (0.93, 0.90, 0.85, 1)),     # radius, half-height -> 6.6 x 11 cm (a paper cup low down)
     ("phone", "box", (0.30, 0.10), (0.035, 0.07, 0.012), (0.05, 0.05, 0.05, 1)),   # 7x14x2.4 cm (a thick phone / small book)
     ("hand", "box", (0.30, -0.60), (0.045, 0.06, 0.02), (0.85, 0.65, 0.55, 1)),     # 9x12x4 cm hand-sized intruder, parked out of view
 ]
@@ -88,7 +88,7 @@ class SimArm:
         self.lo = np.array([m.jnt_range[j][0] for j in jids]); self.hi = np.array([m.jnt_range[j][1] for j in jids])
         self.mocap = {name: mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_BODY, name) for name, *_ in OBJECTS}
         self.R_target = rot_y(cfg.motion.down_orientation[1])
-        self.mover = Mover(cfg.workspace, cfg.motion.hard_speed_cap)
+        self.mover = Mover(cfg.workspace, cfg.motion.hard_speed_cap, cfg.motion.pitch_rate)
         self.gripper_goal = 0.044     # sim ctrl units (0.022 closed .. 0.044 open)
         self.gripper_cmd = 0.04       # real units (0 .. 0.04)
         self.attached = None          # object name held (kinematic attach: the fingers have no collision geoms)
@@ -116,6 +116,8 @@ class SimArm:
     def _ik_step(self, target, gain=0.5, damping=0.05):
         p, R = self.ee()
         ep = np.asarray(target) - p
+        if self.mover.pitch is not None:
+            self.R_target = rot_y(self.mover.pitch)
         Re = self.R_target @ R.T
         er = 0.5 * np.array([Re[2, 1] - Re[1, 2], Re[0, 2] - Re[2, 0], Re[1, 0] - Re[0, 1]])
         self.mujoco.mj_jacSite(self.model, self.data, self.jp, self.jr, self.site)
@@ -153,7 +155,7 @@ class SimArm:
             self.data.qvel[:] = 0
             mj.mj_forward(self.model, self.data)
             p, R = self.ee()
-            self.mover.init_at(tuple(p))
+            self.mover.init_at(tuple(p), self.cfg.motion.down_orientation[1])
             self._event(f"sim staged at {[round(v, 3) for v in p]} (asked {[round(v, 3) for v in start]}, miss {1000*math.dist(p, start):.0f} mm)")
         self._thread = threading.Thread(target=self._run, daemon=True, name="sim")
         self._thread.start()
@@ -191,7 +193,7 @@ class SimArm:
                     if self.attached is None and self.gripper_cmd < 0.01 and width < 0.03:
                         for name, bid in self.mocap.items():
                             mid = self.model.body_mocapid[bid]; op = self.data.mocap_pos[mid]
-                            if math.hypot(op[0] - p[0], op[1] - p[1]) < 0.035 and abs(op[2] - p[2]) < 0.05:
+                            if math.hypot(op[0] - p[0], op[1] - p[1]) < 0.035 and abs(op[2] - p[2]) < 0.06:
                                 self.attached = name; self._event(f"grasped {name}"); break
                     if self.attached is not None:
                         mid = self.model.body_mocapid[self.mocap[self.attached]]
@@ -208,7 +210,7 @@ class SimArm:
                                              holding=holding, gripper_goal=self.gripper_cmd,
                                              goal=self.mover.goal or tuple(p), speed_cap=self.mover.speed_cap,
                                              frozen=self.mover.frozen, status="frozen" if self.mover.frozen else "live",
-                                             rot=R_to_angle_axis(R))
+                                             rot=R_to_angle_axis(R), pitch=self.mover.pitch)
                     self.sim_time = n * dt
                 if self.realtime:
                     ahead = t0 + n * dt - time.perf_counter()
@@ -224,8 +226,8 @@ class SimArm:
         with self.lock:
             return self._snap
 
-    def command(self, goal, speed_cap, gripper=None):
-        self.mover.set_goal(goal, speed_cap)
+    def command(self, goal, speed_cap, gripper=None, pitch=None):
+        self.mover.set_goal(goal, speed_cap, pitch)
         if gripper is not None:
             self.gripper_cmd = max(0.0, min(0.04, float(gripper)))
             self.gripper_goal = 0.022 + self.gripper_cmd * (0.022 / 0.04)

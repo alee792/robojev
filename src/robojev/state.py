@@ -40,7 +40,7 @@ def render(cfg: Config, w: World) -> dict:
             "status": "in view" if e.in_view else f"out of view, last seen {e.last_seen_s:.0f} s ago",
             "reachable": "yes" if e.reachable else "no, outside the arm's workspace",
         }
-        if e.speed_mps > 0.02:
+        if e.speed_mps > 0.02 and e.in_view:   # motion is only a fact while we can see it
             item["motion"] = f"moving, about {e.speed_mps*100:.0f} cm/s"
         if e.known_s < 5 and w.uptime_s > 8:
             item["status"] += f"; appeared {e.known_s:.0f} s ago (was not there before)"

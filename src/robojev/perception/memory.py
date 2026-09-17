@@ -140,7 +140,10 @@ class Tracker:
             for b_ in ents[i + 1:]:
                 if b_.id not in self.entities or a_.id not in self.entities:
                     continue
-                if np.hypot(*(a_.xyz[:2] - b_.xyz[:2])) < self.match_radius and abs(a_.height - b_.height) < 0.04:
+                dist = np.hypot(*(a_.xyz[:2] - b_.xyz[:2]))
+                # a younger, unconfirmed track inside a confirmed object's footprint is a fragment of it
+                fragment = b_.seen_count < CONFIRM and a_.seen_count >= CONFIRM and dist < max(a_.width, b_.width) / 2
+                if (dist < self.match_radius and abs(a_.height - b_.height) < 0.04) or fragment:
                     a_.seen_count += b_.seen_count
                     a_.last_seen = max(a_.last_seen, b_.last_seen)
                     del self.entities[b_.id]

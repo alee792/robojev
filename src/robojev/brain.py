@@ -58,6 +58,8 @@ class Brain:
         self.origin_xy = None                    # where the held object was picked up
         self.place_xy = None                     # latched when move_to_place starts (the reference's *view* moves, not the object)
         self.held: str | None = None             # label of the object we closed on
+        self.pitch: float | None = None          # wrist pitch the current primitive wants (None = keep)
+        self.grasp_dz: float | None = None       # fingertip height above the table when we closed on the held object
         self.placed: tuple[str, str, float] | None = None   # (label, place, t) after a release at the place
         self.prev_prim: str | None = None
         self.done = False
@@ -327,6 +329,9 @@ class Brain:
                     status = "applied"
             if self.avoid and self.avoid not in labels:
                 self.avoid = None
+            av_e = world.entity(self.avoid) if self.avoid else None
+            if av_e is not None and not av_e.in_view and av_e.last_seen_s > 3.0:
+                self._note(f"evade clear: {self.avoid} out of view"); self.avoid = self.evade = None; self.evade_anchor = None
             J["evade"] = Judgment("evade", ch, pmax, a.get("confidence"), probs, pmax >= th.evade_p_max, status, tag, age_ms)
 
         a = answers.get("orders_violated")
@@ -416,6 +421,7 @@ class Brain:
                 self.last_result = f"{self.prim}" + (f" {self.prim_subject}" if self.prim_subject else "") + " done"
                 if self.prim == "close_gripper" and world.holding_label:
                     self.last_result = f"grasped {world.holding_label}"
+                    self.grasp_dz = world.arm.ee[2] - world.table_z
                 if self.prim == "open_gripper":
                     if self.held and self.prev_prim in ("lower_to_place", "set_down_here"):
                         self.placed = (self.held, self.place if self.prev_prim == "lower_to_place" else "right here", now)
@@ -423,6 +429,6 @@ class Brain:
                     self.held = None
                 self._note(self.last_result)
 
-        if self.prim_status in ("done", "failed") and self.prim in ("move_above", "descend_to_grasp", "move_to_place", "lower_to_place", "set_down_here", "lift", "retreat", "rise_away", "back_off"):
+        if self.prim_status in ("done", "failed") and self.prim in ("move_above", "descend_to_grasp", "approach_side", "advance_to_grasp", "move_to_place", "lower_to_place", "set_down_here", "lift", "retreat", "rise_away", "back_off"):
             goal = sp   # finished primitives hold position until the next pick
         return goal, cap, gripper, reason

@@ -11,8 +11,8 @@ from robojev.config import Config
 class FakeArm:
     def __init__(self, cfg: Config, start_at=(0.25, 0.0, 0.20), rate_hz: float = 100.0):
         self.cfg = cfg
-        self.mover = Mover(cfg.workspace, cfg.motion.hard_speed_cap)
-        self.mover.init_at(start_at)
+        self.mover = Mover(cfg.workspace, cfg.motion.hard_speed_cap, cfg.motion.pitch_rate)
+        self.mover.init_at(start_at, cfg.motion.down_orientation[1])
         self.gripper = 0.04
         self.rate = rate_hz
         self._stop = threading.Event()
@@ -46,8 +46,8 @@ class FakeArm:
         with self._lock:
             return self._snap
 
-    def command(self, goal, speed_cap, gripper=None):
-        self.mover.set_goal(goal, speed_cap)
+    def command(self, goal, speed_cap, gripper=None, pitch=None):
+        self.mover.set_goal(goal, speed_cap, pitch)
         if gripper is not None:
             self.gripper = max(0.0, min(0.04, gripper))
 

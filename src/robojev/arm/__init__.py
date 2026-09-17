@@ -6,6 +6,7 @@ at its own rate and exposes thread-safe snapshots; the Jev loop never calls a dr
 """
 from __future__ import annotations
 
+import math
 import threading
 import time
 from dataclasses import dataclass, field
@@ -28,13 +29,14 @@ class ArmSnapshot:
     rot: tuple[float, float, float] | None = None  # EE orientation, angle-axis, as the driver reports it
     holding: bool = False                          # something is between the closed fingers
     gripper_goal: float | None = None              # last commanded width (0 closed .. 0.04 open)
+    pitch: float | None = None                     # wrist pitch setpoint (rad; 1.309 = pointing 75 deg down, 0 = level)
 
 
 class ArmBackend(Protocol):
     def start(self) -> None: ...
     def stop(self) -> None: ...
     def snapshot(self) -> ArmSnapshot: ...
-    def command(self, goal: tuple[float, float, float], speed_cap: float, gripper: float | None = None) -> None: ...
+    def command(self, goal: tuple[float, float, float], speed_cap: float, gripper: float | None = None, pitch: float | None = None) -> None: ...
     def freeze(self, reason: str) -> None: ...
     def resume(self) -> None: ...
 
@@ -46,9 +48,12 @@ class Mover:
     box. A frozen mover holds its setpoint until resumed.
     """
 
-    def __init__(self, workspace, hard_speed_cap: float):
+    def __init__(self, workspace, hard_speed_cap: float, pitch_rate: float = 0.6):
         self.ws = workspace
         self.hard_cap = hard_speed_cap
+        self.pitch_rate = pitch_rate
+        self.pitch = None        # pitch setpoint (rad), rate-limited toward pitch_goal
+        self.pitch_goal = None
         self.lock = threading.Lock()
         self.goal = None
         self.setpoint = None
@@ -56,15 +61,19 @@ class Mover:
         self.frozen = False
         self.freeze_reason = ""
 
-    def init_at(self, p):
+    def init_at(self, p, pitch: float | None = None):
         with self.lock:
             self.setpoint = tuple(self.ws.clamp(p))
             self.goal = self.setpoint
+            if pitch is not None:
+                self.pitch = self.pitch_goal = float(pitch)
 
-    def set_goal(self, goal, speed_cap):
+    def set_goal(self, goal, speed_cap, pitch: float | None = None):
         with self.lock:
             self.goal = tuple(self.ws.clamp(goal))
             self.speed_cap = max(0.0, min(speed_cap, self.hard_cap))
+            if pitch is not None:
+                self.pitch_goal = float(pitch)
 
     def freeze(self, reason):
         with self.lock:
@@ -83,6 +92,9 @@ class Mover:
         with self.lock:
             if self.setpoint is None or self.goal is None or self.frozen:
                 return self.setpoint
+            if self.pitch is not None and self.pitch_goal is not None:
+                dp = self.pitch_goal - self.pitch
+                self.pitch = self.pitch_goal if abs(dp) <= self.pitch_rate * dt else self.pitch + math.copysign(self.pitch_rate * dt, dp)
             dx = [g - s for g, s in zip(self.goal, self.setpoint)]
             dist = (dx[0] ** 2 + dx[1] ** 2 + dx[2] ** 2) ** 0.5
             max_step = self.speed_cap * dt

@@ -15,7 +15,7 @@ class Workspace:
     # up to base z 0.20; straight-down (90 deg) only reaches z 0.15. Table is at base z ~ -0.02.
     x: tuple[float, float] = (0.18, 0.44)
     y: tuple[float, float] = (-0.18, 0.18)
-    z: tuple[float, float] = (0.05, 0.19)
+    z: tuple[float, float] = (0.025, 0.19)   # floor: fingertips 4.5 cm above the table (side grasps run low)
 
     def clamp(self, p):
         return (min(max(p[0], self.x[0]), self.x[1]),
@@ -50,6 +50,13 @@ class Motion:
     primitive_timeout_s: float = 10.0     # a primitive that has not finished by then is reported failed
     stall_s: float = 3.0                  # a primitive whose EE has not moved for this long (and is not done) is reported failed
     down_orientation: tuple[float, float, float] = (0.0, 1.309, 0.0)  # 75 deg pitch: far larger reachable envelope than straight down (see reachability map)
+    pitch_rate: float = 0.6               # rad/s: how fast the wrist pitch setpoint may change
+    gripper_opening: float = 0.08         # m between the pads fully open (two 4 cm carriages)
+    side_grasp_min_width: float = 0.045   # objects at least this wide are grasped from the side, not from above
+    side_pitch: float = 0.5               # rad below level for a side grasp: fully level is unreachable low over the table (sim IK map), 0.5 is solid everywhere
+    side_standoff: float = 0.06           # approach point: this far behind the object's near edge, wrist level
+    side_grasp_height: float = 0.045      # fingertips this far above the table for a side grasp (a tapered cup is narrowest low down)
+    side_grasp_depth: float = 0.01        # fingertip centre this far short of the object's centre when closing
     real_tick_hz: float = 20.0            # arm I/O thread rate (real)
     real_goal_time: float = 0.1           # per-command interpolation horizon (0.001..0.2 = linear)
     sim_physics_dt: float = 0.002

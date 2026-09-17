@@ -305,8 +305,8 @@ class Loop:
         self.per.held_label = self.brain.held if snap.holding else None
         self.last_reason = reason
         if snap.status in ("live", "frozen", "baselining"):
-            self.arm.command(goal, cap, gripper)
-        self.log.write("commands", tick=self.tick, goal=goal, speed_cap=cap, gripper=gripper, reason=reason,
+            self.arm.command(goal, cap, gripper, self.brain.pitch)
+        self.log.write("commands", tick=self.tick, goal=goal, speed_cap=cap, gripper=gripper, pitch=self.brain.pitch, reason=reason,
                        ladder=self.brain.state()["ladder"], prim=self.brain.prim, prim_status=self.brain.prim_status,
                        offered=self.brain.offered_keys)
 

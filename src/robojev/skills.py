@@ -45,6 +45,27 @@ def hover_z(cfg: Config, w: World) -> float:
     return min(cfg.workspace.z[1] - 0.02, w.table_z + max(cfg.motion.hover_heights["high"], tallest + cfg.motion.object_clearance))
 
 
+def side_grasp(cfg: Config, e) -> bool:
+    """Objects too wide to drop the fingers around from above are grasped from the side, wrist level."""
+    return e is not None and e.width_m >= cfg.motion.side_grasp_min_width and e.height_m >= 0.05
+
+
+def side_z(cfg: Config, w: World) -> float:
+    return max(cfg.workspace.z[0], w.table_z + cfg.motion.side_grasp_height)
+
+
+def _level(w: World, tol: float = 0.12, cfg: Config | None = None) -> bool:
+    """Wrist at the side-grasp pitch (the setpoint has arrived there)."""
+    want = cfg.motion.side_pitch if cfg else 0.5
+    return w.arm.pitch is not None and abs(w.arm.pitch - want) < tol
+
+
+def _behind(w: World, e, max_back: float, dy_tol: float = 0.03) -> bool:
+    """EE is behind e (toward the robot), within max_back of its near edge and roughly on its centre line."""
+    back = e.xyz[0] - w.arm.ee[0]
+    return abs(e.xyz[1] - w.arm.ee[1]) < dy_tol and 0.0 < back < e.width_m / 2 + max_back
+
+
 def grasp_z(cfg: Config, w: World, label: str) -> float:
     e = w.entity(label)
     h = e.height_m if e else 0.08
@@ -82,12 +103,19 @@ def offered(cfg: Config, w: World, brain) -> list[Prim]:
     for e in w.entities:
         if not e.reachable:
             continue
-        if holding is None:
+        if holding is None and side_grasp(cfg, e):
+            out.append(Prim(f"approach_side:{e.label}", "approach_side", e.label,
+                            f"come down level with the table and line up behind {e.label}, ready to reach it from the side"))
+            if gripper_open and _level(w, cfg=cfg) and _behind(w, e, cfg.motion.side_standoff + 0.03) and height < cfg.motion.side_grasp_height + 0.03:
+                out.append(Prim(f"advance_to_grasp:{e.label}", "advance_to_grasp", e.label,
+                                f"slide the open gripper forward around {e.label} from the side, ready to grasp it"))
+        elif holding is None:
             out.append(Prim(f"move_above:{e.label}", "move_above", e.label, f"move to hover above {e.label}"))
             if gripper_open and _above(w, e.label):
                 out.append(Prim(f"descend_to_grasp:{e.label}", "descend_to_grasp", e.label,
                                 f"lower the open gripper down around {e.label}, ready to grasp it"))
-    if holding is None and gripper_open and w.above_label and height < (w.entity(w.above_label).height_m + 0.03 if w.entity(w.above_label) else 0.0):
+    if holding is None and gripper_open and w.above_label and height < (w.entity(w.above_label).height_m + 0.03 if w.entity(w.above_label) else 0.0) \
+            and (not side_grasp(cfg, w.entity(w.above_label)) or (_level(w, cfg=cfg) and height < cfg.motion.side_grasp_height + 0.03)):
         out.append(Prim("close_gripper", "close_gripper", w.above_label, f"close the gripper to grasp {w.above_label}"))
     if holding is not None:
         if height < cfg.motion.carry_height - 0.02:
@@ -98,7 +126,8 @@ def offered(cfg: Config, w: World, brain) -> list[Prim]:
             out.append(Prim("lower_to_place", "lower_to_place", holding, f"lower {holding} onto the table at the place"))
     if holding is not None:
         held = w.entity(holding)
-        low = height < ((held.height_m if held else 0.08) * cfg.motion.grasp_fraction + 0.04)
+        dz = brain.grasp_dz if getattr(brain, 'grasp_dz', None) is not None else (held.height_m if held else 0.08) * cfg.motion.grasp_fraction
+        low = height < dz + 0.04
         if not low:
             out.append(Prim("set_down_here", "set_down_here", holding, f"lower {holding} onto the table right here (e.g. to abort or if the place cannot be reached)"))
         else:
@@ -125,14 +154,30 @@ def goal_for(cfg: Config, w: World, brain, now: float):
         e = w.entity(subj)
         if e is None:
             return sp, None, False, f"{subj} is no longer known", "move_above: lost subject"
+        brain.pitch = cfg.motion.down_orientation[1]
         goal = cfg.workspace.clamp((e.xyz[0], e.xyz[1], hover_z(cfg, w)))
         return goal, None, near(goal), None, f"move_above {subj}"
     if name == "descend_to_grasp":
         e = w.entity(subj)
         if e is None:
             return sp, None, False, f"{subj} is no longer known", "descend: lost subject"
+        brain.pitch = cfg.motion.down_orientation[1]
         goal = cfg.workspace.clamp((e.xyz[0], e.xyz[1], grasp_z(cfg, w, subj)))
         return goal, 0.04, near(goal, 0.02, 0.01), None, f"descend_to_grasp {subj}"
+    if name == "approach_side":
+        e = w.entity(subj)
+        if e is None:
+            return sp, None, False, f"{subj} is no longer known", "approach_side: lost subject"
+        brain.pitch = cfg.motion.side_pitch
+        goal = cfg.workspace.clamp((e.xyz[0] - (e.width_m / 2 + cfg.motion.side_standoff), e.xyz[1], side_z(cfg, w)))
+        return goal, 0.04, near(goal) and _level(w, 0.05, cfg), None, f"approach_side {subj}"
+    if name == "advance_to_grasp":
+        e = w.entity(subj)
+        if e is None:
+            return sp, None, False, f"{subj} is no longer known", "advance: lost subject"
+        brain.pitch = cfg.motion.side_pitch
+        goal = cfg.workspace.clamp((e.xyz[0] - cfg.motion.side_grasp_depth, e.xyz[1], side_z(cfg, w)))
+        return goal, 0.04, near(goal, 0.012, 0.01), None, f"advance_to_grasp {subj}"
     if name == "close_gripper":
         done = age > cfg.motion.gripper_settle_s
         fail = None
@@ -151,17 +196,26 @@ def goal_for(cfg: Config, w: World, brain, now: float):
     if name == "set_down_here":
         held = w.entity(w.holding_label) if w.holding_label else None
         h = held.height_m if held else 0.08
-        goal = (sp[0], sp[1], max(cfg.workspace.z[0], tz + h * cfg.motion.grasp_fraction + 0.01))
+        dz = brain.grasp_dz if brain.grasp_dz is not None else h * cfg.motion.grasp_fraction
+        goal = (sp[0], sp[1], max(cfg.workspace.z[0], tz + dz + 0.005))
         return goal, None, near(goal, 0.02, 0.01), None, "set_down_here"
     if name == "lower_to_place":
         held = w.entity(w.holding_label) if w.holding_label else None
         h = held.height_m if held else 0.08
-        goal = (sp[0], sp[1], max(cfg.workspace.z[0], tz + h * cfg.motion.grasp_fraction + 0.01))
+        dz = brain.grasp_dz if brain.grasp_dz is not None else h * cfg.motion.grasp_fraction
+        goal = (sp[0], sp[1], max(cfg.workspace.z[0], tz + dz + 0.005))
         return goal, None, near(goal, 0.02, 0.01), None, "lower_to_place"
     if name == "open_gripper":
         done = age > cfg.motion.gripper_settle_s
         return sp, 0.04, done, None, "open_gripper"
     if name == "retreat":
+        if _level(w, cfg=cfg):
+            # wrist level with the open fingers around something: back out before rising, or the
+            # fingers lift the object's rim
+            for e in w.entities:
+                if e.label != w.holding_label and abs(e.xyz[1] - ee[1]) < e.width_m / 2 + 0.02 and -0.02 < e.xyz[0] - ee[0] < e.width_m / 2 + 0.05:
+                    goal = cfg.workspace.clamp((e.xyz[0] - (e.width_m / 2 + cfg.motion.side_standoff), sp[1], sp[2]))
+                    return goal, None, False, None, f"retreat: backing out from {e.label}"
         goal = (sp[0], sp[1], min(cfg.workspace.z[1], tz + cfg.motion.safe_height))
         return goal, None, near(goal), None, "retreat"
     if name == "rise_away":

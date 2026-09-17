@@ -34,6 +34,7 @@ class RealArm:
         self._driver_factory = driver_factory or self._default_factory
         self.log = log
         self.mover = Mover(cfg.workspace, cfg.motion.hard_speed_cap)
+        self.pitch_ok = False   # True when the arm reached the staged orientation exactly: then pitch may be streamed
         self.watchdog = EffortWatchdog(cfg.safety.effort_trip_n, cfg.safety.effort_baseline_s, persist=cfg.safety.effort_persist_ticks)
         self._lag_over = 0
         self.driver = None
@@ -80,7 +81,7 @@ class RealArm:
         self.driver.set_cartesian_positions(start + list(self.cfg.motion.down_orientation),
                                             trossen_arm.InterpolationSpace.joint, 4.0, True)
         pose = list(self.driver.get_cartesian_positions())
-        self.mover.init_at(pose[:3])
+        self.mover.init_at(pose[:3], self.cfg.motion.down_orientation[1])
         want = list(self.cfg.motion.down_orientation)
         got = pose[3:6]
         miss = math.dist(start, pose[:3]); rmiss = math.dist(want, got)
@@ -89,6 +90,7 @@ class RealArm:
         # stream the orientation the arm actually reached, never one it could not: fighting an
         # unreachable orientation showed up as a 68 N phantom force on the first run
         self.stream_orient = got if rmiss > 0.05 else want
+        self.pitch_ok = rmiss <= 0.05
         if rmiss > 0.05:
             self._event(f"WARNING: streaming the reached orientation {[round(v, 2) for v in got]} instead of {want}")
         if miss > 0.02:
@@ -155,6 +157,8 @@ class RealArm:
                     step_m = math.dist(prev, sp) if prev is not None else 0.0
                     self.last_step_m = step_m
                     self.max_step_m = max(self.max_step_m, step_m)
+                    if self.pitch_ok and self.mover.pitch is not None:
+                        orient = [0.0, float(self.mover.pitch), 0.0]   # angle-axis about base y
                     self.driver.set_cartesian_positions(list(sp) + orient, space, goal_time, False)
                 g = self._gripper_goal
                 if g is not None and g != self._gripper_sent:
@@ -169,7 +173,7 @@ class RealArm:
                                              ext_force=(fx, fy, fz), setpoint=sp or tuple(pose[:3]),
                                              holding=holding, gripper_goal=g,
                                              goal=self.mover.goal or tuple(pose[:3]), speed_cap=self.mover.speed_cap,
-                                             frozen=self.mover.frozen, rot=tuple(pose[3:6]),
+                                             frozen=self.mover.frozen, rot=tuple(pose[3:6]), pitch=self.mover.pitch,
                                              status="frozen" if self.mover.frozen else ("live" if self.watchdog.baseline else "baselining"))
                 next_t += dt
                 sleep = next_t - time.perf_counter()
@@ -194,8 +198,8 @@ class RealArm:
         with self._lock:
             return self._snap
 
-    def command(self, goal, speed_cap, gripper=None):
-        self.mover.set_goal(goal, speed_cap)
+    def command(self, goal, speed_cap, gripper=None, pitch=None):
+        self.mover.set_goal(goal, speed_cap, pitch)
         if gripper is not None:
             self._gripper_goal = max(0.0, min(0.04, float(gripper)))
 
