@@ -174,6 +174,9 @@ class Tracker:
         if eid in self.entities:
             self.entities[eid].name = name
 
+    def forget(self, eid: str) -> None:
+        self.entities.pop(eid, None)
+
     def in_view(self, e: Entity, now: float) -> bool:
         return now - e.last_seen < self.oov
 

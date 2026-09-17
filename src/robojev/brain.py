@@ -439,6 +439,6 @@ class Brain:
                     self.held = None
                 self._note(self.last_result)
 
-        if self.prim_status in ("done", "failed") and self.prim in ("move_above", "descend_to_grasp", "approach_side", "advance_to_grasp", "move_to_place", "lower_to_place", "set_down_here", "lift", "retreat", "rise_away", "back_off"):
+        if self.prim_status in ("done", "failed") and self.prim in ("move_above", "descend_to_grasp", "approach_side", "advance_to_grasp", "move_to_place", "lower_to_place", "set_down_here", "lift", "retreat", "survey", "rise_away", "back_off"):
             goal = sp   # finished primitives hold position until the next pick
         return goal, cap, gripper, reason

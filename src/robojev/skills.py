@@ -167,6 +167,10 @@ def offered(cfg: Config, w: World, brain) -> list[Prim]:
         out.append(Prim("open_gripper", "open_gripper", None, "open the gripper (it is holding nothing)"))
     if height < cfg.motion.safe_height - 0.02:
         out.append(Prim("retreat", "retreat", None, "rise straight up to a safe height, e.g. after releasing an object"))
+    at_survey = (math.hypot(w.arm.ee[0] - cfg.motion.hover_start[0], w.arm.ee[1] - cfg.motion.hover_start[1]) < 0.03
+                 and height > cfg.motion.safe_height - 0.03 and w.arm.pitch is not None and abs(w.arm.pitch - cfg.motion.hover_pitch) < 0.1)
+    if holding is None and not at_survey:
+        out.append(Prim("survey", "survey", None, "go back to the survey pose, where the camera sees the whole table: use it when the target is gone, cannot be found, or the scene needs a fresh look"))
     for k, v in SAFETY.items():
         out.append(Prim(k, k, None, v))
     return out
@@ -257,6 +261,10 @@ def goal_for(cfg: Config, w: World, brain, now: float):
                     return goal, None, False, None, f"retreat: backing out from {e.label}"
         goal = (sp[0], sp[1], min(cfg.workspace.z[1], tz + cfg.motion.safe_height))
         return goal, None, near(goal), None, "retreat"
+    if name == "survey":
+        brain.pitch = cfg.motion.hover_pitch
+        goal = cfg.workspace.clamp((cfg.motion.hover_start[0], cfg.motion.hover_start[1], tz + cfg.motion.safe_height))
+        return goal, None, near(goal, 0.03, 0.03) and w.arm.pitch is not None and abs(w.arm.pitch - cfg.motion.hover_pitch) < 0.05, None, "survey"
     if name == "rise_away":
         goal = (sp[0], sp[1], min(cfg.workspace.z[1], tz + cfg.motion.safe_height))
         return goal, None, near(goal), None, "rise_away"

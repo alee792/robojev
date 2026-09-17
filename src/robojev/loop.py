@@ -118,6 +118,8 @@ class Perception(threading.Thread):
                                         ee_xy=(snap.ee[:2] if self.cameras else None))
                     if self.cameras and self.held_label and snap.holding:
                         self.tracker.pin(self.held_label, snap.ee[:2], t)
+                    if self.cameras and have_pose and not snap.holding:
+                        self._absence_check(t, snap)
                     if self.vlm is not None:
                         self._feed_vlm(t)
                     self.info = info | {"table_z": self.table_z, "n_dets": len(dets)}
@@ -154,6 +156,31 @@ class Perception(threading.Thread):
                 self.tracker.set_name(eid, res.name)
             if self.log:
                 self.log.write("events", kind="vlm", text=f"{eid}: {res.name} ({res.kind}, {res.confidence:.2f}) {res.reason}")
+
+    def _absence_check(self, t, snap):
+        """Object permanence with negative evidence: if a confirmed track's spot is well inside the
+        wrist camera's image at a usable range and no detection matched it this frame, count it as
+        absent; ~0.8 s of that and the track is dropped (the cup moved by hand while the camera
+        was elsewhere left the arm grasping air three times: real run 12)."""
+        name, cam, ext, fmask = self.cameras[0]
+        det = self.detectors[name]
+        R, tt = det.extrinsic(self._pose6(snap))
+        intr = det.intr
+        for e in self.tracker.stable():
+            if e.last_seen >= t - 0.05:
+                e.absent = 0
+                continue
+            p = np.asarray([e.xyz[0], e.xyz[1], e.xyz[2] + e.height / 2], float)
+            c = R.T @ (p - tt)
+            if not (0.15 < c[2] < 0.75):
+                continue
+            u, v = intr.fx * c[0] / c[2] + intr.ppx, intr.fy * c[1] / c[2] + intr.ppy
+            if not (60 < u < intr.w - 60 and 60 < v < intr.h - 100):
+                continue   # near the border or the fingers: no verdict
+            e.absent = getattr(e, "absent", 0) + 1
+            if e.absent >= 8:
+                self.tracker.forget(e.id)
+                self.log.write("events", kind="perception", text=f"{e.label()} is gone: looked where it was and nothing is there")
 
     def _pose6(self, snap):
         """EE pose as the driver reports it: [x, y, z, angle-axis]."""
