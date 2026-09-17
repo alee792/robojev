@@ -1,0 +1,97 @@
+{
+  "_provenance": "Reconstructed by hand from video frames t029.5–t041 (media/keyframes/t29_5.jpg … t41.jpg) and user screenshots. Values are from ONE moment of one run. Keys shown in order seen. '…' = scrolled past / not legible. Keys prefixed _ are annotations, not part of the original.",
+
+  "_section_static_context": "Top of report (scrolled past at t029). Appears to be a static 'rules of the world' block. Parent key name not visible.",
+  "…weapons": {
+    "shotgun": {
+      "attack_type": "hitscan",
+      "damage_per_shot": "35-105 (7 pellets x 5-15)",
+      "fire_rate": "~1/sec",
+      "spread_deg": "±5.6",
+      "effective_range": "under 500",
+      "ammo_type": "shells",
+      "max_ammo": 50,
+      "one_liner": "devastating up close, pellets scatter with distance"
+    },
+    "super shotgun": {
+      "attack_type": "hitscan",
+      "damage_per_shot": "100-300 (20 pellets x 5-15)",
+      "fire_rate": "~0.6/sec",
+      "spread_deg": "±11.2",
+      "effective_range": "under 300",
+      "ammo_type": "shells (2 per shot)",
+      "max_ammo": 50,
+      "one_liner": "point blank annihilation, slow reload"
+    }
+  },
+  "enemy_types": {},
+  "player_physics": {
+    "max_speed": "~292 map units/second",
+    "acceleration": "reaches max speed in ~1.1 seconds from standstill"
+  },
+  "measurement_context": {
+    "distance_unit": "Doom map unit; not inches, feet, meters, or miles. The player's body is 32 units wide.",
+    "distance_bands": {
+      "contact": "under 64 map units; immediate melee range",
+      "close": "64 to under 256; nearby dangerous engagement range",
+      "medium": "256 to under 768; ranged engagement and meaningful travel distance",
+      "far": "768 or more; distant and substantial travel required"
+    },
+    "relative_bearing_degrees": {
+      "0": "straight ahead",
+      "positive": "left",
+      "negative": "right",
+      "+90": "directly left",
+      "-90": "directly right",
+      "+/-180": "behind"
+    },
+    "vertical_aim": "automatic when the target is in view; only horizontal bearing matters then. A shot stops on the first solid thing in front of the muzzle — a target on higher or lower ground that is out of sight cannot be hit until you back off far enough to see it",
+    "time": {
+      "one_game_tick": "1/35 second",
+      "control_rate": "decisions update every ~4 ticks (~0.1 seconds); controls persist continuously between decisions"
+    },
+    "controls": "aiming, movement, and the trigger operate simultaneously",
+    "projectile_prediction": "closest approach assumes the player stays at the current position; moving changes it"
+  },
+
+  "_section_dynamic_state": "Per-tick state below.",
+  "player": {
+    "health": "55/100",
+    "armor": "39/200",
+    "weapon": "shotgun",
+    "ammo": 0,
+    "status": null,
+    "carrying": ["fist", "pistol (60 bullets)", "shotgun (out of shells, in hand)"],
+    "keys": null,
+    "switching": null
+  },
+  "walls": { "left": "open", "ahead": "open", "right": "open" },
+  "footing": null,
+  "velocity": { "speed": "274 map units/second", "direction": "-7° (dead ahead)" },
+  "pressed_against_wall": null,
+  "aimed_at": [],
+  "just_took_damage": true,
+  "blind_spots": [],
+
+  "_gap": "A list-of-objects section sits between blind_spots and items (frame t37_2 shows it closing with '}]'). GOAL's question text references backticked `player`, `enemies`, `items`, so it is almost certainly enemies[] (narration also mentions incoming projectiles). Contents not recovered. 'items' key confirmed at t37_2.",
+
+  "items": [
+    { "label": "shotgun C (weapon + 8 shells)", "kind": "shotgun", "range": "medium", "bearing": "+1° (dead ahead)" },
+    { "label": "super shotgun C (weapon + 8 shells)", "kind": "super shotgun", "range": "medium", "bearing": "+9° (dead ahead)" },
+    { "label": "shotgun B (weapon + 8 shells)", "kind": "shotgun", "range": "medium", "bearing": "+18° (dead ahead)" },
+    { "label": "cell pack B (100 cells)", "kind": "cell pack", "range": "medium", "bearing": "-6° (dead ahead)" },
+    { "label": "stimpack A (10 health)", "kind": "stimpack", "range": "far", "bearing": "-6° (dead ahead)" },
+    { "label": "shotgun A (weapon + 8 shells)", "kind": "shotgun", "range": "medium", "bearing": "-6° (dead ahead)" }
+  ],
+  "remembered": [
+    { "label": "ammo clip C (10 bullets)", "last_seen": "just now", "distance": "121 (close)", "bearing": "-53° (ahead right)", "status": "out of view" },
+    { "label": "imp G", "last_seen": "just now", "distance": "293 (medium)", "bearing": "+49° (ahead left)", "status": "out of view" },
+    { "label": "imp F", "last_seen": "just now", "distance": "57 (contact)", "bearing": "-92° (right)", "status": "out of view" },
+    { "label": "…", "bearing": "-48° (ahead right)", "status": "out of view" },
+    { "label": "cacodemon B", "last_seen": "just now", "distance": "343 (medium)", "bearing": "-76° (right)", "status": "out of view" },
+    { "label": "ammo clip G (10 bullets)", "last_seen": "just now", "distance": "474 (medium)", "bearing": "-78° (right)", "status": "out of view" },
+    { "label": "armor vest B (100 armor)", "last_seen": "just now", "distance": "195 (close)", "bearing": "+98° (left)", "status": "out of view" },
+    { "label": "ammo clip B (10 bullets)", "last_seen": "a few seconds ago", "distance": "335 (medium)", "bearing": "+106° (left)", "status": "out of view" },
+    { "label": "chaingun A (weapon + 20 bullets)", "last_seen": "a few seconds ago", "distance": "698 (medium)", "bearing": "+141° (behind left)", "status": "out of view" }
+  ]
+}
