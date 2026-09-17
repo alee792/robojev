@@ -36,6 +36,7 @@ class Brain:
         self.hover_height = "high"
         self.speed_level = 1
         self.override = False
+        self.avoid: str | None = None       # label of an object the gripper is backing away from
         self.last_applied_t: float | None = None
         self.last_applied_tag = -1
         self.recent: list[str] = []
@@ -64,7 +65,7 @@ class Brain:
             ladder = "hold"
         return {"target": self.target, "motion": self.motion, "hover_position": self.hover_position,
                 "hover_height": self.hover_height, "speed_name": self.cfg.motion.speed_names[self.speed_level],
-                "speed_level": self.speed_level, "override": self.override, "ladder": ladder,
+                "speed_level": self.speed_level, "override": self.override, "avoid": self.avoid, "ladder": ladder,
                 "answer_age_s": age, "recent": list(self.recent)}
 
     # -- apply one fresh answer set ---------------------------------------------------------------
@@ -156,6 +157,31 @@ class Brain:
                 status = "pending_confirmation"
             J["speed"] = Judgment("speed", self.cfg.motion.speed_names[lvl], s, a.get("confidence"), a.get("probabilities", {}), True, status, tag, age_ms)
 
+        a = answers.get("avoid")
+        if a and a.get("type") == "choice":
+            probs, ch = a["probabilities"], a["choice"]
+            pmax = max(probs.values()) if probs else 0.0
+            status = "gated"
+            if pmax >= th.avoid_p_max:
+                if ch.startswith("move_away_from:"):
+                    label = ch.split(":", 1)[1]
+                    if label in labels:
+                        status = "override"
+                        if self.avoid != label:
+                            self._note(f"avoiding {label}")
+                        self.avoid = label
+                        self._streak["avoid"] = ("clear", 0)
+                elif self.avoid is not None:
+                    if self._streak_ok("avoid", "clear", th.avoid_clear_consecutive):
+                        self._note(f"clear of {self.avoid}"); self.avoid = None; status = "applied"
+                    else:
+                        status = "pending_confirmation"
+                else:
+                    status = "applied"
+            if self.avoid and self.avoid not in labels:
+                self.avoid = None
+            J["avoid"] = Judgment("avoid", ch, pmax, a.get("confidence"), probs, pmax >= th.avoid_p_max, status, tag, age_ms)
+
         a = answers.get("orders_violated")
         if a and a.get("type") == "noul":
             p = float(a["noul"])
@@ -184,9 +210,19 @@ class Brain:
         if st["ladder"] == "hold":
             return sp, slowest, "no fresh answers: holding"
         cap = m.speed_levels[self.speed_level]
+        tgt = world.entity(self.target) if self.target else None
+        av = world.entity(self.avoid) if self.avoid else None
+        if av is not None:
+            # DODGE analogue: back straight away from the avoided object until avoid_distance,
+            # keeping height. Code chooses the direction; Jev only named the object.
+            dx, dy = ee[0] - av.xyz[0], ee[1] - av.xyz[1]
+            L = math.hypot(dx, dy)
+            ux, uy = (dx / L, dy / L) if L > 1e-6 else (-1.0, 0.0)
+            need = max(0.0, m.avoid_distance - L)
+            goal = ws.clamp((ee[0] + ux * need, ee[1] + uy * need, max(sp[2], tz + m.hover_heights["high"])))
+            return goal, cap, f"avoid {self.avoid}: {L*100:.0f} cm away, want {m.avoid_distance*100:.0f}"
         if self.override:
             return sp, cap, "orders_violated: holding"
-        tgt = world.entity(self.target) if self.target else None
         z = tz + m.hover_heights[self.hover_height]
         # never lower than the tallest thing on the table plus clearance (a "low" hover over a
         # 12 cm cup would otherwise hit it)

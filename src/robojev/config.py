@@ -40,6 +40,7 @@ class Motion:
     hover_start: tuple[float, float] = (0.28, 0.0)  # xy where streaming begins after staging
     standoff: float = 0.08                # lateral offset for hover_position != directly_above
     back_off_distance: float = 0.08       # how far back_off retreats from the target, horizontally
+    avoid_distance: float = 0.16          # keep the gripper this far (horizontally) from an avoided object
     down_orientation: tuple[float, float, float] = (0.0, 1.309, 0.0)  # 75 deg pitch: far larger reachable envelope than straight down (see reachability map)
     real_tick_hz: float = 20.0            # arm I/O thread rate (real)
     real_goal_time: float = 0.1           # per-command interpolation horizon (0.001..0.2 = linear)
@@ -68,6 +69,8 @@ class Thresholds:
     hover_position_conf: float = 0.40
     hover_height_conf: float = 0.40
     orders_violated_p: float = 0.70
+    avoid_p_max: float = 0.50             # dynamic option count -> gate on p_max
+    avoid_clear_consecutive: int = 3      # answers of no_avoidance_needed before an avoid latch clears
     # hysteresis: conservative picks latch on 1 answer; aggressive picks need N consecutive
     aggressive_consecutive: int = 3
     target_switch_consecutive: int = 3
@@ -87,7 +90,7 @@ class Loop:
     tick_hz: float = 10.0
     question_set: str = "v0"
     model: str = "jev-1.13.0"
-    perception_hz: float = 15.0
+    perception_hz: float = 10.0
     remembered_ttl_s: float = 120.0       # drop remembered entities unseen for this long
     out_of_view_s: float = 1.0            # unseen for this long -> status "out of view"
 

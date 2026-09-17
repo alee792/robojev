@@ -34,6 +34,8 @@ class Entity:
     seen_count: int = 1
     history: list = field(default_factory=list)   # (t, x, y) for motion estimate
     name: str | None = None      # operator override, e.g. "paper cup"
+    dims: list = field(default_factory=list)      # (h, w, color) per sighting until frozen
+    frozen: bool = False         # description frozen after CONFIRM sightings (labels must not flicker)
 
     def kind(self) -> str:
         """A shape-based guess; a depth camera cannot know what a thing is, only its silhouette."""
@@ -64,8 +66,12 @@ class Entity:
         return float(np.hypot(x1 - x0, y1 - y0) / dt) if dt > 0.2 else 0.0
 
 
+CONFIRM = 10          # sightings before an entity's description is frozen
+UNCONFIRMED_TTL = 6.0  # s: an entity with fewer than CONFIRM sightings that stops being seen is a phantom
+
+
 class Tracker:
-    def __init__(self, match_radius: float = 0.06, ema: float = 0.5, ttl_s: float = 30.0, out_of_view_s: float = 1.0):
+    def __init__(self, match_radius: float = 0.07, ema: float = 0.5, ttl_s: float = 30.0, out_of_view_s: float = 1.0):
         self.match_radius, self.ema, self.ttl, self.oov = match_radius, ema, ttl_s, out_of_view_s
         self.entities: dict[str, Entity] = {}
         self._n = 0
@@ -83,17 +89,33 @@ class Tracker:
                 unmatched.remove(d)
                 a = self.ema
                 e.xyz = a * np.asarray(d.base_xyz) + (1 - a) * e.xyz
-                e.height = a * d.height + (1 - a) * e.height
-                e.width = a * d.width + (1 - a) * e.width
-                e.color = d.color_name if e.seen_count < 5 else e.color
+                if not e.frozen:
+                    e.dims.append((d.height, d.width, d.color_name))
+                    hs, ws, cs = zip(*e.dims)
+                    e.height, e.width = float(np.median(hs)), float(np.median(ws))
+                    e.color = max(set(cs), key=cs.count)
+                    if len(e.dims) >= CONFIRM:
+                        e.frozen = True
                 e.last_seen, e.seen_count = now, e.seen_count + 1
                 e.history.append((now, float(e.xyz[0]), float(e.xyz[1])))
                 e.history = e.history[-40:]
         for d in unmatched:
             eid = letter(self._n); self._n += 1
             self.entities[eid] = Entity(eid, np.asarray(d.base_xyz, float), d.height, d.width, d.color_name, now, now,
-                                        history=[(now, d.base_xyz[0], d.base_xyz[1])], name=self.names.get(eid))
-        for eid in [k for k, e in self.entities.items() if now - e.last_seen > self.ttl]:
+                                        history=[(now, d.base_xyz[0], d.base_xyz[1])], name=self.names.get(eid),
+                                        dims=[(d.height, d.width, d.color_name)])
+        # merge duplicates (two cameras, or a split blob): the younger one folds into the older
+        ents = sorted(self.entities.values(), key=lambda e: e.first_seen)
+        for i, a_ in enumerate(ents):
+            for b_ in ents[i + 1:]:
+                if b_.id not in self.entities or a_.id not in self.entities:
+                    continue
+                if np.hypot(*(a_.xyz[:2] - b_.xyz[:2])) < self.match_radius and abs(a_.height - b_.height) < 0.04:
+                    a_.seen_count += b_.seen_count
+                    a_.last_seen = max(a_.last_seen, b_.last_seen)
+                    del self.entities[b_.id]
+        for eid in [k for k, e in self.entities.items()
+                    if now - e.last_seen > (self.ttl if e.seen_count >= CONFIRM else UNCONFIRMED_TTL)]:
             del self.entities[eid]
 
     def set_name(self, eid: str, name: str | None):
@@ -104,5 +126,5 @@ class Tracker:
     def in_view(self, e: Entity, now: float) -> bool:
         return now - e.last_seen < self.oov
 
-    def stable(self, min_seen: int = 3) -> list[Entity]:
+    def stable(self, min_seen: int = CONFIRM) -> list[Entity]:
         return [e for e in self.entities.values() if e.seen_count >= min_seen]

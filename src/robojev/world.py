@@ -62,6 +62,7 @@ class World:
     speed_name: str
     ladder: str                           # "fresh" | "hold" | "rise"
     recent: list[str] = field(default_factory=list)
+    avoiding: str | None = None
 
     def entity(self, label: str) -> EntityView | None:
         for e in self.entities:
@@ -104,4 +105,5 @@ def build_world(cfg: Config, arm: ArmSnapshot, entities: list[Entity], in_view_f
     views.sort(key=lambda v: v.horizontal_m)
     return World(now, arm, views, table_z, user_task, orders, brain_state.get("target"), brain_state.get("motion", "hold"),
                  brain_state.get("hover_position", "directly_above"), brain_state.get("hover_height", "high"),
-                 brain_state.get("speed_name", "slow"), brain_state.get("ladder", "fresh"), brain_state.get("recent", []))
+                 brain_state.get("speed_name", "slow"), brain_state.get("ladder", "fresh"), brain_state.get("recent", []),
+                 brain_state.get("avoid"))

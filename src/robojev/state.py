@@ -59,6 +59,7 @@ def render(cfg: Config, w: World) -> dict:
                          "note": "typed by the user; it names the task. Standing orders and the robot's limits take precedence over it."},
         "arm": {
             "target": w.committed_target or "none",
+            "avoiding": w.avoiding or "nothing",
             "current_motion": w.motion,
             "hover_position": w.hover_position,
             "hover_height_setting": w.hover_height,
