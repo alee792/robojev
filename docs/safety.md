@@ -14,10 +14,12 @@ Jev picks among options; code decides whether and how the arm moves.
 - **Gripper stays open** in this task. No grasping.
 
 ## What stops it
-- **Effort watchdog**: Cartesian external force is baselined for 1 s after reaching the hover
-  start, then tracked by a 3 s EMA while calm; a deviation > 25 N for 3 consecutive ticks (150 ms)
-  freezes the setpoint. Resume is manual. Motion artifacts measured: ±5 N in motion, ~16 N on a
-  reversal. This catches hard obstacles, not a paper cup.
+- **Tracking-lag trip (primary)**: the EE lagging the streamed setpoint by > 2 cm for 3 ticks
+  (150 ms) freezes the setpoint. Normal lag is 3 mm at 3 cm/s, so a blocked arm is unmistakable.
+- **Effort watchdog (backstop)**: Cartesian external force is baselined for 1 s at the hover
+  start, then tracked by a 3 s EMA while calm; a deviation > 40 N for 5 ticks freezes. The
+  driver's estimate shifts ~25 N with motion direction, so this only catches hard pushes.
+  Neither detector will notice a paper cup; the z floor and the box are what keep the arm off objects.
 - **Jev silence ladder**: no fresh answer for 0.5 s → hold; for 2 s → rise to 22 cm above the table
   at 1 cm/s. Any request error, timeout or 529 simply counts as silence.
 - **Confidence gates and hysteresis** (`Thresholds`): conservative picks (hold, back off, rise,

@@ -34,7 +34,8 @@ class RealArm:
         self._driver_factory = driver_factory or self._default_factory
         self.log = log
         self.mover = Mover(cfg.workspace, cfg.motion.hard_speed_cap)
-        self.watchdog = EffortWatchdog(cfg.safety.effort_trip_n, cfg.safety.effort_baseline_s)
+        self.watchdog = EffortWatchdog(cfg.safety.effort_trip_n, cfg.safety.effort_baseline_s, persist=cfg.safety.effort_persist_ticks)
+        self._lag_over = 0
         self.driver = None
         self._gripper_goal = None
         self._gripper_sent = None
@@ -137,6 +138,12 @@ class RealArm:
                 if self.watchdog.tripped(dev) and not self.mover.frozen:
                     self.mover.freeze(f"external force deviation {dev:.1f} N")
                     self._event(f"FROZEN: force deviation {dev:.1f} N (baseline {self.watchdog.baseline})")
+                sp_now = self.mover.setpoint
+                lag = math.dist(pose[:3], sp_now) if sp_now is not None else 0.0
+                self._lag_over = self._lag_over + 1 if lag > self.cfg.safety.lag_trip_m else 0
+                if self._lag_over >= self.cfg.safety.lag_persist_ticks and not self.mover.frozen:
+                    self.mover.freeze(f"tracking lag {lag*1000:.0f} mm")
+                    self._event(f"FROZEN: EE lags setpoint by {lag*1000:.0f} mm (blocked?)")
                 if self.watchdog.baseline is None or self.mover.frozen:
                     sp = self.mover.setpoint          # hold: nothing is sent while baselining or frozen
                     last = now
