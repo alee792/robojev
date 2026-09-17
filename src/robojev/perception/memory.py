@@ -84,7 +84,12 @@ class Tracker:
         for e in sorted(self.entities.values(), key=lambda e: -e.seen_count):
             if not unmatched:
                 break
-            d = min(unmatched, key=lambda d: np.hypot(d.base_xyz[0] - e.xyz[0], d.base_xyz[1] - e.xyz[1]))
+            # match on position AND height, so a flat object sliding under a tall one's radius
+            # cannot drag the tall one's track (sim run 3)
+            cands = [d for d in unmatched if abs(d.height - e.height) < 0.04 or not e.frozen and abs(d.height - e.height) < 0.06]
+            if not cands:
+                continue
+            d = min(cands, key=lambda d: np.hypot(d.base_xyz[0] - e.xyz[0], d.base_xyz[1] - e.xyz[1]))
             if np.hypot(d.base_xyz[0] - e.xyz[0], d.base_xyz[1] - e.xyz[1]) <= self.match_radius:
                 unmatched.remove(d)
                 a = self.ema

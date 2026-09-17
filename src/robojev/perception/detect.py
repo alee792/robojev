@@ -35,10 +35,18 @@ COLOR_NAMES = [  # (name, hsv centre) rough buckets
 def color_name(bgr) -> str:
     hsv = cv2.cvtColor(np.uint8([[list(bgr)]]), cv2.COLOR_BGR2HSV)[0, 0]
     h, s, v = int(hsv[0]), int(hsv[1]), int(hsv[2])
-    if v < 50:
+    if v < 60:
         return "black"
     if s < 45:
-        return "white" if v > 160 else "gray"
+        return "white" if v > 170 else ("light gray" if v > 120 else "dark gray")
+    if v < 90:
+        return "dark " + _hue_name(h)
+    if s < 90 and v > 150:
+        return "pale " + _hue_name(h)
+    return _hue_name(h)
+
+
+def _hue_name(h: int) -> str:
     best, bd = "red", 999
     for name, hc in COLOR_NAMES:
         if hc is None:

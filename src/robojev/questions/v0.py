@@ -23,7 +23,7 @@ def build(cfg: Config, w: World) -> dict:
         "type": "choice",
         "instructions": {
             "question": "Which object in `objects` does the user's request (`user_request.text`) refer to?",
-            "rules": "Objects are seen by a depth camera and described only by colour, size and shape, so e.g. a paper cup appears as a white or tan cup-like object. Pick the object that most plausibly matches the request. Choose none_of_these only when there is no request or nothing plausibly matches.",
+            "rules": "Objects are seen by a depth camera and described only by colour, size and shape, so e.g. a paper cup appears as a white or tan cup-like object. Colour names come from a camera and can be off by a shade (black vs dark gray, white vs light gray, orange vs tan). Pick the object that most plausibly matches the request. Choose none_of_these only when there is no request or nothing plausibly matches.",
         },
         "criteria": {**{l: None for l in labels}, NONE: "the request matches none of the listed objects, or there is no request"},
     }
