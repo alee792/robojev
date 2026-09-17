@@ -30,6 +30,7 @@ class ArmSnapshot:
     holding: bool = False                          # something is between the closed fingers
     gripper_goal: float | None = None              # last commanded width (0 closed .. 0.04 open)
     pitch: float | None = None                     # wrist pitch setpoint (rad; 1.309 = pointing 75 deg down, 0 = level)
+    temps: tuple[float, ...] = ()                  # rotor temperatures per joint (C), real arm only
 
 
 class ArmBackend(Protocol):
@@ -53,6 +54,7 @@ class Mover:
         self.hard_cap = hard_speed_cap
         self.pitch_rate = pitch_rate
         self.pitch = None        # pitch setpoint (rad), rate-limited toward pitch_goal
+        self.thermal_cap = None  # extra speed cap while a motor is hot (real arm)
         self.pitch_goal = None
         self.lock = threading.Lock()
         self.goal = None
@@ -97,7 +99,8 @@ class Mover:
                 self.pitch = self.pitch_goal if abs(dp) <= self.pitch_rate * dt else self.pitch + math.copysign(self.pitch_rate * dt, dp)
             dx = [g - s for g, s in zip(self.goal, self.setpoint)]
             dist = (dx[0] ** 2 + dx[1] ** 2 + dx[2] ** 2) ** 0.5
-            max_step = self.speed_cap * dt
+            cap = self.speed_cap if self.thermal_cap is None else min(self.speed_cap, self.thermal_cap)
+            max_step = cap * dt
             if dist <= max_step or dist < 1e-6:
                 self.setpoint = self.goal
             else:

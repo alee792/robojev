@@ -35,6 +35,10 @@ class RealArm:
         self.log = log
         self.mover = Mover(cfg.workspace, cfg.motion.hard_speed_cap)
         self._grip_mode = "position"
+        self._relaxed = False
+        self._temps: tuple[float, ...] = ()
+        self._temp_n = 0
+        self._resting = False
         self.pitch_ok = False   # True when the arm reached the staged orientation exactly: then pitch may be streamed
         self.watchdog = EffortWatchdog(cfg.safety.effort_trip_n, cfg.safety.effort_baseline_s, persist=cfg.safety.effort_persist_ticks)
         self._lag_over = 0
@@ -155,6 +159,27 @@ class RealArm:
                 if self._lag_over >= self.cfg.safety.lag_persist_ticks and not self.mover.frozen:
                     self.mover.freeze(f"tracking lag {lag*1000:.0f} mm")
                     self._event(f"FROZEN: EE lags setpoint by {lag*1000:.0f} mm (blocked?)")
+                if self.mover.frozen and not self._relaxed:
+                    # stop fighting whatever stopped us: command the pose the arm is actually at, once
+                    # (holding the old setpoint against an obstruction is how a motor overheats)
+                    self.driver.set_cartesian_positions(pose, space, 0.5, False)
+                    self._relaxed = True
+                elif not self.mover.frozen:
+                    self._relaxed = False
+                # thermal governor: read rotor temperatures about once a second
+                self._temp_n += 1
+                if self._temp_n % 20 == 0:
+                    try:
+                        self._temps = tuple(float(v) for v in self.driver.get_all_rotor_temperatures())
+                    except Exception as e:
+                        self._event(f"temperature read failed: {e!r}")
+                    hot = max(self._temps) if self._temps else 0.0
+                    if hot > self.cfg.safety.temp_rest_c and not self._resting:
+                        self._resting = True; self.mover.freeze(f"motor at {hot:.0f} C: resting")
+                        self._event(f"RESTING: a rotor is at {hot:.0f} C (limit 95); holding until below {self.cfg.safety.temp_slow_c:.0f}")
+                    elif self._resting and hot < self.cfg.safety.temp_slow_c:
+                        self._resting = False; self.mover.resume(); self._event(f"rotors cooled to {hot:.0f} C: resuming")
+                    self.mover.thermal_cap = 0.03 if hot > self.cfg.safety.temp_slow_c else None
                 if self.watchdog.baseline is None or self.mover.frozen:
                     sp = self.mover.setpoint          # hold: nothing is sent while baselining or frozen
                     last = now
@@ -191,7 +216,7 @@ class RealArm:
                                              ext_force=(fx, fy, fz), setpoint=sp or tuple(pose[:3]),
                                              holding=holding, gripper_goal=g,
                                              goal=self.mover.goal or tuple(pose[:3]), speed_cap=self.mover.speed_cap,
-                                             frozen=self.mover.frozen, rot=tuple(pose[3:6]), pitch=self.mover.pitch,
+                                             frozen=self.mover.frozen, rot=tuple(pose[3:6]), pitch=self.mover.pitch, temps=self._temps,
                                              status="frozen" if self.mover.frozen else ("live" if self.watchdog.baseline else "baselining"))
                 next_t += dt
                 sleep = next_t - time.perf_counter()

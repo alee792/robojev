@@ -386,7 +386,7 @@ class Loop:
         w = self._world
         return {
             "t": time.time(), "tick": self.tick,
-            "arm": {"status": snap.status, "ee": [round(v, 3) for v in snap.ee], "setpoint": [round(v, 3) for v in snap.setpoint],
+            "arm": {"status": snap.status, "pitch": snap.pitch, "temps": [round(v) for v in snap.temps], "ee": [round(v, 3) for v in snap.ee], "setpoint": [round(v, 3) for v in snap.setpoint],
                     "goal": [round(v, 3) for v in snap.goal], "speed_cap": snap.speed_cap, "frozen": snap.frozen,
                     "ext_force": [round(v, 1) for v in snap.ext_force], "gripper": snap.gripper, "error": snap.error},
             "brain": self.brain.state(), "reason": self.last_reason,
