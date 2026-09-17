@@ -48,7 +48,7 @@ class Motion:
 
 @dataclass(frozen=True)
 class Safety:
-    effort_trip_n: float = 12.0           # deviation of |F_ext| (N) from the baseline that freezes the arm
+    effort_trip_n: float = 25.0           # deviation of |F_ext| (N) from the baseline that freezes the arm (reversal artifact ~16 N)
     effort_baseline_s: float = 1.0        # seconds of samples to establish the baseline after staging
     silence_hold_s: float = 0.5           # no fresh Jev answer for this long -> hold (freeze goal)
     silence_rise_s: float = 2.0           # ... this long -> rise to safe_height at slowest speed

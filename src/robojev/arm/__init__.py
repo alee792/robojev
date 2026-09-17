@@ -74,8 +74,10 @@ class Mover:
         with self.lock:
             self.frozen, self.freeze_reason = False, ""
 
-    def step(self, dt: float):
-        """Advance the setpoint by at most speed_cap*dt toward the goal. Returns the setpoint."""
+    def step(self, dt: float, max_dt: float = 0.075):
+        """Advance the setpoint by at most speed_cap*min(dt, max_dt) toward the goal. The dt clamp
+        keeps a late tick from turning into a large step. Returns the setpoint."""
+        dt = min(dt, max_dt)
         with self.lock:
             if self.setpoint is None or self.goal is None or self.frozen:
                 return self.setpoint
@@ -93,18 +95,27 @@ class Mover:
 
 
 class EffortWatchdog:
-    """Trips when |F_ext| deviates from a baseline learned at rest. Efforts are not zero at rest
-    (idle read showed about -33, -6, -25 N), so only deviation is meaningful."""
+    """Trips when |F_ext| deviates from a slowly adapting baseline for several consecutive ticks.
 
-    def __init__(self, trip_n: float, baseline_s: float):
+    Efforts are not zero at rest (about (6, 1, 10) N at the hover start) and they wander by
+    +-5 N in motion and jump ~16 N on a direction reversal (first_contact traces, 2026-09-17), so:
+    the baseline is an EMA with a long time constant, the threshold sits above the reversal
+    artifact, and a trip needs `persist` consecutive over-threshold ticks. This catches hard
+    obstacles, not a paper cup."""
+
+    def __init__(self, trip_n: float, baseline_s: float, tau_s: float = 3.0, persist: int = 3):
         self.trip_n = trip_n
         self.baseline_s = baseline_s
+        self.tau = tau_s
+        self.persist = persist
         self.samples = []
         self.baseline = None
         self.t_start = None
+        self.t_last = None
+        self.over = 0
 
     def reset(self):
-        self.samples, self.baseline, self.t_start = [], None, None
+        self.samples, self.baseline, self.t_start, self.t_last, self.over = [], None, None, None, 0
 
     def update(self, force_xyz, now: float) -> float | None:
         """Returns the deviation in N once a baseline exists, else None."""
@@ -116,9 +127,16 @@ class EffortWatchdog:
             if now - self.t_start >= self.baseline_s and len(self.samples) >= 5:
                 n = len(self.samples)
                 self.baseline = tuple(sum(s[i] for s in self.samples) / n for i in range(3))
+                self.t_last = now
             return None
         d = ((f[0] - self.baseline[0]) ** 2 + (f[1] - self.baseline[1]) ** 2 + (f[2] - self.baseline[2]) ** 2) ** 0.5
+        self.over = self.over + 1 if d > self.trip_n else 0
+        if d <= self.trip_n:   # adapt only while calm, so a real contact cannot be learned away
+            dt = max(0.0, now - (self.t_last or now))
+            a = min(1.0, dt / self.tau)
+            self.baseline = tuple(self.baseline[i] + a * (f[i] - self.baseline[i]) for i in range(3))
+        self.t_last = now
         return d
 
     def tripped(self, deviation: float | None) -> bool:
-        return deviation is not None and deviation > self.trip_n
+        return deviation is not None and self.over >= self.persist

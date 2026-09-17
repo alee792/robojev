@@ -15,7 +15,9 @@ Jev picks among options; code decides whether and how the arm moves.
 
 ## What stops it
 - **Effort watchdog**: Cartesian external force is baselined for 1 s after reaching the hover
-  start; a deviation > 12 N freezes the setpoint. Resume is manual (dashboard button).
+  start, then tracked by a 3 s EMA while calm; a deviation > 25 N for 3 consecutive ticks (150 ms)
+  freezes the setpoint. Resume is manual. Motion artifacts measured: ±5 N in motion, ~16 N on a
+  reversal. This catches hard obstacles, not a paper cup.
 - **Jev silence ladder**: no fresh answer for 0.5 s → hold; for 2 s → rise to 22 cm above the table
   at 1 cm/s. Any request error, timeout or 529 simply counts as silence.
 - **Confidence gates and hysteresis** (`Thresholds`): conservative picks (hold, back off, rise,

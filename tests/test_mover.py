@@ -38,4 +38,7 @@ def test_watchdog_uses_deviation():
         w.update((-33, -6, -25), t)
         t += 0.1
     assert not w.tripped(w.update((-33, -6, -25), t))
-    assert w.tripped(w.update((-33, -6, -40), t))
+    # a one-tick spike does not trip; a persistent one does
+    assert not w.tripped(w.update((-33, -6, -40), t + 0.05))
+    assert not w.tripped(w.update((-33, -6, -40), t + 0.10))
+    assert w.tripped(w.update((-33, -6, -40), t + 0.15))
