@@ -43,7 +43,7 @@ class Motion:
     avoid_distance: float = 0.16          # keep the gripper this far (horizontally) from an avoided object
     carry_height: float = 0.16            # above the table while carrying
     grasp_fraction: float = 0.5           # grasp at this fraction of the object's height
-    place_gap: float = 0.06               # clearance between a placed object and its reference object
+    place_gap: float = 0.04               # clearance between a placed object and its reference object
     gripper_settle_s: float = 1.0         # wait after a gripper command before judging the result
     primitive_timeout_s: float = 10.0     # a primitive that has not finished by then is reported failed
     down_orientation: tuple[float, float, float] = (0.0, 1.309, 0.0)  # 75 deg pitch: far larger reachable envelope than straight down (see reachability map)
@@ -77,6 +77,7 @@ class Thresholds:
     avoid_p_max: float = 0.50             # dynamic option count -> gate on p_max
     next_p_max: float = 0.45              # next-primitive pick (dynamic option count)
     next_consecutive: int = 2             # non-safety primitives need this many consecutive picks
+    next_interrupt_p: float = 0.65        # a safety pick (hold/back_off/rise_away) interrupts a running primitive only above this
     place_p_max: float = 0.50
     task_done_p: float = 0.80
     task_done_consecutive: int = 3

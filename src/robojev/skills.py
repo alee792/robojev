@@ -61,11 +61,13 @@ def resolve_place(cfg: Config, w: World, place: str | None, origin_xy) -> tuple[
     if e is None or rel not in PLACE_RELATIONS:
         return None
     dx, dy = PLACE_RELATIONS[rel]
-    gap = cfg.motion.place_gap + e.width_m / 2 if hasattr(e, "width_m") else cfg.motion.place_gap
+    gap = cfg.motion.place_gap + e.width_m / 2
     x, y = e.xyz[0] + dx * gap, e.xyz[1] + dy * gap
-    if not cfg.workspace.contains((x, y, cfg.workspace.z[0] + 0.001)):
+    # keep the spot inside the box; a spot that had to move more than 6 cm is not that place any more
+    cx, cy, _ = cfg.workspace.clamp((x, y, cfg.workspace.z[0] + 0.001))
+    if math.hypot(cx - x, cy - y) > 0.06:
         return None
-    return (x, y)
+    return (cx, cy)
 
 
 def offered(cfg: Config, w: World, brain) -> list[Prim]:

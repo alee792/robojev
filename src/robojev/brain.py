@@ -159,9 +159,13 @@ class Brain:
                 if ch not in self.offered_keys:
                     status = "gated"
                 elif ch in SAFETY_PRIMS:
-                    status = "applied"
-                    if self.prim != ch:
-                        self._start(ch, world)
+                    running = self.prim_status == "running" and self.prim not in SAFETY_PRIMS
+                    if running and pmax < th.next_interrupt_p:
+                        status = "busy"       # a lukewarm "hold" must not stutter a primitive in progress
+                    else:
+                        status = "applied"
+                        if self.prim != ch:
+                            self._start(ch, world)
                 elif self.prim_status == "running" and self.prim not in SAFETY_PRIMS:
                     status = "busy"
                 elif self._streak_ok("next", ch, th.next_consecutive):
