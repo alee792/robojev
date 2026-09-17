@@ -42,7 +42,9 @@ def build(args, cfg: Config):
         per = Perception(cfg, arm, virtual=VirtualScene(), log=log)
     elif args.perception == "simcam":
         from robojev.arm.sim import SimCamera
-        per = Perception(cfg, arm, camera=SimCamera(arm), log=log)
+        wrist = SimCamera(arm, "cam", third=True)
+        over = SimCamera(arm, "overhead", width=640, height=480)
+        per = Perception(cfg, arm, cameras=[("wrist", wrist, None, True), ("overhead", over, over.extrinsic_fixed(), False)], log=log)
     else:
         from robojev.perception.camclient import CamClient
         per = Perception(cfg, arm, camera=CamClient(args.camserver), log=log)

@@ -88,7 +88,7 @@ class Loop:
     question_set: str = "v0"
     model: str = "jev-1.13.0"
     perception_hz: float = 15.0
-    remembered_ttl_s: float = 30.0        # drop remembered entities unseen for this long
+    remembered_ttl_s: float = 120.0       # drop remembered entities unseen for this long
     out_of_view_s: float = 1.0            # unseen for this long -> status "out of view"
 
 

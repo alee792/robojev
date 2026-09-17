@@ -86,25 +86,44 @@ def fit_plane(points: np.ndarray, iters: int = 60, thresh: float = 0.008, rng=np
 class Detector:
     def __init__(self, intr: Intrinsics, workspace_xy=((0.10, 0.80), (-0.40, 0.40)),
                  min_height=0.02, max_height=0.30, stride=4, table_z: float | None = None,
-                 ee_mask_radius: float = 0.10):
+                 extrinsic=None, finger_mask: bool = True):
         self.intr = intr
         self.ws = workspace_xy
         self.min_h, self.max_h = min_height, max_height
         self.stride = stride
         self.table_z = table_z      # if known, use it instead of fitting every frame
         self.last_plane = None      # (normal, d) in base frame
-        self.ee_mask_radius = ee_mask_radius  # the gripper fingers are always in view; drop points this close to the EE
+        self.extrinsic = extrinsic or cam_to_base   # pose6 -> (R, t) of the camera in base frame
+        self.finger_mask = finger_mask               # wrist camera: the fingers are always in view
 
     def run(self, color: np.ndarray, depth_m: np.ndarray, pose6) -> tuple[list[Detection], dict]:
         pts_opt, uv = self.intr.deproject(depth_m, self.stride)
         # D405 valid range ~0.07..0.5+ m; drop far/noisy points
         m = (pts_opt[:, 2] > 0.07) & (pts_opt[:, 2] < 1.0)
         pts_opt, uv = pts_opt[m], uv[m]
-        R, t = cam_to_base(pose6)
+        R, t = self.extrinsic(pose6)
         P = pts_opt @ R.T + t
         ee = np.asarray(pose6[:3], float)
-        far_from_ee = np.linalg.norm(P - ee, axis=1) > self.ee_mask_radius
-        P, uv = P[far_from_ee], uv[far_from_ee]
+        if self.finger_mask:
+            # the fingers hang from the flange down to the EE point: a column above ee_z.
+            # (a sphere around the EE also deleted the target under the gripper - sim run 1)
+            fingers = (np.abs(P[:, 0] - ee[0]) < 0.055) & (np.abs(P[:, 1] - ee[1]) < 0.055) & (P[:, 2] > ee[2] - 0.03)
+            P, uv = P[~fingers], uv[~fingers]
+        else:
+            # a fixed camera sees the whole arm: mask the base column and everything at or above
+            # the EE height within a corridor from the base to the EE (the links are up there;
+            # objects never are, because the z floor keeps the EE above the tallest object)
+            base = np.hypot(P[:, 0], P[:, 1]) < 0.10
+            seg = ee[:2]; L = np.linalg.norm(seg)
+            if L > 1e-6:
+                u = seg / L
+                along = P[:, :2] @ u
+                perp = np.abs(P[:, 0] * u[1] - P[:, 1] * u[0])
+                corridor = (along > -0.05) & (along < L + 0.08) & (perp < 0.09) & (P[:, 2] > ee[2] - 0.03)
+            else:
+                corridor = np.zeros(len(P), bool)
+            keep = ~(base | corridor)
+            P, uv = P[keep], uv[keep]
         info = {"n_points": int(len(P))}
         if len(P) < 100:
             return [], info | {"error": "too few depth points"}

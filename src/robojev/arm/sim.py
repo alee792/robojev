@@ -25,7 +25,7 @@ TABLE_Z = -0.02   # table surface in base frame, like the real bay (base plate s
 
 OBJECTS = [  # name, kind, xy, size, rgba
     ("cup", "cylinder", (0.37, -0.07), (0.04, 0.055), (0.93, 0.90, 0.85, 1)),      # radius, half-height -> 11 cm tall
-    ("phone", "box", (0.30, 0.10), (0.035, 0.07, 0.005), (0.05, 0.05, 0.05, 1)),   # 7x14x1 cm
+    ("phone", "box", (0.30, 0.10), (0.035, 0.07, 0.012), (0.05, 0.05, 0.05, 1)),   # 7x14x2.4 cm (a thick phone / small book)
 ]
 
 
@@ -60,8 +60,9 @@ def build_model():
         else:
             b.pos = [x, y, TABLE_Z + size[2]]
             b.add_geom(name=name + "_g", type=mujoco.mjtGeom.mjGEOM_BOX, size=list(size), rgba=list(rgba), contype=0, conaffinity=0)
-    # third-person camera for the dashboard
+    # third-person camera for the dashboard, and an overhead "scene" camera like the boom D455
     w.add_camera(name="third", pos=[0.9, -0.7, 0.55], xyaxes=[0.6, 0.8, 0, -0.35, 0.26, 0.9])
+    w.add_camera(name="overhead", pos=[0.33, 0.0, 0.80], xyaxes=[0, -1, 0, 1, 0, 0], fovy=60)
     return spec.compile()
 
 
@@ -215,41 +216,57 @@ class SimArm:
 
 
 class SimCamera:
-    """Renders the wrist camera (colour + depth in metres) from the sim. Same surface as CamClient."""
+    """Renders one MuJoCo camera (colour + depth in metres). Same surface as CamClient.
+    `third=True` also renders the third-person view for the dashboard."""
 
-    def __init__(self, arm: SimArm, width=640, height=480):
-        self.arm, self.w, self.h = arm, width, height
-        fovy = math.radians(arm.model.cam_fovy[arm.cam_id])
+    def __init__(self, arm: SimArm, cam_name: str = "cam", width=640, height=480, third: bool = False):
+        import mujoco
+        self.arm, self.w, self.h, self.cam_name = arm, width, height, cam_name
+        self.cam_id = mujoco.mj_name2id(arm.model, mujoco.mjtObj.mjOBJ_CAMERA, cam_name)
+        fovy = math.radians(arm.model.cam_fovy[self.cam_id])
         fy = (height / 2) / math.tan(fovy / 2)
         self.info = {"width": width, "height": height, "fx": fy, "fy": fy, "ppx": width / 2, "ppy": height / 2,
-                     "depth_scale": 1.0, "serial": "sim", "name": "MuJoCo wrist cam"}
+                     "depth_scale": 1.0, "serial": f"sim-{cam_name}", "name": f"MuJoCo {cam_name}"}
         self.renderer = None   # GL contexts are thread-bound on macOS: created lazily on the calling thread
+        self.want_third = third
         self.n = 0
         self.third_jpeg = None
+
+    def extrinsic_fixed(self):
+        """(R, t) of a fixed camera in base frame, from MuJoCo. MuJoCo cameras look along -z of
+        their frame with +y up; optical: x right = cam x, y down = -cam y, z forward = -cam z."""
+        with self.arm.lock:
+            self.arm.mujoco.mj_forward(self.arm.model, self.arm.data)
+            cp = self.arm.data.cam_xpos[self.cam_id].copy(); cR = self.arm.data.cam_xmat[self.cam_id].reshape(3, 3).copy()
+        R = np.stack([cR[:, 0], -cR[:, 1], -cR[:, 2]], 1)
+        return lambda pose6, R=R, t=cp: (R, t)
 
     def _ensure(self):
         if self.renderer is None:
             import mujoco
             self.renderer = mujoco.Renderer(self.arm.model, self.h, self.w)
             self.depth_renderer = mujoco.Renderer(self.arm.model, self.h, self.w); self.depth_renderer.enable_depth_rendering()
-            self.third = mujoco.Renderer(self.arm.model, 240, 320)
+            self.third = mujoco.Renderer(self.arm.model, 240, 320) if self.want_third else None
 
     def frame(self):
         from robojev.perception.camclient import Frame
         import cv2
         self._ensure()
         with self.arm.lock:
-            self.renderer.update_scene(self.arm.data, camera="cam")
-            self.depth_renderer.update_scene(self.arm.data, camera="cam")
-            self.third.update_scene(self.arm.data, camera="third")
+            self.renderer.update_scene(self.arm.data, camera=self.cam_name)
+            self.depth_renderer.update_scene(self.arm.data, camera=self.cam_name)
             rgb = self.renderer.render().copy()
             depth = self.depth_renderer.render().copy()
-            third = self.third.render().copy()
+            third = None
+            if self.third is not None:
+                self.third.update_scene(self.arm.data, camera="third")
+                third = self.third.render().copy()
         depth[~np.isfinite(depth)] = 0
         depth[depth > 3.0] = 0
-        ok, jpg = cv2.imencode(".jpg", cv2.cvtColor(third, cv2.COLOR_RGB2BGR), [cv2.IMWRITE_JPEG_QUALITY, 70])
-        if ok:
-            self.third_jpeg = jpg.tobytes()
+        if third is not None:
+            ok, jpg = cv2.imencode(".jpg", cv2.cvtColor(third, cv2.COLOR_RGB2BGR), [cv2.IMWRITE_JPEG_QUALITY, 70])
+            if ok:
+                self.third_jpeg = jpg.tobytes()
         self.n += 1
         return Frame(time.time(), self.n, cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR), depth.astype(np.float32))
 

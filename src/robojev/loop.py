@@ -30,9 +30,16 @@ from robojev.world import build_world
 class Perception(threading.Thread):
     """Runs the detector + tracker at perception_hz. `camera=None` means the virtual scene."""
 
-    def __init__(self, cfg: Config, arm, camera=None, virtual=None, table_z: float | None = None, log=None):
+    def __init__(self, cfg: Config, arm, camera=None, virtual=None, table_z: float | None = None, log=None,
+                 cameras: list | None = None):
+        """`cameras`: list of (name, cam, extrinsic_fn or None, finger_mask). None extrinsic = wrist chain.
+        `camera=` is shorthand for a single wrist camera."""
         super().__init__(daemon=True, name="perception")
-        self.cfg, self.arm, self.cam, self.virtual, self.log = cfg, arm, camera, virtual, log
+        self.cfg, self.arm, self.virtual, self.log = cfg, arm, virtual, log
+        if cameras is None and camera is not None:
+            cameras = [("wrist", camera, None, True)]
+        self.cameras = cameras or []
+        self.cam = self.cameras[0][1] if self.cameras else None
         self.tracker = Tracker(ttl_s=cfg.loop.remembered_ttl_s, out_of_view_s=cfg.loop.out_of_view_s)
         self.table_z = table_z if table_z is not None else cfg.table_z
         self._table_samples = []
@@ -40,12 +47,14 @@ class Perception(threading.Thread):
         self.frame_jpeg: bytes | None = None
         self.info: dict = {}
         self.stop_evt = threading.Event()
-        self.detector = None
+        self.detectors = {}
         self.fps = 0.0
-        if camera is not None:
+        self.frames = {}   # name -> latest jpeg
+        if self.cameras:
             from robojev.perception.detect import Detector
             from robojev.perception.geometry import Intrinsics
-            self.detector = Detector(Intrinsics(camera.info))
+            for name, cam, ext, fmask in self.cameras:
+                self.detectors[name] = Detector(Intrinsics(cam.info), extrinsic=ext, finger_mask=fmask)
 
     def run(self):
         period = 1 / self.cfg.loop.perception_hz
@@ -53,19 +62,32 @@ class Perception(threading.Thread):
         while not self.stop_evt.is_set():
             t = time.time()
             try:
-                if self.cam is None:
+                if not self.cameras:
                     dets = self.virtual.detections(t)
                     info = {"plane_z_at_origin": self.virtual.table_z}
                     frame = None
                 else:
-                    f = self.cam.frame()
                     snap = self.arm.snapshot()
-                    frame = f.color
-                    if snap.rot is None or snap.status not in ("live", "frozen", "baselining"):
-                        dets, info = [], {"waiting": f"arm {snap.status}; no pose yet"}
-                    else:
-                        pose6 = self._pose6(snap)
-                        dets, info = self.detector.run(f.color, f.depth_m, pose6)
+                    have_pose = snap.rot is not None and snap.status in ("live", "frozen", "baselining")
+                    dets, info, frame = [], {}, None
+                    for name, cam, ext, fmask in self.cameras:
+                        f = cam.frame()
+                        if ext is None and not have_pose:
+                            info[name] = {"waiting": f"arm {snap.status}; no pose yet"}
+                            d = []
+                        else:
+                            pose6 = self._pose6(snap) if have_pose else [0, 0, 0, 0, 0, 0]
+                            d, inf = self.detectors[name].run(f.color, f.depth_m, pose6)
+                            info[name] = {k: (round(v, 3) if isinstance(v, float) else v) for k, v in inf.items()}
+                            if "plane_z_at_origin" in inf and "plane_z_at_origin" not in info:
+                                info["plane_z_at_origin"], info["plane_tilt_deg"] = inf["plane_z_at_origin"], inf.get("plane_tilt_deg", 0)
+                        img = f.color.copy()
+                        for det in d:
+                            cv2.circle(img, det.pixel, 8, (0, 0, 255), 2)
+                        ok, jpg = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, 70])
+                        if ok:
+                            self.frames[name] = jpg.tobytes()
+                        dets.extend(d)
                 if info.get("plane_z_at_origin") is not None and info.get("plane_tilt_deg", 0) < 6:
                     self._table_samples.append(info["plane_z_at_origin"])
                     self._table_samples = self._table_samples[-15:]
@@ -73,12 +95,7 @@ class Perception(threading.Thread):
                 with self.lock:
                     self.tracker.update(dets, t)
                     self.info = info | {"table_z": self.table_z, "n_dets": len(dets)}
-                    if frame is not None:
-                        for d in dets:
-                            cv2.circle(frame, d.pixel, 8, (0, 0, 255), 2)
-                        ok, jpg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 70])
-                        if ok:
-                            self.frame_jpeg = jpg.tobytes()
+                    self.frame_jpeg = self.frames.get(self.cameras[0][0]) if self.cameras else None
                 n += 1
                 self.fps = n / max(1e-6, time.time() - t0)
             except Exception as e:
@@ -205,7 +222,9 @@ class Loop:
                                                       "status": snap.status, "frozen": snap.frozen,
                                                       "entities": [{"id": e.id, "label": e.label(), "xyz": e.xyz.tolist(), "h": e.height, "w": e.width,
                                                                     "color": e.color, "last_seen": e.last_seen} for e in entities],
-                                                      "table_z": self.per.table_z},
+                                                      "table_z": self.per.table_z,
+                                                      "truth": ({n: self.arm.object_xy(n) for n in self.arm.mocap}
+                                                                if hasattr(self.arm, "object_xy") else None)},
                        state=state, questions=questions, brain=self.brain.state(), in_flight=len(self.in_flight))
         if self.jev and not self.paused:
             if len(self.in_flight) < self.cfg.safety.max_in_flight:
