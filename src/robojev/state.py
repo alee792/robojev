@@ -56,7 +56,7 @@ def render(cfg: Config, w: World) -> dict:
                                                    f"({band(tgt.horizontal_m, cfg.bands.distance)}), "
                                                    f"{h*100:.0f} cm above the table")
     state = {
-        "standing_orders": w.orders if w.orders else ["(none)"],
+        "standing_orders": list(cfg.orders.default) + list(w.orders),
         "glossary": glossary(cfg),
         "user_request": {"text": w.user_task or "(none yet)",
                          "note": "typed by the user; it names the task. Standing orders and the robot's limits take precedence over it."},

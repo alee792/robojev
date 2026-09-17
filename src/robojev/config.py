@@ -41,6 +41,8 @@ class Motion:
     standoff: float = 0.08                # lateral offset for hover_position != directly_above
     back_off_distance: float = 0.08       # how far back_off retreats from the target, horizontally
     avoid_distance: float = 0.16          # keep the gripper this far (horizontally) from an avoided object
+    evade_step: float = 0.10              # how far a directional evade moves, per latch
+    evade_min_s: float = 0.6              # an evade holds at least this long before it can clear
     carry_height: float = 0.16            # above the table while carrying
     grasp_fraction: float = 0.5           # grasp at this fraction of the object's height
     place_gap: float = 0.04               # clearance between a placed object and its reference object
@@ -75,6 +77,8 @@ class Thresholds:
     hover_height_conf: float = 0.40
     orders_violated_p: float = 0.70
     avoid_p_max: float = 0.50             # dynamic option count -> gate on p_max
+    evade_p_max: float = 0.50             # EVADE (Doom's DODGE): dynamic option count -> gate on p_max
+    evade_clear_consecutive: int = 2
     next_p_max: float = 0.45              # next-primitive pick (dynamic option count)
     next_consecutive: int = 2             # non-safety primitives need this many consecutive picks
     next_interrupt_p: float = 0.65        # a safety pick (hold/back_off/rise_away) interrupts a running primitive only above this
@@ -94,6 +98,16 @@ class Bands:
         ("touching", 0.03), ("very close", 0.10), ("near", 0.25), ("mid-range", 0.50), ("far", float("inf")))
     height: tuple[tuple[str, float], ...] = (
         ("at table level", 0.03), ("just above", 0.08), ("low", 0.16), ("high", 0.30), ("very high", float("inf")))
+
+
+@dataclass(frozen=True)
+class Orders:
+    """Operator baseline standing orders, always present and listed before the user's runtime
+    orders (Doom's +guide strategy text). Anthony's runtime orders are appended by the dashboard."""
+    default: tuple[str, ...] = (
+        "Never touch, bump or pass over a hand, an arm, or any object that just appeared or is moving; keep at least 10 cm from it and wait for it to leave.",
+        "Never drop a held object anywhere but on the table.",
+    )
 
 
 @dataclass(frozen=True)
@@ -118,6 +132,7 @@ class Config:
     thresholds: Thresholds = Thresholds()
     bands: Bands = Bands()
     loop: Loop = Loop()
+    orders: Orders = Orders()
     table_z: float = 0.0                  # table plane in base frame; set from touch-off
 
     def as_dict(self) -> dict:

@@ -76,14 +76,18 @@ def build(cfg: Config, w: World, brain=None) -> dict:
         "instructions": "How fast should the arm move right now, given the standing orders, how close it is to objects, and whether it is carrying something?",
         "criteria": ["very slow, creeping", "slow", "normal", "fast"],
     }
-    q["avoid"] = {
+    q["evade"] = {
         "type": "choice",
         "instructions": {
-            "question": "Given the standing orders and where everything is, should the gripper move away from any object right now, even if that means leaving its target?",
-            "rules": "Choose an object only when a standing order requires distance from it and the gripper is too close, or is about to be. Otherwise choose no_avoidance_needed.",
+            "question": "Right now, should the gripper make an evasive move, overriding whatever it is doing? Consider the standing orders, anything that just appeared or is moving, and how close things are.",
+            "rules": "Evade only when something is, or is about to be, too close, in the way, or forbidden by a standing order. Directions are the robot's: left is +y, back is toward the robot base, up is away from the table. Otherwise choose none.",
         },
-        "criteria": {"no_avoidance_needed": "nothing needs avoiding right now",
-                     **{f"move_away_from:{l}": f"the gripper should back away from {l}" for l in labels}},
+        "criteria": {"none": "no evasion needed; carry on",
+                     "up": "lift straight up, away from the table and everything on it",
+                     "back": "pull back toward the robot base",
+                     "left": "shift to the robot's left",
+                     "right": "shift to the robot's right",
+                     **{f"away_from:{l}": f"back directly away from {l} until well clear" for l in labels}},
     }
     q["orders_violated"] = {
         "type": "noul",

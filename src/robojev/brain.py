@@ -44,7 +44,10 @@ class Brain:
         self.hover_height = "high"
         self.speed_level = 1
         self.override = False
-        self.avoid: str | None = None
+        self.avoid: str | None = None       # label being backed away from (evade = away_from:X)
+        self.evade: str | None = None       # directional evade: up | back | left | right | None
+        self.evade_t: float | None = None
+        self.evade_anchor = None            # setpoint when the evade latched (the step is relative to it)
         # sequencer
         self.prim: str | None = None
         self.prim_subject: str | None = None
@@ -121,7 +124,7 @@ class Brain:
             ladder = "hold"
         return {"target": self.target, "motion": self.motion, "hover_position": self.hover_position,
                 "hover_height": self.hover_height, "speed_name": self.cfg.motion.speed_names[self.speed_level],
-                "speed_level": self.speed_level, "override": self.override, "avoid": self.avoid, "ladder": ladder,
+                "speed_level": self.speed_level, "override": self.override, "avoid": self.avoid, "evade": self.evade, "ladder": ladder,
                 "answer_age_s": age, "fresh_age_s": fresh_age, "recent": list(self.recent),
                 "prim": self.prim, "prim_subject": self.prim_subject, "prim_status": self.prim_status,
                 "prim_age": (now - self.prim_started_t) if self.prim_started_t else None,
@@ -281,30 +284,36 @@ class Brain:
                 status = "pending_confirmation"
             J["speed"] = Judgment("speed", self.cfg.motion.speed_names[lvl], s, a.get("confidence"), a.get("probabilities", {}), True, status, tag, age_ms)
 
-        a = answers.get("avoid")
+        a = answers.get("evade")
         if a and a.get("type") == "choice":
             probs, ch = a["probabilities"], a["choice"]
             pmax = max(probs.values()) if probs else 0.0
             status = "gated"
-            if pmax >= th.avoid_p_max:
-                if ch.startswith("move_away_from:"):
-                    label = ch.split(":", 1)[1]
-                    if label in labels:
-                        status = "override"
-                        if self.avoid != label:
-                            self._note(f"avoiding {label}")
-                        self.avoid = label
-                        self._streak["avoid"] = ("clear", 0)
-                elif self.avoid is not None:
-                    if self._streak_ok("avoid", "clear", th.avoid_clear_consecutive):
-                        self._note(f"clear of {self.avoid}"); self.avoid = None; status = "applied"
+            if pmax >= th.evade_p_max:
+                if ch != "none":
+                    status = "override"
+                    label = ch.split(":", 1)[1] if ch.startswith("away_from:") else None
+                    direction = None if label else ch
+                    if label and label not in labels:
+                        status = "gated"
+                    else:
+                        if (label, direction) != (self.avoid, self.evade):
+                            self._note(f"evade {ch}")
+                            self.evade_anchor = tuple(world.arm.setpoint)
+                            self.evade_t = now
+                        self.avoid, self.evade = label, direction
+                        self._streak["evade"] = ("clear", 0)
+                elif self.avoid is not None or self.evade is not None:
+                    held_long_enough = self.evade_t is not None and now - self.evade_t >= self.cfg.motion.evade_min_s
+                    if held_long_enough and self._streak_ok("evade", "clear", th.evade_clear_consecutive):
+                        self._note("evade clear"); self.avoid = self.evade = None; self.evade_anchor = None; status = "applied"
                     else:
                         status = "pending_confirmation"
                 else:
                     status = "applied"
             if self.avoid and self.avoid not in labels:
                 self.avoid = None
-            J["avoid"] = Judgment("avoid", ch, pmax, a.get("confidence"), probs, pmax >= th.avoid_p_max, status, tag, age_ms)
+            J["evade"] = Judgment("evade", ch, pmax, a.get("confidence"), probs, pmax >= th.evade_p_max, status, tag, age_ms)
 
         a = answers.get("orders_violated")
         if a and a.get("type") == "noul":
@@ -348,13 +357,21 @@ class Brain:
         if st["ladder"] == "hold":
             return sp, slowest, None, "no fresh answers: holding"
         cap = m.speed_levels[self.speed_level]
+        if self.evade and self.evade_anchor is not None:
+            ax, ay, az = self.evade_anchor
+            step = m.evade_step
+            goal = {"up": (ax, ay, min(ws.z[1], tz + m.safe_height)),
+                    "back": (ax - step, ay, max(az, skills.hover_z(self.cfg, world))),
+                    "left": (ax, ay + step, max(az, skills.hover_z(self.cfg, world))),
+                    "right": (ax, ay - step, max(az, skills.hover_z(self.cfg, world)))}.get(self.evade, (ax, ay, az))
+            return ws.clamp(goal), max(cap, m.speed_levels[2]), None, f"evade {self.evade}"
         av = world.entity(self.avoid) if self.avoid else None
         if av is not None:
             dx, dy = ee[0] - av.xyz[0], ee[1] - av.xyz[1]
             L = math.hypot(dx, dy); ux, uy = (dx / L, dy / L) if L > 1e-6 else (-1.0, 0.0)
             need = max(0.0, m.avoid_distance - L)
             goal = ws.clamp((ee[0] + ux * need, ee[1] + uy * need, max(sp[2], skills.hover_z(self.cfg, world))))
-            return goal, cap, None, f"avoid {self.avoid}: {L*100:.0f} cm away, want {m.avoid_distance*100:.0f}"
+            return goal, max(cap, m.speed_levels[2]), None, f"evade away_from {self.avoid}: {L*100:.0f} cm away, want {m.avoid_distance*100:.0f}"
         if self.override:
             return sp, cap, None, "orders_violated: holding"
         if self.prim is None:
