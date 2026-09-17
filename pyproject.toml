@@ -1,0 +1,35 @@
+[project]
+name = "robojev"
+version = "0.1.0"
+description = "Drive a WidowX AI arm from natural language with a Doom-style loop of typed Jev judgments."
+requires-python = ">=3.12"
+dependencies = [
+  "httpx[http2]>=0.27",
+  "numpy>=1.26",
+  "aiohttp>=3.9",
+  "opencv-contrib-python-headless>=4.10",
+]
+
+[project.optional-dependencies]
+real = ["trossen-arm==1.9.3"]
+sim = ["mujoco>=3.2"]
+cameras = [
+  "pyrealsense2; sys_platform != 'darwin'",
+  "pyrealsense2-macosx; sys_platform == 'darwin'",
+]
+
+[project.scripts]
+robojev = "robojev.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/robojev"]
+
+[tool.uv]
+package = true
+
+[dependency-groups]
+dev = ["pytest>=8"]
