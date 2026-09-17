@@ -19,6 +19,35 @@ code change. Research bundle: `context/`. API probes: `experiments/`.
   or 1 s of silence elapsed (`--clocked` restores one request per tick). A 30 s sim run sent 48
   requests in 300 ticks. ~2.8k tokens/call, p50 ~145 ms, p95 ~256 ms.
 
+## Jev as the policy (v1, evening of 2026-09-17)
+Direction: Jev picks every channel every tick in a scene that changes at the decision rate; code
+resolves picks into setpoints and enforces limits. Built:
+- **Primitive library** (`src/robojev/skills.py`): move_above, descend_to_grasp, close_gripper,
+  lift, move_to_place, lower_to_place, set_down_here, open_gripper, retreat + hold/back_off/rise_away.
+  Offered to Jev only when preconditions hold; verified by code; new verbs are sequences Jev
+  composes at run time (no code per task).
+- **Battery v1** (`questions/v1.py`): target, place, next (3 paraphrases, 2-of-3 majority), speed,
+  evade (none/up/back/left/right/away_from X = Doom's DODGE, overrides everything), orders_violated,
+  task_done. Default operator orders (hands, moving objects, never drop) sit above user orders.
+- **Event-driven requests**: a request only when facts changed (entity moved > 2 cm, phase changed,
+  orders/task changed, offer set changed) or 1 s of silence; ~85% fewer calls; the silence ladder
+  distinguishes "chose not to ask" from "asked and got nothing".
+- **Dynamic sim scenario** `--scenario intruder`: a hand slides in between gripper and cup mid-task
+  and the cup is moved while the arm works. `scripts/analyze.py` measures pick changes per tick,
+  intrusion-to-evade latency and task resumption.
+- **Perception hygiene learned the hard way**: height-aware clustering only for top-down cameras,
+  carried object masked and its track pinned to the gripper, partial/merged/occluded views never
+  move a track, static objects remembered 3 min, moving ones 20 s, no new tracks from blobs at the
+  gripper or wider than 16 cm.
+- **VLM naming tier** (`--vlm claude|stub`, `perception/vlm.py`): off the control path, names each
+  confirmed track once from a colour crop and drops phantoms; needs `ANTHROPIC_API_KEY`.
+
+Results in sim (intruder scenario, pick-and-place "put the paper cup to the left of the phone"):
+full sequence grasp -> carry -> lower -> release with a hand intrusion on the way (run intr11);
+evade fires 0.6-7 s after the hand appears depending on where the arm is; the `next` pick changes
+on 15-35% of answers versus 0-4% in the static scene. Remaining fragility is perception phantoms
+from the shape-only labeller (the VLM tier is the fix) and override/timeout interplay.
+
 ## Layout
 | Path | Role |
 |---|---|
