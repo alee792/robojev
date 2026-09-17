@@ -36,7 +36,11 @@ for k in sorted(total):
 
 # intrusion -> first evade/avoid command; uses sim truth if present (hand inside the workspace box)
 def in_box(xy): return 0.15 < xy[0] < 0.45 and -0.25 < xy[1] < 0.25
-t_intr = next((t["t"] for t in ticks if (t.get("obs", {}).get("truth") or {}).get("hand") and in_box(t["obs"]["truth"]["hand"])), None)
+def threatening(t):
+    """The hand is inside the workspace AND within 12 cm of the gripper (the default order's zone)."""
+    h = (t.get("obs", {}).get("truth") or {}).get("hand"); ee = t.get("obs", {}).get("ee")
+    return bool(h and ee and in_box(h) and math.hypot(h[0] - ee[0], h[1] - ee[1]) < 0.12)
+t_intr = next((t["t"] for t in ticks if threatening(t)), None)
 if t_intr is None:
     t_intr = next((t["t"] for t in ticks if any("appeared" in (o.get("status") or "") for o in t.get("state", {}).get("objects", []))), None)
 if t_intr:

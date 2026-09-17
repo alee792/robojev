@@ -76,7 +76,7 @@ class Thresholds:
     motion_conf: float = 0.40
     hover_position_conf: float = 0.40
     hover_height_conf: float = 0.40
-    orders_violated_p: float = 0.70
+    orders_violated_p: float = 0.90       # a logged signal; EVADE is the action channel, so this only brakes when near-certain
     avoid_p_max: float = 0.50             # dynamic option count -> gate on p_max
     evade_p_max: float = 0.50             # EVADE (Doom's DODGE): dynamic option count -> gate on p_max
     evade_clear_consecutive: int = 2

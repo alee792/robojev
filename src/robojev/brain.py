@@ -74,6 +74,9 @@ class Brain:
         self.applied_count = 0
         self.offered_keys: list[str] = []
         self._ee_hist: list = []   # (t, ee) for stall detection
+        self.prim_active_s = 0.0   # seconds the primitive's own goal has actually been commanded
+        self._last_compose_t = None
+        self.prim_budget_s = 0.0
 
     # -- helpers -----------------------------------------------------------------------------
     def _streak_ok(self, key: str, candidate: str, needed: int) -> bool:
@@ -141,6 +144,8 @@ class Brain:
         self.prev_prim = self.prim
         self.prim, self.prim_subject = name, (subj or None)
         self.prim_started_t, self.prim_status = time.time(), "running"
+        self.prim_active_s = 0.0
+        self.prim_budget_s = 0.0
         if name == "descend_to_grasp":
             e = world.entity(subj)
             self.origin_xy = tuple(e.xyz[:2]) if e else None
@@ -361,13 +366,17 @@ class Brain:
         st = self.state()
         slowest = m.speed_levels[0]
         self.offered_keys = [p.key for p in skills.offered(self.cfg, world, self)]
-        # timeouts and stalls are judged whatever else is going on (an evade used to hide a stuck lift for 25 s)
+        # timeouts count only the time the primitive's own goal was being commanded (an evade or a
+        # hold must not eat its clock), and the budget scales with how far it has to go at the cap
         self._ee_hist.append((now, ee)); self._ee_hist = [h for h in self._ee_hist if now - h[0] <= 4.0]
-        if self.prim_status == "running" and self.prim not in SAFETY_PRIMS:
-            age = now - (self.prim_started_t or now)
-            if age > m.primitive_timeout_s:
-                self.prim_status, self.last_result = "failed", f"{self.prim} failed: timed out after {age:.0f} s"; self._note(self.last_result)
-            elif age > m.stall_s and not (self.avoid or self.evade or self.override):
+        dt = 0.0 if self._last_compose_t is None else min(0.5, now - self._last_compose_t)
+        self._last_compose_t = now
+        overridden = bool(self.avoid or self.evade or self.override or st["ladder"] != "fresh")
+        if self.prim_status == "running" and self.prim not in SAFETY_PRIMS and not overridden:
+            self.prim_active_s += dt
+            if self.prim_active_s > max(m.primitive_timeout_s, self.prim_budget_s):
+                self.prim_status, self.last_result = "failed", f"{self.prim} failed: timed out after {self.prim_active_s:.0f} s of trying"; self._note(self.last_result)
+            elif self.prim_active_s > m.stall_s:
                 old = [h for h in self._ee_hist if now - h[0] >= m.stall_s]
                 if old and math.dist(old[-1][1], ee) < 0.01 and self.prim not in ("close_gripper", "open_gripper"):
                     self.prim_status, self.last_result = "failed", f"{self.prim} failed: the arm stalled (goal may be unreachable)"; self._note(self.last_result)
@@ -396,6 +405,8 @@ class Brain:
         if self.prim is None:
             return (sp[0], sp[1], max(sp[2], skills.hover_z(self.cfg, world))), cap, None, "no primitive yet: holding at hover height"
         goal, gripper, done, fail, reason = skills.goal_for(self.cfg, world, self, now)
+        if self.prim_status == "running" and self.prim_budget_s == 0.0 and goal is not None:
+            self.prim_budget_s = 2.0 * math.dist(sp, goal) / max(cap, 1e-3) + 2.0
         if self.prim_status == "running":
             age = now - (self.prim_started_t or now)
             if fail:
