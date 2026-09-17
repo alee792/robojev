@@ -71,7 +71,11 @@ class Perception(threading.Thread):
                     have_pose = snap.rot is not None and snap.status in ("live", "frozen", "baselining")
                     dets, info, frame = [], {}, None
                     for name, cam, ext, fmask in self.cameras:
-                        f = cam.frame()
+                        try:
+                            f = cam.frame()
+                        except Exception as e:      # one camera's hiccup must not blind the other
+                            info[name] = {"error": repr(e)[:120]}
+                            continue
                         if ext is None and not have_pose:
                             info[name] = {"waiting": f"arm {snap.status}; no pose yet"}
                             d = []
