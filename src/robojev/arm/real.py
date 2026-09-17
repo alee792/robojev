@@ -129,7 +129,7 @@ class RealArm:
                     self._snap = ArmSnapshot(time.time(), tuple(pose[:3]), joints[6], joints=joints,
                                              ext_force=(fx, fy, fz), setpoint=sp or tuple(pose[:3]),
                                              goal=self.mover.goal or tuple(pose[:3]), speed_cap=self.mover.speed_cap,
-                                             frozen=self.mover.frozen,
+                                             frozen=self.mover.frozen, rot=tuple(pose[3:6]),
                                              status="frozen" if self.mover.frozen else ("live" if self.watchdog.baseline else "baselining"))
                 next_t += dt
                 sleep = next_t - time.perf_counter()
@@ -166,3 +166,57 @@ class RealArm:
     def resume(self):
         self.mover.resume()
         self._event("resume")
+
+
+class RealArmReadOnly(RealArm):
+    """Reads the real arm's pose in a thread; never sets a mode or sends a command. Commands are
+    recorded in the snapshot's goal so the dashboard shows what *would* be sent."""
+
+    @staticmethod
+    def _default_factory(ip):
+        import trossen_arm
+        d = trossen_arm.TrossenArmDriver()
+        d.configure(trossen_arm.Model.wxai_v0, trossen_arm.StandardEndEffector.wxai_v0_follower, ip, False)
+        return d
+
+    def start(self):
+        self.driver = self._driver_factory(self.ip)
+        pose = list(self.driver.get_cartesian_positions())
+        self.mover.init_at(pose[:3])
+        self._event(f"read-only: arm at {[round(v, 3) for v in pose[:3]]}, no commands will be sent")
+        self._thread = threading.Thread(target=self._run, daemon=True, name="arm-ro")
+        self._thread.start()
+
+    def stop(self):
+        self._stop.set()
+        if self._thread and self._thread.is_alive():
+            self._thread.join(timeout=3)
+        if self.driver is not None:
+            try:
+                self.driver.cleanup()
+            except Exception:
+                pass
+            self.driver = None
+        self._set_status("stopped")
+
+    def _run(self):
+        dt = 1 / self.cfg.motion.real_tick_hz
+        last = time.perf_counter()
+        try:
+            while not self._stop.is_set():
+                now = time.perf_counter()
+                pose = list(self.driver.get_cartesian_positions())
+                joints = tuple(self.driver.get_all_positions())
+                fx, fy, fz = list(self.driver.get_cartesian_external_efforts())[:3]
+                sp = self.mover.step(now - last)   # the mover walks, the arm does not
+                last = now
+                with self._lock:
+                    self._snap = ArmSnapshot(time.time(), tuple(pose[:3]), joints[6], joints=joints, ext_force=(fx, fy, fz),
+                                             setpoint=sp or tuple(pose[:3]), goal=self.mover.goal or tuple(pose[:3]),
+                                             speed_cap=self.mover.speed_cap, frozen=self.mover.frozen, rot=tuple(pose[3:6]),
+                                             status="live")
+                time.sleep(max(0.0, dt - (time.perf_counter() - now)))
+        except Exception as e:
+            self._event(f"read-only thread error: {e!r}")
+            with self._lock:
+                self._snap.status, self._snap.error = "error", repr(e)

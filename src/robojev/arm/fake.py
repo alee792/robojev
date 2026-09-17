@@ -33,7 +33,8 @@ class FakeArm:
             last = now
             with self._lock:
                 self._snap = ArmSnapshot(time.time(), sp, self.gripper, setpoint=sp, goal=self.mover.goal,
-                                         speed_cap=self.mover.speed_cap, frozen=self.mover.frozen, status="live")
+                                         speed_cap=self.mover.speed_cap, frozen=self.mover.frozen, status="live",
+                                         rot=self.cfg.motion.down_orientation)
             time.sleep(dt)
 
     def stop(self):

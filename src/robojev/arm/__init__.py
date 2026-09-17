@@ -25,6 +25,7 @@ class ArmSnapshot:
     frozen: bool = False
     status: str = "init"                           # init | staging | live | frozen | parking | stopped | error
     error: str | None = None
+    rot: tuple[float, float, float] | None = None  # EE orientation, angle-axis, as the driver reports it
 
 
 class ArmBackend(Protocol):
