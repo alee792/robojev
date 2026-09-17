@@ -43,7 +43,7 @@ class Motion:
     avoid_distance: float = 0.16          # keep the gripper this far (horizontally) from an avoided object
     evade_step: float = 0.10              # how far a directional evade moves, per latch
     evade_min_s: float = 0.6              # an evade holds at least this long before it can clear
-    carry_height: float = 0.14            # above the table while carrying (base z 0.12: inside the reachable envelope)
+    carry_height: float = 0.12            # above the table while carrying (base z 0.10: well inside the reachable envelope)
     grasp_fraction: float = 0.5           # grasp at this fraction of the object's height
     place_gap: float = 0.04               # clearance between a placed object and its reference object
     gripper_settle_s: float = 1.0         # wait after a gripper command before judging the result

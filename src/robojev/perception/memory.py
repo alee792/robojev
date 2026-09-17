@@ -118,7 +118,7 @@ class Tracker:
         for d in unmatched:
             if d.width > MAX_NEW_WIDTH:
                 continue   # merged blobs (hand+cup came out 21 cm wide) must not become objects
-            if carried_xy is not None and np.hypot(d.base_xyz[0] - carried_xy[0], d.base_xyz[1] - carried_xy[1]) < 0.09:
+            if carried_xy is not None and np.hypot(d.base_xyz[0] - carried_xy[0], d.base_xyz[1] - carried_xy[1]) < 0.15:
                 continue
             eid = letter(self._n); self._n += 1
             self.entities[eid] = Entity(eid, np.asarray(d.base_xyz, float), d.height, d.width, d.color_name, now, now,
