@@ -45,6 +45,7 @@ class Motion:
     evade_min_s: float = 0.6              # an evade holds at least this long before it can clear
     carry_height: float = 0.12            # above the table while carrying (base z 0.10: well inside the reachable envelope)
     grasp_fraction: float = 0.5           # grasp at this fraction of the object's height
+    place_region: tuple[tuple[float, float], tuple[float, float]] = ((0.30, 0.55), (-0.16, 0.16))   # 'somewhere else' stays where the survey pose can see it
     shift_distance: float = 0.15          # how far a 'move it to the left/right/away/closer' place is from the pickup spot
     grip_squeeze: float = 0.035           # close to (object width - this) so a paper cup is held firmly, not crushed (it closed to 2.6 cm on a 7 cm cup: real run 11)
     place_gap: float = 0.04               # clearance between a placed object and its reference object
@@ -61,7 +62,7 @@ class Motion:
     side_standoff: float = 0.06           # approach point: this far behind the object's near edge, wrist level
     side_grasp_height: float = 0.02       # tips 2 cm up: the pads (1.4-6.9 cm behind the tips, tilted) then meet a tapered cup where it is narrowest
     advance_push_n: float = 6.0           # F_x rise above the pre-advance baseline that means the fingers are shoving the object      # fingertips this far above the table for a side grasp (a tapered cup is narrowest low down)
-    side_grasp_depth: float = -0.02       # tips 2 cm past the centre: pads (1.4-6.9 cm behind the tips) straddle it, and the palm (6.9 cm back) stays 1.4 cm clear of a 7 cm cup's near wall (-0.03 put the palm on the wall: real run 9)
+    side_grasp_depth: float = -0.025      # tips 2.5 cm past the centre: pads (1.4-6.9 cm behind the tips) straddle it, and the palm (6.9 cm back) stays 1.4 cm clear of a 7 cm cup's near wall (-0.03 put the palm on the wall: real run 9)
     side_pitch_advance: float = 0.35      # flatter wrist while sliding around the object: the pads span less height, so they meet the cup where it is narrower
     side_pitch_far: float = 0.25          # flatter still beyond side_far_x: keeps the arm extended instead of bunching the elbow, and is reachable there (sim map)
     side_far_x: float = 0.36

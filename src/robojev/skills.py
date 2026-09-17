@@ -92,12 +92,13 @@ def resolve_place(cfg: Config, w: World, place: str | None, origin_xy, last_set_
         rng = random.Random(int(origin_xy[0] * 1000) ^ int(origin_xy[1] * 1000) ^ int(w.t * 10))
         best = None
         for _ in range(200):
-            x = rng.uniform(ws.x[0] + 0.03, ws.x[1] - 0.03); y = rng.uniform(ws.y[0] + 0.03, ws.y[1] - 0.03)
+            (x0, x1), (y0, y1) = cfg.motion.place_region
+            x = rng.uniform(x0, x1); y = rng.uniform(y0, y1)
             d_origin = math.hypot(x - origin_xy[0], y - origin_xy[1])
             d_obj = min([math.hypot(x - e.xyz[0], y - e.xyz[1]) for e in w.entities if e.label != w.holding_label] + [9.0])
             if d_origin < 0.15 or d_obj < 0.12:
                 continue
-            cx0, cy0 = (ws.x[0] + ws.x[1]) / 2, 0.0
+            cx0, cy0 = (x0 + x1) / 2, 0.0
             score = min(d_origin, 0.25) + min(d_obj, 0.20) - 0.8 * math.hypot(x - cx0, y - cy0)
             if best is None or score > best[0]:
                 best = (score, x, y)

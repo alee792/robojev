@@ -134,7 +134,9 @@ class Detector:
             v = P - ee
             along = v @ d
             perp = np.linalg.norm(v - np.outer(along, d), axis=1)
-            fingers = (along > -0.22) & (along < 0.02) & (perp < 0.065)
+            # pads: 6.5 cm radius; further back the open carriages stick out ~9 cm sideways (they
+            # were 'black cup-like objects' at +-9 cm behind the tips at the survey pose: real run 13)
+            fingers = ((along > -0.04) & (along < 0.02) & (perp < 0.065)) | ((along > -0.22) & (along <= -0.04) & (perp < 0.11))
             P, uv = P[~fingers], uv[~fingers]
         else:
             # a fixed camera sees the whole arm: mask the base column and everything at or above
