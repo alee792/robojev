@@ -50,3 +50,25 @@ composing the answers into commands, and live standing orders. See `02`–`04` f
 ## Status
 Research only (2026-09-17). Handoff to Fable/Astra for architecture and implementation, with
 creative license. See `README.md`.
+
+## Decision: Jev as the policy, not a guard (2026-09-17, evening)
+Anthony's direction after the first day of building. In Doom, Jev picks every channel every 100 ms
+and the picks matter because the world changes between ticks. In a static tabletop scene the same
+architecture degenerates into a constant ("approach, high, slow") and looks like a guard. The
+pattern is not the difference; the dynamics are.
+
+So the goal is oriented toward **Jev as a reactive policy over a factored, Doom-dense action space
+in a scene that changes at the decision rate**:
+- Channels re-judged every tick: TARGET (which object now), MOVE (toward target / hold / away /
+  toward another entity), EVADE (none / up / left / right / back / away from X; overrides MOVE),
+  GRIP (open / close / hold, offered only when code's preconditions allow), SPEED and HEIGHT as
+  modifiers, LOOK (which entity to inspect) later.
+- Code resolves every pick to a setpoint from the latest geometry, smooths, and enforces limits.
+  Jev never emits a distance or a coordinate.
+- Irreversible steps (descend, close, lift, place) stay sequenced through the primitive library with
+  preconditions; the reactive channels sit on top and can interrupt any step.
+- The demo that proves it: a hand enters between gripper and cup mid-task, the cup is moved while
+  the arm approaches, and the picks change tick to tick with a visible, fast response, then the
+  task resumes. Measures: fraction of ticks where a pick changed, intrusion-to-first-evade latency,
+  task resumption after the intrusion clears.
+- Standing orders remain the natural-language lever that changes the policy without code.
