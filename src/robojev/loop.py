@@ -170,6 +170,8 @@ class Perception(threading.Thread):
             if e.last_seen >= t - 0.05:
                 e.absent = 0
                 continue
+            if np.hypot(e.xyz[0] - snap.ee[0], e.xyz[1] - snap.ee[1]) < 0.20:
+                continue   # right next to the gripper the view is masked/partial: no verdict (a just-released cup was 'gone': real run 13)
             p = np.asarray([e.xyz[0], e.xyz[1], e.xyz[2] + e.height / 2], float)
             c = R.T @ (p - tt)
             if not (0.15 < c[2] < 0.75):
