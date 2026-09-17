@@ -225,7 +225,7 @@ def goal_for(cfg: Config, w: World, brain, now: float):
         if done and w.holding_label is None:
             fail = "closed on nothing"
         e = w.entity(subj) if subj else None
-        target = max(0.0, min(0.035, ((e.width_m if e else 0.0) - cfg.motion.grip_squeeze) / 2))   # per-carriage travel: the pads stop on the object before reaching it
+        target = max(0.026, min(0.035, ((e.width_m if e else 0.0) - cfg.motion.grip_squeeze) / 2))   # per-carriage travel: the pads stop on the object before reaching it; floor 5.2 cm gap (a low width estimate closed to 2.2 cm on the cup: real run 13)
         return sp, target, done, fail, "close_gripper"
     if name == "lift":
         goal = (sp[0], sp[1], carry_z(cfg, w))
