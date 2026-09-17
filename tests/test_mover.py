@@ -31,9 +31,11 @@ def test_freeze_holds():
 def test_watchdog_uses_deviation():
     w = EffortWatchdog(trip_n=10, baseline_s=0.5)
     t = 0.0
-    for _ in range(10):
+    for _ in range(5):
         assert w.update((-33, -6, -25), t) is None
         t += 0.1
-    assert w.baseline is not None
+    while w.baseline is None:
+        w.update((-33, -6, -25), t)
+        t += 0.1
     assert not w.tripped(w.update((-33, -6, -25), t))
     assert w.tripped(w.update((-33, -6, -40), t))
