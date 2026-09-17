@@ -323,6 +323,6 @@ class Brain:
                 self._note(self.last_result)
             elif age > m.primitive_timeout_s and self.prim not in SAFETY_PRIMS:
                 self.prim_status, self.last_result = "failed", f"{self.prim} failed: timed out after {age:.0f} s"; self._note(self.last_result)
-        if self.prim_status in ("done", "failed") and self.prim in ("move_above", "descend_to_grasp", "move_to_place", "lower_to_place", "lift", "retreat", "rise_away", "back_off"):
+        if self.prim_status in ("done", "failed") and self.prim in ("move_above", "descend_to_grasp", "move_to_place", "lower_to_place", "set_down_here", "lift", "retreat", "rise_away", "back_off"):
             goal = sp   # finished primitives hold position until the next pick
         return goal, cap, gripper, reason

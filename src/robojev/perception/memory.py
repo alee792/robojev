@@ -123,6 +123,16 @@ class Tracker:
                     if now - e.last_seen > (self.ttl if e.seen_count >= CONFIRM else UNCONFIRMED_TTL)]:
             del self.entities[eid]
 
+    def pin(self, label: str, xy, now: float | None = None) -> None:
+        """Code-side object permanence for a carried object: its track follows the gripper."""
+        now = now or time.time()
+        for e in self.entities.values():
+            if e.label() == label:
+                e.xyz = np.array([xy[0], xy[1], e.xyz[2]], float)
+                e.last_seen = now
+                e.history.append((now, float(xy[0]), float(xy[1]))); e.history = e.history[-40:]
+                return
+
     def set_name(self, eid: str, name: str | None):
         self.names[eid] = name
         if eid in self.entities:

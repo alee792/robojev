@@ -104,7 +104,7 @@ class Detector:
         self.extrinsic = extrinsic or cam_to_base   # pose6 -> (R, t) of the camera in base frame
         self.finger_mask = finger_mask               # wrist camera: the fingers are always in view
 
-    def run(self, color: np.ndarray, depth_m: np.ndarray, pose6) -> tuple[list[Detection], dict]:
+    def run(self, color: np.ndarray, depth_m: np.ndarray, pose6, holding: bool = False) -> tuple[list[Detection], dict]:
         pts_opt, uv = self.intr.deproject(depth_m, self.stride)
         # D405 valid range ~0.07..0.5+ m; drop far/noisy points
         m = (pts_opt[:, 2] > 0.07) & (pts_opt[:, 2] < 1.0)
@@ -112,6 +112,11 @@ class Detector:
         R, t = self.extrinsic(pose6)
         P = pts_opt @ R.T + t
         ee = np.asarray(pose6[:3], float)
+        if holding:
+            # the carried object rides with the gripper; code knows where it is, and its points must
+            # not pollute other tracks (it dragged the phone's track 4 cm in pick-and-place run 2)
+            carried = np.hypot(P[:, 0] - ee[0], P[:, 1] - ee[1]) < 0.08
+            P, uv = P[~carried], uv[~carried]
         if self.finger_mask:
             # the fingers hang from the flange down to the EE point: a column above ee_z.
             # (a sphere around the EE also deleted the target under the gripper - sim run 1)

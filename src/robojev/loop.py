@@ -50,6 +50,7 @@ class Perception(threading.Thread):
         self.detectors = {}
         self.fps = 0.0
         self.frames = {}   # name -> latest jpeg
+        self.held_label: str | None = None   # set by the loop from the brain; the track follows the EE
         if self.cameras:
             from robojev.perception.detect import Detector
             from robojev.perception.geometry import Intrinsics
@@ -81,7 +82,7 @@ class Perception(threading.Thread):
                             d = []
                         else:
                             pose6 = self._pose6(snap) if have_pose else [0, 0, 0, 0, 0, 0]
-                            d, inf = self.detectors[name].run(f.color, f.depth_m, pose6)
+                            d, inf = self.detectors[name].run(f.color, f.depth_m, pose6, holding=snap.holding)
                             info[name] = {k: (round(v, 3) if isinstance(v, float) else v) for k, v in inf.items()}
                             if "plane_z_at_origin" in inf and "plane_z_at_origin" not in info:
                                 info["plane_z_at_origin"], info["plane_tilt_deg"] = inf["plane_z_at_origin"], inf.get("plane_tilt_deg", 0)
@@ -98,6 +99,8 @@ class Perception(threading.Thread):
                     self.table_z = float(np.median(self._table_samples))
                 with self.lock:
                     self.tracker.update(dets, t)
+                    if self.cameras and self.held_label and snap.holding:
+                        self.tracker.pin(self.held_label, snap.ee[:2], t)
                     self.info = info | {"table_z": self.table_z, "n_dets": len(dets)}
                     self.frame_jpeg = self.frames.get(self.cameras[0][0]) if self.cameras else None
                 n += 1
@@ -241,6 +244,7 @@ class Loop:
                 self.log.write("answers", tick=self.tick, outcome="skipped_in_flight")
         # compose every tick, whether or not anything new arrived
         goal, cap, gripper, reason = self.brain.compose(world, now)
+        self.per.held_label = self.brain.held if snap.holding else None
         self.last_reason = reason
         if snap.status in ("live", "frozen", "baselining"):
             self.arm.command(goal, cap, gripper)

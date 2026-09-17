@@ -94,8 +94,15 @@ def offered(cfg: Config, w: World, brain) -> list[Prim]:
             out.append(Prim("move_to_place", "move_to_place", holding, f"carry {holding} to the place the user asked for ({brain.place})"))
         if place_xy is not None and math.hypot(w.arm.ee[0] - place_xy[0], w.arm.ee[1] - place_xy[1]) <= 0.03:
             out.append(Prim("lower_to_place", "lower_to_place", holding, f"lower {holding} onto the table at the place"))
-    if w.gripper_state != "open":
-        out.append(Prim("open_gripper", "open_gripper", holding, "open the gripper" + (f", releasing {holding}" if holding else "")))
+    if holding is not None:
+        held = w.entity(holding)
+        low = height < ((held.height_m if held else 0.08) * cfg.motion.grasp_fraction + 0.04)
+        if not low:
+            out.append(Prim("set_down_here", "set_down_here", holding, f"lower {holding} onto the table right here (e.g. to abort or if the place cannot be reached)"))
+        else:
+            out.append(Prim("open_gripper", "open_gripper", holding, f"open the gripper, releasing {holding} onto the table"))
+    elif w.gripper_state != "open":
+        out.append(Prim("open_gripper", "open_gripper", None, "open the gripper (it is holding nothing)"))
     if height < cfg.motion.safe_height - 0.02:
         out.append(Prim("retreat", "retreat", None, "rise straight up to a safe height, e.g. after releasing an object"))
     for k, v in SAFETY.items():
@@ -139,6 +146,11 @@ def goal_for(cfg: Config, w: World, brain, now: float):
             return sp, None, False, "place cannot be resolved", "move_to_place: no place"
         goal = cfg.workspace.clamp((xy[0], xy[1], carry_z(cfg, w)))
         return goal, None, near(goal), None, f"move_to_place {brain.place}"
+    if name == "set_down_here":
+        held = w.entity(w.holding_label) if w.holding_label else None
+        h = held.height_m if held else 0.08
+        goal = (sp[0], sp[1], max(cfg.workspace.z[0], tz + h * cfg.motion.grasp_fraction + 0.01))
+        return goal, None, near(goal, 0.02, 0.01), None, "set_down_here"
     if name == "lower_to_place":
         held = w.entity(w.holding_label) if w.holding_label else None
         h = held.height_m if held else 0.08

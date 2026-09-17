@@ -21,7 +21,7 @@ def glossary(cfg: Config) -> dict:
         "bearing": "horizontal direction from the gripper: 0 is straight ahead (away from the robot base), positive is left, negative is right",
         "height": "the gripper's height above the table surface",
         "control": "decisions update every 0.1 s; a decision persists until the next one arrives; code enforces speed and workspace limits",
-        "primitives": "the arm acts by running one primitive at a time (move above, descend to grasp, close gripper, lift, move to place, lower to place, open gripper, retreat); each runs until done or failed, then the next is chosen",
+        "primitives": "the arm acts by running one primitive at a time (move above, descend to grasp, close gripper, lift, move to place, lower to place, set down here, open gripper, retreat); each runs until done or failed, then the next is chosen",
         "gripper": "the gripper can hold one object; `holding` says which",
     }
 
