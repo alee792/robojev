@@ -36,6 +36,7 @@ class Entity:
     name: str | None = None      # operator override, e.g. "paper cup"
     dims: list = field(default_factory=list)      # (h, w, color) per sighting until frozen
     frozen: bool = False         # description frozen after CONFIRM sightings (labels must not flicker)
+    last_speed: float = 0.0      # speed at the last sighting: a thing that was moving when it vanished has left
 
     def kind(self) -> str:
         """A shape-based guess; a depth camera cannot know what a thing is, only its silhouette."""
@@ -73,6 +74,7 @@ class Entity:
 
 CONFIRM = 10          # sightings before an entity's description is frozen
 MAX_NEW_WIDTH = 0.16  # m: wider detections are merged neighbours, not new objects (tabletop scale)
+STATIC_TTL = 180.0    # s: a static object out of view (occluded by the arm) stays remembered this long
 UNCONFIRMED_TTL = 2.0  # s: an entity with fewer than CONFIRM sightings that stops being seen is a phantom
 
 
@@ -102,8 +104,8 @@ class Tracker:
             if np.hypot(d.base_xyz[0] - e.xyz[0], d.base_xyz[1] - e.xyz[1]) <= self.match_radius:
                 unmatched.remove(d)
                 a = self.ema
-                if e.frozen and d.width > 1.6 * e.width:
-                    a = 0.1   # a blob much wider than this object is a merge with a neighbour: barely trust its centre
+                if (e.frozen and d.width > 1.6 * e.width) or d.partial:
+                    a = 0.1   # a merged blob, or one cut by the image border, has a biased centre: barely trust it
                 e.xyz = a * np.asarray(d.base_xyz) + (1 - a) * e.xyz
                 if not e.frozen:
                     e.dims.append((d.height, d.width, d.color_name))
@@ -115,9 +117,10 @@ class Tracker:
                 e.last_seen, e.seen_count = now, e.seen_count + 1
                 e.history.append((now, float(e.xyz[0]), float(e.xyz[1])))
                 e.history = e.history[-40:]
+                e.last_speed = e.velocity()
         for d in unmatched:
-            if d.width > MAX_NEW_WIDTH:
-                continue   # merged blobs (hand+cup came out 21 cm wide) must not become objects
+            if d.width > MAX_NEW_WIDTH or d.partial:
+                continue   # merged blobs and border-cut blobs must not become objects
             if carried_xy is not None and np.hypot(d.base_xyz[0] - carried_xy[0], d.base_xyz[1] - carried_xy[1]) < 0.15:
                 continue
             eid = letter(self._n); self._n += 1
@@ -134,8 +137,10 @@ class Tracker:
                     a_.seen_count += b_.seen_count
                     a_.last_seen = max(a_.last_seen, b_.last_seen)
                     del self.entities[b_.id]
+        # object permanence: a static object the arm is occluding stays remembered for a long time
+        # (Doom's remembered[]); something that was moving when last seen has probably left
         for eid in [k for k, e in self.entities.items()
-                    if now - e.last_seen > (self.ttl if e.seen_count >= CONFIRM else UNCONFIRMED_TTL)]:
+                    if now - e.last_seen > (UNCONFIRMED_TTL if e.seen_count < CONFIRM else (self.ttl if e.last_speed > 0.02 else STATIC_TTL))]:
             del self.entities[eid]
 
     def pin(self, label: str, xy, now: float | None = None) -> None:

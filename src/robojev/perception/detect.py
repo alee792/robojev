@@ -24,6 +24,7 @@ class Detection:
     color_name: str
     n_points: int
     pixel: tuple[int, int]                # image centre of the blob
+    partial: bool = False                 # blob touches the image border: its centroid is biased
 
 
 COLOR_NAMES = [  # (name, hsv centre) rough buckets
@@ -177,11 +178,14 @@ class Detector:
             base_z = float(cx * 0 + (self.table_z if self.table_z is not None else -(self.last_plane[1] + self.last_plane[0][0] * cx + self.last_plane[0][1] * cy) / self.last_plane[0][2]))
             spread = np.percentile(np.hypot(pts[:, 0] - cx, pts[:, 1] - cy), 90) * 2
             u0, v0 = int(px[:, 0].mean()), int(px[:, 1].mean())
+            margin = 3 * self.stride
+            partial = bool(px[:, 0].min() < margin or px[:, 1].min() < margin
+                           or px[:, 0].max() > self.intr.w - margin or px[:, 1].max() > self.intr.h - margin)
             patch = color[max(0, v0 - 6):v0 + 6, max(0, u0 - 6):u0 + 6].reshape(-1, 3)
             bgr = tuple(int(x) for x in np.median(patch, 0)) if len(patch) else (128, 128, 128)
             dets.append(Detection(xyz=(float(cx), float(cy), base_z + top / 2), base_xyz=(float(cx), float(cy), base_z),
                                   height=top, width=float(spread), color_bgr=bgr, color_name=color_name(bgr),
-                                  n_points=int(k.sum()), pixel=(u0, v0)))
+                                  n_points=int(k.sum()), pixel=(u0, v0), partial=partial))
         dets.sort(key=lambda d: -d.n_points)
         return dets, info
 
