@@ -232,7 +232,7 @@ def goal_for(cfg: Config, w: World, brain, now: float):
             # wrist level with the open fingers around something: back out before rising, or the
             # fingers lift the object's rim
             for e in w.entities:
-                if e.label != w.holding_label and abs(e.xyz[1] - ee[1]) < e.width_m / 2 + 0.02 and -0.02 < e.xyz[0] - ee[0] < e.width_m / 2 + 0.05:
+                if e.label != w.holding_label and abs(e.xyz[1] - ee[1]) < e.width_m / 2 + 0.02 and -(e.width_m / 2 + 0.02) < e.xyz[0] - ee[0] < e.width_m / 2 + 0.05:
                     goal = cfg.workspace.clamp((e.xyz[0] - (e.width_m / 2 + cfg.motion.side_standoff), sp[1], sp[2]))
                     return goal, None, False, None, f"retreat: backing out from {e.label}"
         goal = (sp[0], sp[1], min(cfg.workspace.z[1], tz + cfg.motion.safe_height))
