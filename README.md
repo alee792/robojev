@@ -70,7 +70,8 @@ uv sync --extra sim --extra real --extra cameras
 # sim, with the drifting-object scenario and the dashboard on :8080
 .venv/bin/robojev run --arm sim --perception simcam --scenario drift --task "hover over the paper cup"
 # bay: camera server needs root on macOS (librealsense cannot claim the UVC interface otherwise)
-sudo .venv/bin/python -m robojev.perception.camserver                      # wrist D405, :8765
+scripts/camserver.sh 8765            # wrist D405; boom D455: scripts/camserver.sh 8766 408222301818
+# (wraps: sudo env DYLD_INSERT_LIBRARIES=scripts/nohid/nohid.dylib .venv/bin/python -m robojev.perception.camserver ...)                      # wrist D405, :8765
 sudo .venv/bin/python -m robojev.perception.camserver --serial 408222301818 --port 8766   # boom D455
 .venv/bin/robojev calibrate --out overhead_calib.json                      # arm read-only, 2 objects in both views
 .venv/bin/robojev run --arm real-ro --perception camera --task "hover over the paper cup"   # no motion

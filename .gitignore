@@ -4,3 +4,4 @@ __pycache__/
 *.pyc
 runs/
 MUJOCO_LOG.TXT
+scripts/nohid/nohid.dylib
