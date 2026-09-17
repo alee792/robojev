@@ -26,6 +26,7 @@ TABLE_Z = -0.02   # table surface in base frame, like the real bay (base plate s
 OBJECTS = [  # name, kind, xy, size, rgba
     ("cup", "cylinder", (0.37, -0.07), (0.04, 0.055), (0.93, 0.90, 0.85, 1)),      # radius, half-height -> 11 cm tall
     ("phone", "box", (0.30, 0.10), (0.035, 0.07, 0.012), (0.05, 0.05, 0.05, 1)),   # 7x14x2.4 cm (a thick phone / small book)
+    ("hand", "box", (0.30, -0.60), (0.045, 0.06, 0.02), (0.85, 0.65, 0.55, 1)),     # 9x12x4 cm hand-sized intruder, parked out of view
 ]
 
 
@@ -305,6 +306,8 @@ class Scenario(threading.Thread):
     def run(self):
         if self.kind == "static":
             return
+        if self.kind == "intruder":
+            return self._intruder()
         t0 = time.time()
         cup = self.arm.object_xy("cup")
         a = (0.30, 0.10)                       # beside
@@ -319,4 +322,36 @@ class Scenario(threading.Thread):
                 k = 0.5 - 0.5 * math.cos(math.pi * k)
                 x, y = a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k
             self.arm.set_object("phone", x, y)
+            time.sleep(0.05)
+
+    def _intruder(self):
+        """At start_s a hand slides in from the robot's right to sit between the gripper and the cup
+        for 6 s, then leaves. At start_s + 16 s the cup is relocated 8 cm to the robot's left over
+        2 s (someone moved it). Repeats every 40 s."""
+        t0 = time.time()
+        park = (0.30, -0.60)
+        while not self.stop_evt.is_set():
+            t = (time.time() - t0)
+            cyc = (t - self.start_s) % 40.0 if t >= self.start_s else -1
+            cup = self.arm.object_xy("cup")
+            ee = self.arm.snapshot().ee
+            between = ((cup[0] + ee[0]) / 2, (cup[1] + ee[1]) / 2 - 0.02)
+            if 0 <= cyc < 2:          # slide in
+                k = 0.5 - 0.5 * math.cos(math.pi * cyc / 2)
+                self.arm.set_object("hand", park[0] + (between[0] - park[0]) * k, park[1] + (between[1] - park[1]) * k)
+            elif 2 <= cyc < 8:        # stay between gripper and cup
+                self.arm.set_object("hand", *between)
+            elif 8 <= cyc < 10:       # leave
+                k = 0.5 - 0.5 * math.cos(math.pi * (cyc - 8) / 2)
+                hx, hy = self.arm.object_xy("hand")
+                self.arm.set_object("hand", hx + (park[0] - hx) * k * 0.5, hy + (park[1] - hy) * k * 0.5)
+            elif 10 <= cyc < 16:
+                self.arm.set_object("hand", *park)
+            elif 16 <= cyc < 18 and self.arm.attached != "cup":   # cup relocated (unless the arm holds it)
+                if not hasattr(self, "_cup0") or self._cup0 is None:
+                    self._cup0 = cup
+                k = 0.5 - 0.5 * math.cos(math.pi * (cyc - 16) / 2)
+                self.arm.set_object("cup", self._cup0[0], self._cup0[1] + 0.08 * k)
+            elif cyc >= 18:
+                self._cup0 = None
             time.sleep(0.05)

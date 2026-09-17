@@ -46,6 +46,7 @@ class EntityView:
     speed_mps: float
     reachable: bool
     width_m: float = 0.08
+    known_s: float = 999.0        # seconds since first seen
 
 
 @dataclass
@@ -107,7 +108,8 @@ def build_world(cfg: Config, arm: ArmSnapshot, entities: list[Entity], in_view_f
         bearing = math.degrees(math.atan2(dy, dx))
         reach = cfg.workspace.contains((e.xyz[0], e.xyz[1], cfg.workspace.z[0] + 0.001), margin=0.0)
         views.append(EntityView(e.id, e.label(), e.describe(), (float(e.xyz[0]), float(e.xyz[1]), float(e.xyz[2])),
-                                horiz, bearing, e.height, in_view_fn(e, now), now - e.last_seen, e.velocity(), reach, e.width))
+                                horiz, bearing, e.height, in_view_fn(e, now), now - e.last_seen, e.velocity(), reach, e.width,
+                                now - e.first_seen))
     views.sort(key=lambda v: v.horizontal_m)
     # phase facts, all from code
     w_ = arm.gripper
