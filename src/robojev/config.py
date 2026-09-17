@@ -31,9 +31,9 @@ class Workspace:
 @dataclass(frozen=True)
 class Motion:
     # EE speed caps per Jev speed level, m/s. Index = score level.
-    speed_levels: tuple[float, ...] = (0.01, 0.03, 0.06, 0.10)
+    speed_levels: tuple[float, ...] = (0.03, 0.07, 0.12, 0.18)   # real run 8 at 3 cm/s took 36 s for a pick-and-place; lag was millimetres
     speed_names: tuple[str, ...] = ("very slow", "slow", "normal", "fast")
-    hard_speed_cap: float = 0.10          # never exceeded whatever Jev says
+    hard_speed_cap: float = 0.18          # never exceeded whatever Jev says
     hover_heights: dict = field(default_factory=lambda: {"low": 0.10, "high": 0.16})  # above table plane
     safe_height: float = 0.18             # rise here on ladder step 2 / effort trip
     object_clearance: float = 0.05        # z floor while moving = tallest object + this
@@ -47,11 +47,11 @@ class Motion:
     grasp_fraction: float = 0.5           # grasp at this fraction of the object's height
     shift_distance: float = 0.15          # how far a 'move it to the left/right/away/closer' place is from the pickup spot
     place_gap: float = 0.04               # clearance between a placed object and its reference object
-    gripper_settle_s: float = 1.0         # wait after a gripper command before judging the result
+    gripper_settle_s: float = 0.7         # wait after a gripper command before judging the result
     primitive_timeout_s: float = 10.0     # a primitive that has not finished by then is reported failed
     stall_s: float = 3.0                  # a primitive whose EE has not moved for this long (and is not done) is reported failed
     down_orientation: tuple[float, float, float] = (0.0, 1.309, 0.0)  # 75 deg pitch: far larger reachable envelope than straight down (see reachability map)
-    pitch_rate: float = 0.6               # rad/s: how fast the wrist pitch setpoint may change
+    pitch_rate: float = 1.2               # rad/s: how fast the wrist pitch setpoint may change
     gripper_opening: float = 0.08         # m between the pads fully open (two 4 cm carriages)
     side_grasp_min_width: float = 0.045   # objects at least this wide are grasped from the side, not from above
     hover_pitch: float = 0.5              # staging/hover wrist pitch: the camera surveys the table instead of the patch under the fingers
@@ -70,7 +70,7 @@ class Motion:
 class Safety:
     effort_trip_n: float = 40.0           # coarse backstop: |F_ext| deviation (N); the driver's estimate shifts ~25 N with motion direction
     effort_persist_ticks: int = 5
-    lag_trip_m: float = 0.02              # primary obstacle detector: EE lagging the setpoint by this much (normal ~3 mm at 3 cm/s)
+    lag_trip_m: float = 0.03              # primary obstacle detector: EE lagging the setpoint by this much (normal ~3 mm at 3 cm/s, ~1 cm at 12)
     lag_persist_ticks: int = 3
     effort_baseline_s: float = 1.0        # seconds of samples to establish the baseline after staging
     silence_hold_s: float = 0.5           # no fresh Jev answer for this long -> hold (freeze goal)

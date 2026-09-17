@@ -71,7 +71,7 @@ class RealArm:
         self.driver.set_all_modes(trossen_arm.Mode.position)
         self._set_status("staging")
         # from sleep (folded) to STAGED is a joint move; never start Cartesian streaming from sleep
-        self.driver.set_all_positions(list(STAGED), 3.0, True)
+        self.driver.set_all_positions(list(STAGED), 2.0, True)
         self.driver.set_gripper_position(0.04, 1.0, True)
         self._gripper_sent = 0.04
         # From STAGED, one slow blocking move to the hover-start pose, pointing down. Streaming
@@ -80,7 +80,7 @@ class RealArm:
         start = list(self.cfg.workspace.clamp(start))
         survey = [0.0, self.cfg.motion.hover_pitch, 0.0]
         self.driver.set_cartesian_positions(start + survey,
-                                            trossen_arm.InterpolationSpace.joint, 4.0, True)
+                                            trossen_arm.InterpolationSpace.joint, 2.5, True)
         pose = list(self.driver.get_cartesian_positions())
         self.mover.init_at(pose[:3], self.cfg.motion.hover_pitch)
         want = survey
