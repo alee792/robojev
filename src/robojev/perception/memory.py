@@ -83,7 +83,10 @@ class Tracker:
         self._n = 0
         self.names: dict[str, str] = {}
 
-    def update(self, dets: list[Detection], now: float | None = None) -> None:
+    def update(self, dets: list[Detection], now: float | None = None, carried_xy=None) -> None:
+        """`carried_xy`: the gripper position while it holds something; detections there are the
+        carried object leaking past the mask and must not become new tracks (run 6: a phantom 2 cm
+        from the gripper made the policy flee into a corner)."""
         now = now or time.time()
         unmatched = list(dets)
         # greedy nearest matching
@@ -115,6 +118,8 @@ class Tracker:
         for d in unmatched:
             if d.width > MAX_NEW_WIDTH:
                 continue   # merged blobs (hand+cup came out 21 cm wide) must not become objects
+            if carried_xy is not None and np.hypot(d.base_xyz[0] - carried_xy[0], d.base_xyz[1] - carried_xy[1]) < 0.09:
+                continue
             eid = letter(self._n); self._n += 1
             self.entities[eid] = Entity(eid, np.asarray(d.base_xyz, float), d.height, d.width, d.color_name, now, now,
                                         history=[(now, d.base_xyz[0], d.base_xyz[1])], name=self.names.get(eid),

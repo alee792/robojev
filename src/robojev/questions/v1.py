@@ -80,7 +80,7 @@ def build(cfg: Config, w: World, brain=None) -> dict:
         "type": "choice",
         "instructions": {
             "question": "Right now, should the gripper make an evasive move, overriding whatever it is doing? Consider the standing orders, anything that just appeared or is moving, and how close things are.",
-            "rules": "Never evade the current target (`arm.target`) itself: it is meant to be approached, grasped and carried, and closing in on it is not a reason to evade. Evade only when a hand, a new or moving object, or something a standing order forbids is, or is about to be, too close or in the way. Directions are the robot's: left is +y, back is toward the robot base, up is away from the table. Otherwise choose none.",
+            "rules": "Never evade the current target (`arm.target`) or the object the place refers to (`arm.place_for_the_object`): the arm is meant to get close to those, and closing in on them is not a reason to evade. Evade only when a hand, a new or moving object, or something a standing order forbids is, or is about to be, too close or in the way. Directions are the robot's: left is +y, back is toward the robot base, up is away from the table. Otherwise choose none.",
         },
         "criteria": {"none": "no evasion needed; carry on",
                      "up": "lift straight up, away from the table and everything on it",
