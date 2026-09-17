@@ -30,7 +30,7 @@ canvas{background:#000;width:100%;height:40px}
 <button onclick="post('/api/pause')">pause Jev</button><button onclick="post('/api/unpause')">unpause</button></div>
 <h3 style="margin-top:10px">user task (separate from orders)</h3><input id=task placeholder="hover over the paper cup"><button onclick="post('/api/task',{text:g('task').value})">set task</button>
 <h3 style="margin-top:10px">standing orders (operator, one per line)</h3><textarea id=orders rows=4></textarea><button onclick="post('/api/orders',{orders:g('orders').value.split('\n')})">apply orders</button>
-<h3 style="margin-top:10px">camera</h3><img id=cam src="/frame.jpg"></div>
+<h3 style="margin-top:10px">wrist camera</h3><img id=cam src="/frame.jpg"><img id=third src="/third.jpg" style="margin-top:6px"></div>
 <div class=card><h3>judgments <span id=qs></span></h3><table id=j></table>
 <h3 style="margin-top:10px">brain</h3><div id=brain class=mono></div>
 <h3 style="margin-top:10px">jev</h3><div id=stats></div><canvas id=spark width=300 height=40></canvas>
@@ -63,7 +63,7 @@ g('ev').textContent=s.events.slice().reverse().map(x=>new Date(x.t*1000).toLocal
 g('state').textContent=JSON.stringify(s.state,null,1);
 if(!seeded){g('task').value=s.task;g('orders').value=s.orders.join('\n');seeded=true}
 }catch(e){console.log(e)}}
-setInterval(poll,250);setInterval(()=>{g('cam').src='/frame.jpg?'+Date.now()},200);poll();
+setInterval(poll,250);setInterval(()=>{g('cam').src='/frame.jpg?'+Date.now();g('third').src='/third.jpg?'+Date.now()},200);poll();
 </script></body></html>"""
 
 
@@ -78,6 +78,12 @@ def make_app(loop) -> web.Application:
 
     async def frame(req):
         jpg = loop.per.frame_jpeg
+        if not jpg:
+            return web.Response(status=204)
+        return web.Response(body=jpg, content_type="image/jpeg")
+
+    async def third(req):
+        jpg = getattr(loop.per.cam, "third_jpeg", None)
         if not jpg:
             return web.Response(status=204)
         return web.Response(body=jpg, content_type="image/jpeg")
@@ -104,7 +110,7 @@ def make_app(loop) -> web.Application:
         b = await req.json(); loop.per.tracker.set_name(b["id"], b.get("name")); loop.event("name", **b)
         return web.json_response({"ok": True})
 
-    app.add_routes([web.get("/", index), web.get("/api/snapshot", snapshot), web.get("/frame.jpg", frame),
+    app.add_routes([web.get("/", index), web.get("/api/snapshot", snapshot), web.get("/frame.jpg", frame), web.get("/third.jpg", third),
                     web.post("/api/orders", orders), web.post("/api/task", task), web.post("/api/stop", stop),
                     web.post("/api/resume", resume), web.post("/api/pause", pause), web.post("/api/unpause", unpause),
                     web.post("/api/name", name)])

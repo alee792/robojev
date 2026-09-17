@@ -27,6 +27,9 @@ def build(args, cfg: Config):
     elif args.arm == "real-ro":
         from robojev.arm.real import RealArmReadOnly
         arm = RealArmReadOnly(cfg, log=log)
+    elif args.arm == "sim":
+        from robojev.arm.sim import SimArm
+        arm = SimArm(cfg, log=log)
     elif args.arm == "real":
         if not args.i_am_at_the_estop:
             sys.exit("refusing to command the real arm without --i-am-at-the-estop")
@@ -37,10 +40,17 @@ def build(args, cfg: Config):
     if args.perception == "virtual":
         from robojev.perception.virtual import VirtualScene
         per = Perception(cfg, arm, virtual=VirtualScene(), log=log)
+    elif args.perception == "simcam":
+        from robojev.arm.sim import SimCamera
+        per = Perception(cfg, arm, camera=SimCamera(arm), log=log)
     else:
         from robojev.perception.camclient import CamClient
         per = Perception(cfg, arm, camera=CamClient(args.camserver), log=log)
     loop = Loop(cfg, arm, per, log, use_jev=not args.no_jev, task=args.task, orders=args.orders or [])
+    if args.arm == "sim" and args.scenario != "static":
+        from robojev.arm.sim import Scenario
+        loop.scenario = Scenario(arm, args.scenario, start_s=args.scenario_start)
+        loop.scenario.start()
     return arm, per, loop, log
 
 
@@ -64,7 +74,7 @@ async def serve(args, cfg):
         except NotImplementedError:
             pass
     try:
-        if args.perception == "camera":
+        if args.perception in ("camera", "simcam") and args.arm != "sim":
             # let the plane fit settle so the arm's hover-start height uses the measured table
             await asyncio.sleep(1.5)
             if per._table_samples:
@@ -87,8 +97,10 @@ def main(argv=None):
     ap = argparse.ArgumentParser(prog="robojev")
     sub = ap.add_subparsers(dest="cmd", required=True)
     r = sub.add_parser("run")
-    r.add_argument("--arm", choices=["fake", "real-ro", "real"], default="fake")
-    r.add_argument("--perception", choices=["virtual", "camera"], default="virtual")
+    r.add_argument("--arm", choices=["fake", "sim", "real-ro", "real"], default="fake")
+    r.add_argument("--perception", choices=["virtual", "simcam", "camera"], default="virtual")
+    r.add_argument("--scenario", choices=["static", "drift"], default="static")
+    r.add_argument("--scenario-start", type=float, default=10.0)
     r.add_argument("--camserver", default="http://127.0.0.1:8765")
     r.add_argument("--task", default="")
     r.add_argument("--orders", action="append")
