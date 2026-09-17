@@ -40,6 +40,10 @@ def render(cfg: Config, w: World) -> dict:
             "status": "in view" if e.in_view else f"out of view, last seen {e.last_seen_s:.0f} s ago",
             "reachable": "yes" if e.reachable else "no, outside the arm's workspace",
         }
+        if e.flat:
+            item["on_it"] = [o.label for o in w.entities if not o.flat and o.resting_on == e.label] or "nothing"
+        else:
+            item["resting_on"] = e.resting_on or "the bare table"
         if e.speed_mps > 0.02 and e.in_view:   # motion is only a fact while we can see it
             item["motion"] = f"moving, about {e.speed_mps*100:.0f} cm/s"
         if e.known_s < 5 and w.uptime_s > 8:

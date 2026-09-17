@@ -26,6 +26,8 @@ class Detection:
     pixel: tuple[int, int]                # image centre of the blob
     partial: bool = False                 # blob touches the image border: its centroid is biased
     camera: str | None = None             # which camera produced it
+    flat: bool = False                    # a flat area on the table (a mat), found by colour, not height
+    footprint: tuple | None = None        # (xmin, xmax, ymin, ymax) in base frame for flat areas
 
 
 COLOR_NAMES = [  # (name, hsv centre) rough buckets
@@ -180,6 +182,7 @@ class Detector:
             info["plane_z_at_origin"] = self.table_z
         above = (height > self.min_h) & (height < self.max_h)
         inws = (P[:, 0] > self.ws[0][0]) & (P[:, 0] < self.ws[0][1]) & (P[:, 1] > self.ws[1][0]) & (P[:, 1] < self.ws[1][1])
+        flat_dets = self._flat_regions(P, uv, height, color, inws)
         sel = above & inws
         info["n_above"] = int(sel.sum())
         if sel.sum() < 10:
@@ -230,7 +233,41 @@ class Detector:
                                   height=top, width=float(spread), color_bgr=bgr, color_name=color_name(bgr),
                                   n_points=int(k.sum()), pixel=(u0, v0), partial=partial))
         dets.sort(key=lambda d: -d.n_points)
-        return dets, info
+        return dets + flat_dets, info
+
+    def _flat_regions(self, P, uv, height, color, inws) -> list[Detection]:
+        """Large dark patches lying on the table plane (a mat): depth cannot see 3 mm, colour can.
+        Returns flat Detections with a footprint (axis-aligned box in base frame)."""
+        on = (np.abs(height) < 0.012) & inws
+        if on.sum() < 200:
+            return []
+        px = uv[on]
+        bgr = color[px[:, 1], px[:, 0]].astype(int)
+        dark = bgr.max(axis=1) < 75          # black/dark grey on a light wooden table
+        if dark.sum() < 150:
+            return []
+        Q, uvq = P[on][dark], px[dark]
+        labels = _cluster_xy(Q[:, :2], cell=0.03, heights=None, dh=1.0)
+        out = []
+        margin = 3 * self.stride
+        for lab in np.unique(labels):
+            k = labels == lab
+            if k.sum() < 150:
+                continue
+            pts, pp = Q[k], uvq[k]
+            xmin, xmax = np.percentile(pts[:, 0], 2), np.percentile(pts[:, 0], 98)
+            ymin, ymax = np.percentile(pts[:, 1], 2), np.percentile(pts[:, 1], 98)
+            if max(xmax - xmin, ymax - ymin) < 0.10:
+                continue                      # a mat is big; small dark spots are shadows or cables
+            partial = bool(pp[:, 0].min() < margin or pp[:, 1].min() < margin or pp[:, 0].max() > self.intr.w - margin
+                           or pp[:, 1].max() > 0.6 * self.intr.h - margin)
+            cx, cy = float((xmin + xmax) / 2), float((ymin + ymax) / 2)
+            u0, v0 = int(pp[:, 0].mean()), int(pp[:, 1].mean())
+            tz = float(np.median(P[on][dark][k][:, 2]))
+            out.append(Detection(xyz=(cx, cy, tz), base_xyz=(cx, cy, tz), height=0.0, width=float(max(xmax - xmin, ymax - ymin)),
+                                 color_bgr=(20, 20, 20), color_name="black", n_points=int(k.sum()), pixel=(u0, v0),
+                                 partial=partial, flat=True, footprint=(float(xmin), float(xmax), float(ymin), float(ymax))))
+        return out
 
 
 def _cluster_xy(xy: np.ndarray, cell: float, heights: np.ndarray | None = None, dh: float = 0.035) -> np.ndarray:

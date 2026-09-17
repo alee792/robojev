@@ -103,6 +103,37 @@ def resolve_place(cfg: Config, w: World, place: str | None, origin_xy, last_set_
             if best is None or score > best[0]:
                 best = (score, x, y)
         return (best[1], best[2]) if best else None
+    rel2, _, label2 = place.partition(":")
+    if rel2 in ("on", "off") and label2:
+        m = w.entity(label2)
+        if m is None or not m.flat or not m.footprint:
+            return None
+        fp = m.footprint
+        others = [e for e in w.entities if not e.flat and e.label != w.holding_label]
+        def free(x, y, d=0.10):
+            return all(math.hypot(x - o.xyz[0], y - o.xyz[1]) >= d for o in others)
+        cands = []
+        if rel2 == "on":
+            for i in range(9):
+                for j in range(9):
+                    x = fp[0] + 0.05 + (fp[1] - fp[0] - 0.10) * i / 8; y = fp[2] + 0.05 + (fp[3] - fp[2] - 0.10) * j / 8
+                    cands.append((x, y))
+            cx, cy = (fp[0] + fp[1]) / 2, (fp[2] + fp[3]) / 2
+            cands.sort(key=lambda c: math.hypot(c[0] - cx, c[1] - cy))   # the middle first
+        else:
+            (x0, x1), (y0, y1) = cfg.motion.place_region
+            here = origin_xy or (w.arm.ee[0], w.arm.ee[1])
+            for i in range(14):
+                for j in range(14):
+                    x = x0 + (x1 - x0) * i / 13; y = y0 + (y1 - y0) * j / 13
+                    if fp[0] - 0.06 <= x <= fp[1] + 0.06 and fp[2] - 0.06 <= y <= fp[3] + 0.06:
+                        continue          # not on the mat, and clear of its edge
+                    cands.append((x, y))
+            cands.sort(key=lambda c: math.hypot(c[0] - here[0], c[1] - here[1]))   # the nearest spot off the mat
+        for x, y in cands:
+            if cfg.workspace.contains((x, y, cfg.workspace.z[0] + 0.001), margin=0.0) and free(x, y):
+                return (x, y)
+        return None
     if place in SHIFTS:
         if not origin_xy:
             return None
@@ -133,7 +164,7 @@ def offered(cfg: Config, w: World, brain) -> list[Prim]:
     place_xy = (brain.place_xy if (brain.prim in ("move_to_place", "lower_to_place") and brain.place_xy) else None) \
         or resolve_place(cfg, w, brain.place, brain.origin_xy, getattr(brain, 'last_set_down_xy', None))
     for e in w.entities:
-        if not e.reachable:
+        if not e.reachable or e.flat:
             continue
         if holding is None and side_grasp(cfg, e):
             out.append(Prim(f"approach_side:{e.label}", "approach_side", e.label,

@@ -40,10 +40,14 @@ class Entity:
     last_pixel: tuple | None = None   # (camera name, u, v) of the last detection, for VLM crops
     vlm_kind: str | None = None       # kind from the vision model, once named
     phantom: bool = False             # the vision model said this is not a real object
+    flat: bool = False                # a flat area on the table (a mat): a place, not a thing to pick up
+    footprint: list | None = None     # [xmin, xmax, ymin, ymax], the union of full views
 
     def kind(self) -> str:
         """A shape-based guess; a depth camera cannot know what a thing is, only its silhouette."""
         h, w = self.height, self.width
+        if self.flat:
+            return "flat mat"
         if w < 0.035 and h >= 0.05:
             return "thin post-like object"
         if h >= 0.06 and w <= 0.13 and h > 0.8 * w:
@@ -63,6 +67,9 @@ class Entity:
                  "flat object": "flat and wide, like a phone, book or pad",
                  "small object": "small, like a block or ball"}.get(self.kind(), "box-shaped")
         seen = f"; identified by the vision model as a {self.vlm_kind}" if self.vlm_kind else ""
+        if self.flat and self.footprint:
+            fp = self.footprint
+            return f"{self.color}, flat, {(fp[1]-fp[0])*100:.0f} x {(fp[3]-fp[2])*100:.0f} cm; a mat lying on the table: an area things can be on or off, not something to pick up"
         return f"{self.color}, {self.height*100:.0f} cm tall, {self.width*100:.0f} cm wide; {shape}{seen}"
 
     def velocity(self, window_s: float = 1.5) -> float:
@@ -104,13 +111,26 @@ class Tracker:
                 break
             # match on position AND height, so a flat object sliding under a tall one's radius
             # cannot drag the tall one's track (sim run 3)
-            cands = [d for d in unmatched if abs(d.height - e.height) < 0.04 or not e.frozen and abs(d.height - e.height) < 0.06]
+            if e.flat:
+                cands = [d for d in unmatched if d.flat]
+            else:
+                cands = [d for d in unmatched if not d.flat and (abs(d.height - e.height) < 0.04 or not e.frozen and abs(d.height - e.height) < 0.06)]
             if not cands:
                 continue
             d = min(cands, key=lambda d: np.hypot(d.base_xyz[0] - e.xyz[0], d.base_xyz[1] - e.xyz[1]))
-            if np.hypot(d.base_xyz[0] - e.xyz[0], d.base_xyz[1] - e.xyz[1]) <= self.match_radius:
+            if np.hypot(d.base_xyz[0] - e.xyz[0], d.base_xyz[1] - e.xyz[1]) <= (0.15 if e.flat else self.match_radius):
                 unmatched.remove(d)
                 a = self.ema
+                if e.flat and d.footprint:
+                    # the footprint is the union of everything seen of it; the centre follows the footprint
+                    fp = e.footprint or list(d.footprint)
+                    e.footprint = [min(fp[0], d.footprint[0]), max(fp[1], d.footprint[1]), min(fp[2], d.footprint[2]), max(fp[3], d.footprint[3])]
+                    e.xyz = np.array([(e.footprint[0] + e.footprint[1]) / 2, (e.footprint[2] + e.footprint[3]) / 2, e.xyz[2]], float)
+                    e.width = max(e.footprint[1] - e.footprint[0], e.footprint[3] - e.footprint[2])
+                    e.last_seen, e.seen_count = now, e.seen_count + 1
+                    if e.seen_count >= CONFIRM:
+                        e.frozen = True
+                    continue
                 near_gripper = ee_xy is not None and np.hypot(d.base_xyz[0] - ee_xy[0], d.base_xyz[1] - ee_xy[1]) < 0.15
                 if (e.frozen and d.width > 1.6 * e.width) or d.partial or (e.frozen and near_gripper):
                     # ... and a view from right next to the gripper is too close and too oblique to
@@ -131,6 +151,11 @@ class Tracker:
                 e.last_speed = e.velocity()
                 e.last_pixel = (getattr(d, "camera", None), d.pixel[0], d.pixel[1])
         for d in unmatched:
+            if d.flat:
+                eid = letter(self._n); self._n += 1
+                self.entities[eid] = Entity(eid, np.asarray(d.base_xyz, float), 0.0, d.width, d.color_name, now, now, history=[(now, d.base_xyz[0], d.base_xyz[1])],
+                                            flat=True, footprint=list(d.footprint) if d.footprint else None)
+                continue
             if d.width > MAX_NEW_WIDTH or d.width < 0.02 or d.partial:   # slivers (cables, frame edges) are not objects
                 continue   # merged blobs and border-cut blobs must not become objects
             if carried_xy is not None and np.hypot(d.base_xyz[0] - carried_xy[0], d.base_xyz[1] - carried_xy[1]) < 0.15:
@@ -149,6 +174,12 @@ class Tracker:
                 dist = np.hypot(*(a_.xyz[:2] - b_.xyz[:2]))
                 # a younger, unconfirmed track inside a confirmed object's footprint is a fragment of it
                 fragment = b_.seen_count < CONFIRM and a_.seen_count >= CONFIRM and dist < max(a_.width, b_.width) / 2
+                if a_.flat != b_.flat:
+                    continue
+                if a_.flat and b_.flat:
+                    if dist < 0.15:
+                        a_.seen_count += b_.seen_count; a_.last_seen = max(a_.last_seen, b_.last_seen); del self.entities[b_.id]
+                    continue
                 if (dist < self.match_radius and abs(a_.height - b_.height) < 0.04) or fragment:
                     a_.seen_count += b_.seen_count
                     a_.last_seen = max(a_.last_seen, b_.last_seen)

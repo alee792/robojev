@@ -47,6 +47,9 @@ class EntityView:
     reachable: bool
     width_m: float = 0.08
     known_s: float = 999.0        # seconds since first seen
+    flat: bool = False
+    footprint: tuple | None = None    # (xmin, xmax, ymin, ymax) for flat areas
+    resting_on: str | None = None     # label of the flat area this object sits on, else None (bare table)
 
 
 @dataclass
@@ -80,7 +83,8 @@ class World:
         return None
 
     def closest(self) -> EntityView | None:
-        return min(self.entities, key=lambda e: e.horizontal_m) if self.entities else None
+        solid = [e for e in self.entities if not e.flat]
+        return min(solid, key=lambda e: e.horizontal_m) if solid else None
 
     def between(self, target: EntityView, corridor: float = 0.06) -> list[str]:
         """Entities whose footprint lies within `corridor` of the straight EE->target segment."""
@@ -114,8 +118,16 @@ def build_world(cfg: Config, arm: ArmSnapshot, entities: list[Entity], in_view_f
         reach = cfg.workspace.contains((e.xyz[0], e.xyz[1], cfg.workspace.z[0] + 0.001), margin=0.0)
         views.append(EntityView(e.id, e.label(), e.describe(), (float(e.xyz[0]), float(e.xyz[1]), float(e.xyz[2])),
                                 horiz, bearing, e.height, in_view_fn(e, now), now - e.last_seen, e.velocity(), reach, e.width,
-                                now - e.first_seen))
+                                now - e.first_seen, e.flat, tuple(e.footprint) if e.footprint else None))
     views.sort(key=lambda v: v.horizontal_m)
+    mats = [v for v in views if v.flat and v.footprint]
+    for v in views:
+        if not v.flat:
+            for m in mats:
+                fp = m.footprint
+                if fp[0] - 0.01 <= v.xyz[0] <= fp[1] + 0.01 and fp[2] - 0.01 <= v.xyz[1] <= fp[3] + 0.01:
+                    v.resting_on = m.label
+                    break
     # phase facts, all from code
     w_ = arm.gripper
     if arm.holding:
@@ -126,7 +138,8 @@ def build_world(cfg: Config, arm: ArmSnapshot, entities: list[Entity], in_view_f
         gripper_state = "closed"
     else:
         gripper_state = "moving" if arm.gripper_goal is not None and abs(arm.gripper_goal - w_) > 0.006 else "partly open"
-    nearest = min(views, key=lambda v: v.horizontal_m) if views else None
+    solid = [v for v in views if not v.flat]
+    nearest = min(solid, key=lambda v: v.horizontal_m) if solid else None
     above = nearest.label if nearest and nearest.horizontal_m < 0.045 else None   # 4.5 cm: a side grasp puts the tips 3 cm past the centre
     holding_label = None
     if arm.holding:

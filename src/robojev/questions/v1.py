@@ -23,7 +23,7 @@ def build(cfg: Config, w: World, brain=None) -> dict:
         "type": "choice",
         "instructions": {
             "question": "Which object in `objects` is the one the user's request (`user_request.text`) wants the arm to act on (pick up, hover over, move)?",
-            "rules": "Objects are seen by a depth camera and described only by colour, size and shape, so e.g. a paper cup appears as a white or tan cup-like object. Colour names come from a camera and can be off by a shade (black vs dark gray, white vs light gray, orange vs tan). Pick the object that most plausibly matches the request. If the arm is already holding an object, that object is the target. Choose none_of_these only when there is no request or nothing plausibly matches.",
+            "rules": "Objects are seen by a depth camera and described only by colour, size and shape, so e.g. a paper cup appears as a white or tan cup-like object. Colour names come from a camera and can be off by a shade (black vs dark gray, white vs light gray, orange vs tan). Pick the object that most plausibly matches the request. If the arm is already holding an object, that object is the target. If the request is a standing rule about where things should be (e.g. keep X on the mat and Y off it), pick the object that currently breaks the rule (see each object's `resting_on`); a flat mat is never the target. If nothing breaks the rule, choose none_of_these. Choose none_of_these only when there is no request or nothing plausibly matches.",
         },
         "criteria": {**{l: None for l in labels}, NONE: "the request matches none of the listed objects, or there is no request"},
     }
@@ -35,6 +35,10 @@ def build(cfg: Config, w: World, brain=None) -> dict:
         place_opts[k] = words
     for l in labels:
         if l == tgt:
+            continue
+        if "flat mat" in l:
+            place_opts[f"on:{l}"] = f"on top of {l}"
+            place_opts[f"off:{l}"] = f"off {l}, on the bare table beside it"
             continue
         for rel, words in PLACE_WORDS.items():
             place_opts[f"{rel}:{l}"] = f"{words} {l}"
