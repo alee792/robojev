@@ -200,7 +200,7 @@ class Detector:
                 near = float(np.percentile(along, 5))
                 mid_across = float(np.median(across))
                 c = near + width_across / 2
-                cx, cy = float(c * look_u[0] - mid_across * look_u[1]), float(c * look_u[1] + mid_across * look_u[0])
+                cx, cy = float(c * look_u[0] + mid_across * look_u[1]), float(c * look_u[1] - mid_across * look_u[0])   # along*u + across*(u1, -u0)
                 spread = width_across
             u0, v0 = int(px[:, 0].mean()), int(px[:, 1].mean())
             margin = 3 * self.stride
