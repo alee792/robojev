@@ -25,6 +25,7 @@ class Detection:
     n_points: int
     pixel: tuple[int, int]                # image centre of the blob
     partial: bool = False                 # blob touches the image border: its centroid is biased
+    camera: str | None = None             # which camera produced it
 
 
 COLOR_NAMES = [  # (name, hsv centre) rough buckets

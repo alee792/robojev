@@ -36,7 +36,7 @@ class Perception(threading.Thread):
     """Runs the detector + tracker at perception_hz. `camera=None` means the virtual scene."""
 
     def __init__(self, cfg: Config, arm, camera=None, virtual=None, table_z: float | None = None, log=None,
-                 cameras: list | None = None):
+                 cameras: list | None = None, namer=None):
         """`cameras`: list of (name, cam, extrinsic_fn or None, finger_mask). None extrinsic = wrist chain.
         `camera=` is shorthand for a single wrist camera."""
         super().__init__(daemon=True, name="perception")
@@ -57,6 +57,11 @@ class Perception(threading.Thread):
         self.frames = {}   # name -> latest jpeg
         self.held_label: str | None = None   # set by the loop from the brain; the track follows the EE
         self.raw: dict = {}                  # name -> last raw detections (for the tick log)
+        self.colors: dict = {}               # name -> last colour frame (for VLM crops)
+        self.vlm = None
+        if namer is not None:
+            from robojev.perception.vlm import NamingWorker
+            self.vlm = NamingWorker(namer); self.vlm.start()
         if self.cameras:
             from robojev.perception.detect import Detector
             from robojev.perception.geometry import Intrinsics
@@ -92,6 +97,9 @@ class Perception(threading.Thread):
                             info[name] = {k: (round(v, 3) if isinstance(v, float) else v) for k, v in inf.items()}
                             if "plane_z_at_origin" in inf and "plane_z_at_origin" not in info:
                                 info["plane_z_at_origin"], info["plane_tilt_deg"] = inf["plane_z_at_origin"], inf.get("plane_tilt_deg", 0)
+                        for det in d:
+                            det.camera = name
+                        self.colors[name] = f.color
                         self.raw[name] = [(round(det.base_xyz[0], 3), round(det.base_xyz[1], 3), round(det.height, 3), round(det.width, 3)) for det in d]
                         img = f.color.copy()
                         for det in d:
@@ -109,6 +117,8 @@ class Perception(threading.Thread):
                     self.tracker.update(dets, t, carried_xy=(snap.ee[:2] if (self.cameras and (snap.holding or closing)) else None))
                     if self.cameras and self.held_label and snap.holding:
                         self.tracker.pin(self.held_label, snap.ee[:2], t)
+                    if self.vlm is not None:
+                        self._feed_vlm(t)
                     self.info = info | {"table_z": self.table_z, "n_dets": len(dets)}
                     self.frame_jpeg = self.frames.get(self.cameras[0][0]) if self.cameras else None
                 n += 1
@@ -121,6 +131,28 @@ class Perception(threading.Thread):
             dt = time.time() - t
             if dt < period:
                 time.sleep(period - dt)
+
+    def _feed_vlm(self, now):
+        """Submit crops for confirmed, unnamed tracks; apply names that came back (under self.lock)."""
+        from robojev.perception.vlm import crop_around
+        for e in self.tracker.stable():
+            if e.name is None and e.vlm_kind is None and e.last_pixel and e.last_pixel[0] in self.colors:
+                cam, u, v = e.last_pixel
+                self.vlm.submit(e.id, crop_around(self.colors[cam], (u, v)), e.height, e.width, e.kind(), e.color)
+        for eid, res in self.vlm.take().items():
+            e = self.tracker.entities.get(eid)
+            if e is None:
+                continue
+            if not res.is_object and res.confidence >= 0.6:
+                e.phantom = True
+                if self.log:
+                    self.log.write("events", kind="vlm", text=f"{e.label()} dropped as not an object: {res.reason}")
+                continue
+            e.vlm_kind = res.kind
+            if res.confidence >= 0.5 and res.name:
+                self.tracker.set_name(eid, res.name)
+            if self.log:
+                self.log.write("events", kind="vlm", text=f"{eid}: {res.name} ({res.kind}, {res.confidence:.2f}) {res.reason}")
 
     def _pose6(self, snap):
         """EE pose as the driver reports it: [x, y, z, angle-axis]."""

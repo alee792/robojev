@@ -38,6 +38,13 @@ def build(args, cfg: Config):
         arm = RealArm(cfg, log=log)
     else:
         sys.exit(f"unknown arm {args.arm}")
+    namer = None
+    if args.vlm == "claude":
+        from robojev.perception.vlm import ClaudeNamer
+        namer = ClaudeNamer()
+    elif args.vlm == "stub":
+        from robojev.perception.vlm import StubNamer
+        namer = StubNamer()
     if args.perception == "virtual":
         from robojev.perception.virtual import VirtualScene
         per = Perception(cfg, arm, virtual=VirtualScene(), log=log)
@@ -45,7 +52,7 @@ def build(args, cfg: Config):
         from robojev.arm.sim import SimCamera
         wrist = SimCamera(arm, "cam", third=True)
         over = SimCamera(arm, "overhead", width=640, height=480)
-        per = Perception(cfg, arm, cameras=[("wrist", wrist, None, True), ("overhead", over, over.extrinsic_fixed(), False)], log=log)
+        per = Perception(cfg, arm, cameras=[("wrist", wrist, None, True), ("overhead", over, over.extrinsic_fixed(), False)], log=log, namer=namer)
     else:
         from robojev.perception.camclient import CamClient
         cams = [("wrist", CamClient(args.camserver), None, True)]
@@ -54,7 +61,7 @@ def build(args, cfg: Config):
             if not args.overhead_calib:
                 sys.exit("--overhead needs --overhead-calib <json> (run `robojev calibrate` first)")
             cams.append(("overhead", CamClient(args.overhead), load_calib(args.overhead_calib), False))
-        per = Perception(cfg, arm, cameras=cams, log=log)
+        per = Perception(cfg, arm, cameras=cams, log=log, namer=namer)
     loop = Loop(cfg, arm, per, log, use_jev=not args.no_jev, task=args.task, orders=args.orders or [])
     if args.arm == "sim" and args.scenario != "static":
         from robojev.arm.sim import Scenario
@@ -150,6 +157,7 @@ def main(argv=None):
     r.add_argument("--arm", choices=["fake", "sim", "real-ro", "real"], default="fake")
     r.add_argument("--perception", choices=["virtual", "simcam", "camera"], default="virtual")
     r.add_argument("--scenario", choices=["static", "drift", "intruder"], default="static")
+    r.add_argument("--vlm", choices=["off", "stub", "claude"], default="off", help="slow-tier track naming (claude needs ANTHROPIC_API_KEY)")
     r.add_argument("--scenario-start", type=float, default=10.0)
     r.add_argument("--camserver", default="http://127.0.0.1:8765")
     r.add_argument("--overhead", default=None, help="second camserver URL (boom D455), e.g. http://127.0.0.1:8766")

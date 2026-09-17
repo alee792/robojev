@@ -37,6 +37,9 @@ class Entity:
     dims: list = field(default_factory=list)      # (h, w, color) per sighting until frozen
     frozen: bool = False         # description frozen after CONFIRM sightings (labels must not flicker)
     last_speed: float = 0.0      # speed at the last sighting: a thing that was moving when it vanished has left
+    last_pixel: tuple | None = None   # (camera name, u, v) of the last detection, for VLM crops
+    vlm_kind: str | None = None       # kind from the vision model, once named
+    phantom: bool = False             # the vision model said this is not a real object
 
     def kind(self) -> str:
         """A shape-based guess; a depth camera cannot know what a thing is, only its silhouette."""
@@ -52,11 +55,12 @@ class Entity:
     def label(self) -> str:
         return f"{self.name} {self.id}" if self.name else f"{self.color} {self.kind()} {self.id}"
 
-    def describe(self) -> str:
+    def describe(self) -> str:  # noqa: F811  (kept below; overridden to mention the vision model's kind)
         shape = {"cup-like object": "upright, taller than wide, like a cup, can or bottle",
                  "flat object": "flat and wide, like a phone, book or pad",
                  "small object": "small, like a block or ball"}.get(self.kind(), "box-shaped")
-        return f"{self.color}, {self.height*100:.0f} cm tall, {self.width*100:.0f} cm wide; {shape}"
+        seen = f"; identified by the vision model as a {self.vlm_kind}" if self.vlm_kind else ""
+        return f"{self.color}, {self.height*100:.0f} cm tall, {self.width*100:.0f} cm wide; {shape}{seen}"
 
     def velocity(self, window_s: float = 1.5) -> float:
         """Speed from the displacement between the medians of the older and newer halves of the
@@ -118,6 +122,7 @@ class Tracker:
                 e.history.append((now, float(e.xyz[0]), float(e.xyz[1])))
                 e.history = e.history[-40:]
                 e.last_speed = e.velocity()
+                e.last_pixel = (getattr(d, "camera", None), d.pixel[0], d.pixel[1])
         for d in unmatched:
             if d.width > MAX_NEW_WIDTH or d.partial:
                 continue   # merged blobs and border-cut blobs must not become objects
@@ -126,7 +131,8 @@ class Tracker:
             eid = letter(self._n); self._n += 1
             self.entities[eid] = Entity(eid, np.asarray(d.base_xyz, float), d.height, d.width, d.color_name, now, now,
                                         history=[(now, d.base_xyz[0], d.base_xyz[1])], name=self.names.get(eid),
-                                        dims=[(d.height, d.width, d.color_name)])
+                                        dims=[(d.height, d.width, d.color_name)],
+                                        last_pixel=(getattr(d, "camera", None), d.pixel[0], d.pixel[1]))
         # merge duplicates (two cameras, or a split blob): the younger one folds into the older
         ents = sorted(self.entities.values(), key=lambda e: e.first_seen)
         for i, a_ in enumerate(ents):
@@ -164,4 +170,4 @@ class Tracker:
     def stable(self, min_seen: int = CONFIRM) -> list[Entity]:
         """Confirmed tracks: enough sightings, spread over at least a second (a burst of fragments
         from one pose does not make an object)."""
-        return [e for e in self.entities.values() if e.seen_count >= min_seen and e.last_seen - e.first_seen >= 1.0]
+        return [e for e in self.entities.values() if e.seen_count >= min_seen and e.last_seen - e.first_seen >= 1.0 and not e.phantom]
