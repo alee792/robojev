@@ -56,6 +56,7 @@ class Brain:
         self.last_result: str | None = None
         self.place: str | None = None
         self.origin_xy = None                    # where the held object was picked up
+        self.place_xy = None                     # latched when move_to_place starts (the reference's *view* moves, not the object)
         self.held: str | None = None             # label of the object we closed on
         self.placed: tuple[str, str, float] | None = None   # (label, place, t) after a release at the place
         self.prev_prim: str | None = None
@@ -145,6 +146,8 @@ class Brain:
             self.origin_xy = tuple(e.xyz[:2]) if e else None
         if name == "close_gripper":
             self.held = world.above_label
+        if name == "move_to_place":
+            self.place_xy = skills.resolve_place(self.cfg, world, self.place, self.origin_xy)
         self._note(f"{name}" + (f" {subj}" if subj else ""))
 
     # -- apply one fresh answer set ---------------------------------------------------------------

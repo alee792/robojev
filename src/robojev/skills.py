@@ -77,7 +77,8 @@ def offered(cfg: Config, w: World, brain) -> list[Prim]:
     holding = w.holding_label
     gripper_open = w.gripper_state == "open"
     height = w.arm.ee[2] - w.table_z
-    place_xy = resolve_place(cfg, w, brain.place, brain.origin_xy)
+    place_xy = (brain.place_xy if (brain.prim in ("move_to_place", "lower_to_place") and brain.place_xy) else None) \
+        or resolve_place(cfg, w, brain.place, brain.origin_xy)
     for e in w.entities:
         if not e.reachable:
             continue
@@ -142,7 +143,7 @@ def goal_for(cfg: Config, w: World, brain, now: float):
         goal = (sp[0], sp[1], carry_z(cfg, w))
         return goal, None, near(goal), None, f"lift {subj}"
     if name == "move_to_place":
-        xy = resolve_place(cfg, w, brain.place, brain.origin_xy)
+        xy = brain.place_xy or resolve_place(cfg, w, brain.place, brain.origin_xy)
         if xy is None:
             return sp, None, False, "place cannot be resolved", "move_to_place: no place"
         goal = cfg.workspace.clamp((xy[0], xy[1], carry_z(cfg, w)))
