@@ -238,12 +238,12 @@ class Detector:
     def _flat_regions(self, P, uv, height, color, inws) -> list[Detection]:
         """Large dark patches lying on the table plane (a mat): depth cannot see 3 mm, colour can.
         Returns flat Detections with a footprint (axis-aligned box in base frame)."""
-        on = (np.abs(height) < 0.012) & inws
+        on = (np.abs(height) < 0.009) & inws
         if on.sum() < 200:
             return []
         px = uv[on]
         bgr = color[px[:, 1], px[:, 0]].astype(int)
-        dark = bgr.max(axis=1) < 75          # black/dark grey on a light wooden table
+        dark = bgr.max(axis=1) < 60          # black on a light wooden table (75 let the shadow under the arm in)
         if dark.sum() < 150:
             return []
         Q, uvq = P[on][dark], px[dark]
@@ -255,8 +255,13 @@ class Detector:
             if k.sum() < 150:
                 continue
             pts, pp = Q[k], uvq[k]
-            xmin, xmax = np.percentile(pts[:, 0], 2), np.percentile(pts[:, 0], 98)
-            ymin, ymax = np.percentile(pts[:, 1], 2), np.percentile(pts[:, 1], 98)
+            xmin, xmax = np.percentile(pts[:, 0], 4), np.percentile(pts[:, 0], 96)
+            ymin, ymax = np.percentile(pts[:, 1], 4), np.percentile(pts[:, 1], 96)
+            # a mat is solid: its points fill its box. A sparse box is shadow, cable and rail joined up.
+            cell_area = 0.03 * 0.03
+            filled = len(np.unique(np.floor(pts[:, :2] / 0.03).astype(int), axis=0)) * cell_area
+            if filled < 0.55 * (xmax - xmin) * (ymax - ymin):
+                continue
             if max(xmax - xmin, ymax - ymin) < 0.10:
                 continue                      # a mat is big; small dark spots are shadows or cables
             partial = bool(pp[:, 0].min() < margin or pp[:, 1].min() < margin or pp[:, 0].max() > self.intr.w - margin
@@ -267,6 +272,7 @@ class Detector:
             out.append(Detection(xyz=(cx, cy, tz), base_xyz=(cx, cy, tz), height=0.0, width=float(max(xmax - xmin, ymax - ymin)),
                                  color_bgr=(20, 20, 20), color_name="black", n_points=int(k.sum()), pixel=(u0, v0),
                                  partial=partial, flat=True, footprint=(float(xmin), float(xmax), float(ymin), float(ymax))))
+            out[-1].pixels = pp[::6]   # for the annotated frame
         return out
 
 

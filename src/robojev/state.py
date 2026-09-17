@@ -51,7 +51,7 @@ def render(cfg: Config, w: World) -> dict:
         objects.append(item)
     tgt = w.entity(w.committed_target) if w.committed_target else None
     relations = {
-        "closest_to_gripper": w.closest().label if w.entities else None,
+        "closest_to_gripper": (w.closest().label if w.closest() else None),
         "current_target": w.committed_target or "none yet",
         "between_gripper_and_target": w.between(tgt) if tgt else [],
     }

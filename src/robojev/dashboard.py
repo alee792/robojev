@@ -74,6 +74,10 @@ td.nw{white-space:nowrap}
 
 /* media and blobs ----------------------------------------------------------- */
 img.cam{display:block;width:100%;border-radius:6px;background:#000}
+#small{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+#small .tile{flex:1 1 calc(50% - 8px);min-width:120px}
+.tile .nm{font-size:var(--sm);color:var(--muted);letter-spacing:.04em;margin:0 0 4px}
+#big .tile+.tile{margin-top:8px}
 canvas{display:block;width:100%;height:40px;background:#0b0c0e;border-radius:4px;margin-top:8px}
 pre{margin:0;font-family:inherit;font-size:var(--sm);color:var(--muted);white-space:pre-wrap;
  word-break:break-word;max-height:220px;overflow:auto}
@@ -109,12 +113,9 @@ summary{cursor:pointer;font-size:var(--sm);color:var(--muted)}
 <main>
 <section>
  <div class=card>
-  <h2>Wrist camera</h2>
-  <img id=cam class="cam hidden" src="/frame.jpg"><div class="noframe muted" id=cam_no>No frame</div>
-  <div id=over_blk class=hidden><h2 class=sec>Overhead camera</h2>
-   <img id=over class="cam hidden" src="/frame2.jpg"><div class="noframe muted" id=over_no>No frame</div></div>
-  <div id=third_blk class=hidden><h2 class=sec>Third camera</h2>
-   <img id=third class="cam hidden" src="/third.jpg"><div class="noframe muted" id=third_no>No frame</div></div>
+  <h2>Cameras</h2>
+  <div id=big></div><div id=small></div>
+  <div class=muted id=strip_no>No cameras in this run</div>
  </div>
  <div class=card><h2>Arm detail</h2><div class=kv id=armkv></div></div>
  <div class=card>
@@ -315,14 +316,34 @@ async function poll(){try{const r=await fetch('/api/snapshot');const s=await r.j
 function freshness(){const e=g('v_age');
  if(lastOk==null){e.textContent='waiting for the run';e.className='warn';return}
  const dt=(Date.now()-lastOk)/1000;e.textContent='updated '+dt.toFixed(1)+' s ago';e.className=dt>2?'bad':'muted'}
-// A camera endpoint with no frame answers with no image: hide the img instead of showing it broken.
-// The wrist block always stays, so a dropped wrist frame reads as a fault; the other two go away entirely.
-for(const id of ['cam','over','third']){const im=g(id),no=g(id+'_no'),blk=g(id+'_blk');
- im.addEventListener('load',()=>{im.classList.remove('hidden');no.classList.add('hidden');if(blk)blk.classList.remove('hidden')});
- im.addEventListener('error',()=>{im.classList.add('hidden');no.classList.remove('hidden');if(blk)blk.classList.add('hidden')})}
-setInterval(poll,250);setInterval(freshness,250);
-setInterval(()=>{const t=Date.now();g('cam').src='/frame.jpg?'+t;g('third').src='/third.jpg?'+t;g('over').src='/frame2.jpg?'+t},200);
-poll();freshness();
+// ---- camera strip -------------------------------------------------------------------------
+// The run's cameras come from /api/cameras (wrist first), re-checked every 5 s so one that is
+// plugged in later still turns up. Each tile drives its own refresh from its load/error handler:
+// a slow camera then falls behind instead of piling requests up, and each gets its own rate.
+// A camera with no frame answers 204, which the browser reports as an image error. The wrist
+// keeps its "No frame" placeholder (a dropped wrist frame is a fault worth seeing); the rest of
+// the tiles hide until their endpoint hands back an image again.
+const tiles={};
+function addTile(name,first){
+ const d=document.createElement('div');d.className='tile';
+ d.innerHTML='<div class=nm></div><img class="cam hidden"><div class="muted nf">No frame</div>';
+ d.querySelector('.nm').textContent=name;
+ g(first?'big':'small').appendChild(d);
+ const im=d.querySelector('img'),nf=d.querySelector('.nf'),period=first?200:500;
+ const url=()=>'/cam/'+encodeURIComponent(name)+'.jpg?'+Date.now();
+ const again=()=>setTimeout(()=>{im.src=url()},period);
+ im.addEventListener('load',()=>{im.classList.remove('hidden');nf.classList.add('hidden');d.classList.remove('hidden');again()});
+ im.addEventListener('error',()=>{im.classList.add('hidden');
+  if(first){nf.classList.remove('hidden')}else{d.classList.add('hidden')}again()});
+ tiles[name]=d;im.src=url();
+}
+async function cameras(){try{
+ const names=await (await fetch('/api/cameras')).json();
+ names.forEach((n,i)=>{if(!tiles[n])addTile(n,i==0)});          // keep the tiles already running
+ g('strip_no').classList.toggle('hidden',names.length>0);
+}catch(e){console.log(e)}}
+setInterval(poll,250);setInterval(freshness,250);setInterval(cameras,5000);
+poll();freshness();cameras();
 </script></body></html>"""
 
 
@@ -335,24 +356,33 @@ def make_app(loop) -> web.Application:
     async def snapshot(req):
         return web.Response(text=json.dumps(loop.view(), default=str), content_type="application/json")
 
-    async def frame(req):
-        jpg = loop.per.frame_jpeg
+    def jpeg(name):
+        """Latest frame for one camera, or 204 so the page can hide the tile. "third" is the sim's
+        third-person render, which lives on the camera object rather than in per.frames."""
+        jpg = loop.per.frames.get(name)
+        if not jpg and name == "third":
+            jpg = getattr(loop.per.cam, "third_jpeg", None)
         if not jpg:
             return web.Response(status=204)
         return web.Response(body=jpg, content_type="image/jpeg")
+
+    async def cameras(req):
+        return web.json_response(loop.per.camera_names())
+
+    async def cam(req):
+        return jpeg(req.match_info["name"])
+
+    # the three original endpoints, kept as aliases so older links and bookmarks still work
+    async def frame(req):
+        cams = loop.per.cameras
+        return jpeg(cams[0][0] if cams else "wrist")
 
     async def frame2(req):
         cams = loop.per.cameras
-        jpg = loop.per.frames.get(cams[1][0]) if len(cams) > 1 else None
-        if not jpg:
-            return web.Response(status=204)
-        return web.Response(body=jpg, content_type="image/jpeg")
+        return jpeg(cams[1][0] if len(cams) > 1 else "overhead")
 
     async def third(req):
-        jpg = getattr(loop.per.cam, "third_jpeg", None)
-        if not jpg:
-            return web.Response(status=204)
-        return web.Response(body=jpg, content_type="image/jpeg")
+        return jpeg("third")
 
     async def orders(req):
         loop.set_orders((await req.json()).get("orders", [])); return web.json_response({"ok": True})
@@ -376,7 +406,9 @@ def make_app(loop) -> web.Application:
         b = await req.json(); loop.per.tracker.set_name(b["id"], b.get("name")); loop.event("name", **b)
         return web.json_response({"ok": True})
 
-    app.add_routes([web.get("/", index), web.get("/api/snapshot", snapshot), web.get("/frame.jpg", frame), web.get("/third.jpg", third), web.get("/frame2.jpg", frame2),
+    app.add_routes([web.get("/", index), web.get("/api/snapshot", snapshot), web.get("/api/cameras", cameras),
+                    web.get("/cam/{name:[A-Za-z0-9_-]+}.jpg", cam),
+                    web.get("/frame.jpg", frame), web.get("/third.jpg", third), web.get("/frame2.jpg", frame2),
                     web.post("/api/orders", orders), web.post("/api/task", task), web.post("/api/stop", stop),
                     web.post("/api/resume", resume), web.post("/api/pause", pause), web.post("/api/unpause", unpause),
                     web.post("/api/name", name)])

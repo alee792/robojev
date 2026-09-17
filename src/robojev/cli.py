@@ -20,6 +20,31 @@ from robojev.log import RunLog
 from robojev.loop import Loop, Perception
 
 
+RESERVED_CAMS = {"wrist", "overhead", "third"}
+
+
+def display_cameras(args):
+    """`--camera NAME=URL`, repeatable: extra cameras the dashboard shows and nothing detects on.
+    The name becomes a URL path segment (/cam/<name>.jpg), so it is kept to a plain word."""
+    import re
+    from robojev.perception.camclient import CamClient
+    out, seen = [], set()
+    for spec in (args.camera or []):
+        name, eq, url = spec.partition("=")
+        name, url = name.strip(), url.strip()
+        if not eq or not name or not url:
+            sys.exit(f"--camera wants NAME=URL (e.g. boom=http://127.0.0.1:8766), got {spec!r}")
+        if not re.fullmatch(r"[A-Za-z0-9_-]+", name):
+            sys.exit(f"--camera name {name!r} must be letters, digits, '-' or '_'")
+        if name in RESERVED_CAMS:
+            sys.exit(f"--camera {name}: reserved name (use --camserver for wrist, --overhead for overhead)")
+        if name in seen:
+            sys.exit(f"--camera {name}: given twice, names must be unique")
+        seen.add(name)
+        out.append((name, CamClient(url)))
+    return out
+
+
 def build(args, cfg: Config):
     log = RunLog(name=args.run_name)
     if args.arm == "fake":
@@ -45,14 +70,15 @@ def build(args, cfg: Config):
     elif args.vlm == "stub":
         from robojev.perception.vlm import StubNamer
         namer = StubNamer()
+    disp = display_cameras(args)
     if args.perception == "virtual":
         from robojev.perception.virtual import VirtualScene
-        per = Perception(cfg, arm, virtual=VirtualScene(), log=log)
+        per = Perception(cfg, arm, virtual=VirtualScene(), log=log, display=disp)
     elif args.perception == "simcam":
         from robojev.arm.sim import SimCamera
         wrist = SimCamera(arm, "cam", third=True)
         over = SimCamera(arm, "overhead", width=640, height=480)
-        per = Perception(cfg, arm, cameras=[("wrist", wrist, None, True), ("overhead", over, over.extrinsic_fixed(), False)], log=log, namer=namer)
+        per = Perception(cfg, arm, cameras=[("wrist", wrist, None, True), ("overhead", over, over.extrinsic_fixed(), False)], log=log, namer=namer, display=disp)
     else:
         from robojev.perception.camclient import CamClient
         cams = [("wrist", CamClient(args.camserver), None, True)]
@@ -61,7 +87,7 @@ def build(args, cfg: Config):
             if not args.overhead_calib:
                 sys.exit("--overhead needs --overhead-calib <json> (run `robojev calibrate` first)")
             cams.append(("overhead", CamClient(args.overhead), load_calib(args.overhead_calib), False))
-        per = Perception(cfg, arm, cameras=cams, log=log, namer=namer)
+        per = Perception(cfg, arm, cameras=cams, log=log, namer=namer, display=disp)
     loop = Loop(cfg, arm, per, log, use_jev=not args.no_jev, task=args.task, orders=args.orders or [])
     if args.arm == "sim" and args.scenario != "static":
         from robojev.arm.sim import Scenario
@@ -177,6 +203,8 @@ def main(argv=None):
     r.add_argument("--camserver", default="http://127.0.0.1:8765")
     r.add_argument("--overhead", default=None, help="second camserver URL (boom D455), e.g. http://127.0.0.1:8766")
     r.add_argument("--overhead-calib", default=None, help="calibration json from `robojev calibrate`")
+    r.add_argument("--camera", action="append", default=[], metavar="NAME=URL",
+                   help="extra display-only camserver, repeatable: --camera boom=http://127.0.0.1:8766")
     r.add_argument("--task", default="")
     r.add_argument("--orders", action="append")
     r.add_argument("--port", type=int, default=8080)

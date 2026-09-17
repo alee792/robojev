@@ -36,14 +36,18 @@ class Perception(threading.Thread):
     """Runs the detector + tracker at perception_hz. `camera=None` means the virtual scene."""
 
     def __init__(self, cfg: Config, arm, camera=None, virtual=None, table_z: float | None = None, log=None,
-                 cameras: list | None = None, namer=None):
+                 cameras: list | None = None, namer=None, display: list | None = None):
         """`cameras`: list of (name, cam, extrinsic_fn or None, finger_mask). None extrinsic = wrist chain.
-        `camera=` is shorthand for a single wrist camera."""
+        `camera=` is shorthand for a single wrist camera.
+        `display`: list of (name, cam) shown on the dashboard only -- polled slowly in their own
+        thread, never detected on, so an extra camera can never cost the loop a detection."""
         super().__init__(daemon=True, name="perception")
         self.cfg, self.arm, self.virtual, self.log = cfg, arm, virtual, log
         if cameras is None and camera is not None:
             cameras = [("wrist", camera, None, True)]
         self.cameras = cameras or []
+        self.display = list(display or [])
+        self.display_info: dict = {}         # name -> {"error": ...}, merged into the perception panel
         self.cam = self.cameras[0][1] if self.cameras else None
         self.tracker = Tracker(ttl_s=cfg.loop.remembered_ttl_s, out_of_view_s=cfg.loop.out_of_view_s)
         self.table_z = table_z if table_z is not None else cfg.table_z
@@ -68,7 +72,36 @@ class Perception(threading.Thread):
             for name, cam, ext, fmask in self.cameras:
                 self.detectors[name] = Detector(Intrinsics(cam.info), extrinsic=ext, finger_mask=fmask)
 
+    def camera_names(self) -> list[str]:
+        """Every camera this run can show, wrist first: the detection cameras in order, the sim
+        third-person view if this run renders one, then the display-only cameras."""
+        names = [c[0] for c in self.cameras]
+        if getattr(self.cam, "want_third", False):
+            names.append("third")
+        return names + [n for n, _ in self.display]
+
+    def _display_loop(self, hz: float = 2.5):
+        """Display-only cameras, in their own thread: fetch, re-encode, store. Each camera is wrapped
+        on its own, so one that hangs or dies never stops the others (or the detection loop)."""
+        period = 1 / hz
+        while not self.stop_evt.is_set():
+            t = time.time()
+            for name, cam in self.display:
+                try:
+                    f = cam.frame()
+                    if f is None:
+                        continue
+                    ok, jpg = cv2.imencode(".jpg", f.color, [cv2.IMWRITE_JPEG_QUALITY, 70])
+                    if ok:
+                        self.frames[name] = jpg.tobytes()
+                    self.display_info.pop(name, None)
+                except Exception as e:
+                    self.display_info[name] = {"error": repr(e)[:120]}
+            self.stop_evt.wait(max(0.0, period - (time.time() - t)))
+
     def run(self):
+        if self.display:
+            threading.Thread(target=self._display_loop, daemon=True, name="perception-display").start()
         period = 1 / self.cfg.loop.perception_hz
         n, t0 = 0, time.time()
         while not self.stop_evt.is_set():
@@ -103,6 +136,9 @@ class Perception(threading.Thread):
                         self.raw[name] = [(round(det.base_xyz[0], 3), round(det.base_xyz[1], 3), round(det.height, 3), round(det.width, 3)) for det in d]
                         img = f.color.copy()
                         for det in d:
+                            if getattr(det, "flat", False):
+                                for (pu, pv) in getattr(det, "pixels", []):
+                                    cv2.circle(img, (int(pu), int(pv)), 1, (255, 120, 0), -1)
                             cv2.circle(img, det.pixel, 8, (0, 0, 255), 2)
                         ok, jpg = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, 70])
                         if ok:
@@ -122,7 +158,7 @@ class Perception(threading.Thread):
                         self._absence_check(t, snap)
                     if self.vlm is not None:
                         self._feed_vlm(t)
-                    self.info = info | {"table_z": self.table_z, "n_dets": len(dets)}
+                    self.info = info | dict(self.display_info) | {"table_z": self.table_z, "n_dets": len(dets)}
                     self.frame_jpeg = self.frames.get(self.cameras[0][0]) if self.cameras else None
                 n += 1
                 self.fps = n / max(1e-6, time.time() - t0)
