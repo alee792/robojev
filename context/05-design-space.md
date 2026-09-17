@@ -1,8 +1,9 @@
-# Doom → arm: axes, tensions, and what code must own
+# Design space: axes, tensions, and what code must own
 
-This is **not an architecture**. It lists what changes when the Doom pattern moves onto a WidowX AI arm
-with RealSense cameras, the options on each axis, and a few fixed constraints from the evidence.
-The architect decides.
+This is **not an architecture**, and it isn't tied to any one approach. It lists fixed constraints from
+the evidence, then the open axes for driving a WidowX AI arm with Jev, with options on each. The Doom
+demo shows up as one reference point. It is the chosen *first* approach (see `00-goal.md`), not the only
+shape the design can take.
 
 ## Fixed constraints (from evidence, not preference)
 - **Jev takes text only.** Something upstream has to turn pixels and depth into labeled entities with

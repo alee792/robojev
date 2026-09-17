@@ -1,10 +1,9 @@
-# robojev — goal (draft for alignment)
+# robojev — goal and decisions
 
-**Goal:** Do for a real robot arm what the TypeSafe Jev Doom demo does for a game. Observations
-(RealSense RGB-D and arm telemetry) become a text **situation report** at a high rate. Jev answers a
-battery of small **typed judgments** at about 100 ms per call. **Code composes** the answers into
-safe, persistent arm commands. A **natural-language prompt** (a task, or a standing order that
-changes behavior) steers every judgment without code changes.
+**Goal:** Drive a WidowX AI arm from natural-language prompts, using Jev's fast typed judgments over
+text built from observations (RealSense RGB-D and arm telemetry). Prompts can be tasks or behavior
+changes, and they should take effect without code changes. How observations become state, which
+questions get asked, how often, and how answers become motion are all open design (`05-design-space.md`).
 
 **Non-goals (for now):** hardware and driver integration details; training a learned policy; putting
 images into Jev (it is text-only).
@@ -13,7 +12,32 @@ images into Jev (it is text-only).
 driven by a closed Jev loop. A live standing order (e.g. "stay away from the blue block") visibly
 changes its behavior mid-run, the way "Do not fire, simply dodge" did in the Doom demo.
 
-## Decisions for Anthony (these shape the architecture)
+## Decision: first approach = Doom-style composed loop (2026-09-17)
+Chosen by Anthony as the **first** approach to try. It is a hypothesis to test, not the architecture.
+
+The loop: a situation report, then a battery of small typed judgments several times a second, code
+composing the answers into commands, and live standing orders. See `02`–`04` for how the demo does it.
+
+**Why this first:**
+- It's the only pattern with public evidence of Jev running at a high rate.
+- Standing orders are what make the natural-language part distinctive. Picking one of a few
+  primitives at about 1 Hz is already done (`06-prior-art.md`).
+- Its core rule fits a robot anyway: Jev picks from options code has already validated, and code
+  owns all geometry and side effects.
+
+**Known adaptations it needs:**
+- **Perception:** Doom reads perfect engine state; start with sim ground truth.
+- **Motion:** smooth control and safety run in code at their own rates, with Jev as a slower layer
+  on top.
+
+**Revisit if:**
+- Latency or rate limits can't sustain a useful decision rate.
+- Answers flip between ticks enough to cause chatter.
+- Event-driven or skill-level control proves simpler for the first task.
+
+`05-design-space.md` keeps the alternatives open.
+
+## Open decisions for Anthony (these shape the architecture)
 1. **First task:** pick-and-place, or something reactive (follow/track an object, handover, avoid a
    moving obstacle)? Reactive tasks show off 10 Hz. Pick-and-place is easier to evaluate.
 2. **NL scope:** task commands, standing-order behavior modifiers, or both?

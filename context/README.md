@@ -4,6 +4,11 @@ Research handoff (2026-09-17) for an architect or implementer (Fable/Astra). **N
 built yet, and that's intentional.** You have creative license on the architecture. The constraints
 that are actually binding are called out as such.
 
+**Evidence vs. decision.** `01`–`04` and `sources/` are evidence. `05` is the approach-neutral design
+space. The one decision made so far is recorded separately in `00-goal.md`: try a Doom-style loop
+first. Treat that as a starting hypothesis, not a template. `06-prior-art.md` entries, such as
+jev-askable-arm, are contrast points, not blueprints.
+
 ## Read in this order
 | File | What it is |
 |---|---|
@@ -12,7 +17,7 @@ that are actually binding are called out as such.
 | `02-doom-demo-analysis.md` | How the Doom demo works, what it gets for free, and the cost/latency numbers |
 | `03-doom-situation-report.json` | Their state JSON, rebuilt from video frames |
 | `04-doom-questions.md` | Their question battery, the composition graph, and open sequencing questions |
-| `05-robotics-translation-notes.md` | Doom vs. the arm: fixed constraints plus the design axes still open |
+| `05-design-space.md` | Fixed constraints plus open design axes (approach-neutral) |
 | `06-prior-art.md` | Third-party Jev arm/drone/Doom projects and language-to-robot literature |
 | `07-experiments-to-run.md` | Questions only real API calls can answer |
 
