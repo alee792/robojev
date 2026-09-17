@@ -35,6 +35,28 @@ class Judgment:
     votes: dict | None = None     # `next` only: {variant: {"choice": ..., "p": ...}}
 
 
+SET_DOWN_FILE = "runs/last_set_down.json"
+
+
+def _remember_set_down(xy):
+    """The last set-down spot outlives the process, so "put it back" works in the next run."""
+    try:
+        import json, os
+        os.makedirs("runs", exist_ok=True)
+        json.dump({"xy": list(xy), "t": time.time()}, open(SET_DOWN_FILE, "w"))
+    except OSError:
+        pass
+
+
+def _recall_set_down():
+    try:
+        import json
+        d = json.load(open(SET_DOWN_FILE))
+        return tuple(d["xy"]) if time.time() - d.get("t", 0) < 3600 else None
+    except (OSError, ValueError, KeyError):
+        return None
+
+
 class Brain:
     def __init__(self, cfg: Config):
         self.cfg = cfg
@@ -60,7 +82,7 @@ class Brain:
         self.held: str | None = None             # label of the object we closed on
         self.pitch: float | None = None          # wrist pitch the current primitive wants (None = keep)
         self.grasp_dz: float | None = None
-        self.last_set_down_xy: tuple[float, float] | None = None   # where the robot last released an object (survives new requests)
+        self.last_set_down_xy: tuple[float, float] | None = _recall_set_down()   # where the robot last released an object (survives new requests and restarts, 1 h)
         self.advance_f0: float | None = None   # F_x when the advance began       # fingertip height above the table when we closed on the held object
         self.placed: tuple[str, str, float] | None = None   # (label, place, t) after a release at the place
         self.prev_prim: str | None = None
@@ -435,6 +457,7 @@ class Brain:
                     if self.held and self.prev_prim in ("lower_to_place", "set_down_here"):
                         self.placed = (self.held, self.place if self.prev_prim == "lower_to_place" else "right here", now)
                         self.last_set_down_xy = (world.arm.ee[0], world.arm.ee[1])
+                        _remember_set_down(self.last_set_down_xy)
                         self.last_result = f"released {self.held} at {self.placed[1]}"
                     self.held = None
                 self._note(self.last_result)
