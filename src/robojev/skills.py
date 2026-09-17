@@ -72,12 +72,14 @@ def grasp_z(cfg: Config, w: World, label: str) -> float:
     return max(cfg.workspace.z[0], w.table_z + h * cfg.motion.grasp_fraction)
 
 
-def resolve_place(cfg: Config, w: World, place: str | None, origin_xy) -> tuple[float, float] | None:
+def resolve_place(cfg: Config, w: World, place: str | None, origin_xy, last_set_down_xy=None) -> tuple[float, float] | None:
     """Turn a place pick into xy in base frame, or None if it cannot be resolved."""
     if not place or place == "unspecified":
         return None
     if place == "where_it_was":
         return tuple(origin_xy) if origin_xy else None
+    if place == "where_it_was_set_down":
+        return tuple(last_set_down_xy) if last_set_down_xy else None
     rel, _, label = place.partition(":")
     e = w.entity(label)
     if e is None or rel not in PLACE_RELATIONS:
@@ -99,7 +101,7 @@ def offered(cfg: Config, w: World, brain) -> list[Prim]:
     gripper_open = w.gripper_state == "open"
     height = w.arm.ee[2] - w.table_z
     place_xy = (brain.place_xy if (brain.prim in ("move_to_place", "lower_to_place") and brain.place_xy) else None) \
-        or resolve_place(cfg, w, brain.place, brain.origin_xy)
+        or resolve_place(cfg, w, brain.place, brain.origin_xy, getattr(brain, 'last_set_down_xy', None))
     for e in w.entities:
         if not e.reachable:
             continue
@@ -177,6 +179,9 @@ def goal_for(cfg: Config, w: World, brain, now: float):
             return sp, None, False, f"{subj} is no longer known", "advance: lost subject"
         brain.pitch = cfg.motion.side_pitch
         goal = cfg.workspace.clamp((e.xyz[0] - cfg.motion.side_grasp_depth, e.xyz[1], side_z(cfg, w)))
+        fx = float(w.arm.ext_force[0]) - (brain.advance_f0 if brain.advance_f0 is not None else float(w.arm.ext_force[0]))
+        if fx > cfg.motion.advance_push_n and age > 0.5:
+            return sp, 0.04, False, f"the fingers are pushing {subj} (F_x +{fx:.0f} N)", "advance: pushing"
         return goal, 0.04, near(goal, 0.012, 0.01), None, f"advance_to_grasp {subj}"
     if name == "close_gripper":
         done = age > cfg.motion.gripper_settle_s
@@ -188,7 +193,7 @@ def goal_for(cfg: Config, w: World, brain, now: float):
         goal = (sp[0], sp[1], carry_z(cfg, w))
         return goal, None, near(goal), None, f"lift {subj}"
     if name == "move_to_place":
-        xy = brain.place_xy or resolve_place(cfg, w, brain.place, brain.origin_xy)
+        xy = brain.place_xy or resolve_place(cfg, w, brain.place, brain.origin_xy, getattr(brain, 'last_set_down_xy', None))
         if xy is None:
             return sp, None, False, "place cannot be resolved", "move_to_place: no place"
         goal = cfg.workspace.clamp((xy[0], xy[1], carry_z(cfg, w)))

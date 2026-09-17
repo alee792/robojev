@@ -28,7 +28,8 @@ def build(cfg: Config, w: World, brain=None) -> dict:
         "criteria": {**{l: None for l in labels}, NONE: "the request matches none of the listed objects, or there is no request"},
     }
     place_opts = {"unspecified": "the request does not say where to put the object, or it is not a moving task",
-                  "where_it_was": "back where the object was picked up"}
+                  "where_it_was": "back where the object was picked up",
+                  "where_it_was_set_down": "back to the spot where the robot itself set an object down earlier (the request says to put it back after someone moved it)"}
     for l in labels:
         if l == tgt:
             continue

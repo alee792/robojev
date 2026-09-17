@@ -15,7 +15,7 @@ class Workspace:
     # up to base z 0.20; straight-down (90 deg) only reaches z 0.15. Table is at base z ~ -0.02.
     x: tuple[float, float] = (0.18, 0.44)
     y: tuple[float, float] = (-0.18, 0.18)
-    z: tuple[float, float] = (0.025, 0.19)   # floor: fingertips 4.5 cm above the table (side grasps run low)
+    z: tuple[float, float] = (0.0, 0.19)   # floor: fingertips 4.5 cm above the table (side grasps run low)
 
     def clamp(self, p):
         return (min(max(p[0], self.x[0]), self.x[1]),
@@ -56,7 +56,8 @@ class Motion:
     hover_pitch: float = 0.5              # staging/hover wrist pitch: the camera surveys the table instead of the patch under the fingers
     side_pitch: float = 0.5               # rad below level for a side grasp: fully level is unreachable low over the table (sim IK map), 0.5 is solid everywhere
     side_standoff: float = 0.06           # approach point: this far behind the object's near edge, wrist level
-    side_grasp_height: float = 0.045      # fingertips this far above the table for a side grasp (a tapered cup is narrowest low down)
+    side_grasp_height: float = 0.02       # tips 2 cm up: the pads (1.4-6.9 cm behind the tips, tilted) then meet a tapered cup where it is narrowest
+    advance_push_n: float = 6.0           # F_x rise above the pre-advance baseline that means the fingers are shoving the object      # fingertips this far above the table for a side grasp (a tapered cup is narrowest low down)
     side_grasp_depth: float = 0.01        # fingertip centre this far short of the object's centre when closing
     real_tick_hz: float = 20.0            # arm I/O thread rate (real)
     real_goal_time: float = 0.1           # per-command interpolation horizon (0.001..0.2 = linear)

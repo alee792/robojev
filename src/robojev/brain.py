@@ -59,7 +59,9 @@ class Brain:
         self.place_xy = None                     # latched when move_to_place starts (the reference's *view* moves, not the object)
         self.held: str | None = None             # label of the object we closed on
         self.pitch: float | None = None          # wrist pitch the current primitive wants (None = keep)
-        self.grasp_dz: float | None = None       # fingertip height above the table when we closed on the held object
+        self.grasp_dz: float | None = None
+        self.last_set_down_xy: tuple[float, float] | None = None   # where the robot last released an object (survives new requests)
+        self.advance_f0: float | None = None   # F_x when the advance began       # fingertip height above the table when we closed on the held object
         self.placed: tuple[str, str, float] | None = None   # (label, place, t) after a release at the place
         self.prev_prim: str | None = None
         self.done = False
@@ -153,8 +155,10 @@ class Brain:
             self.origin_xy = tuple(e.xyz[:2]) if e else None
         if name == "close_gripper":
             self.held = world.above_label
+        if name == "advance_to_grasp":
+            self.advance_f0 = float(world.arm.ext_force[0])
         if name == "move_to_place":
-            self.place_xy = skills.resolve_place(self.cfg, world, self.place, self.origin_xy)
+            self.place_xy = skills.resolve_place(self.cfg, world, self.place, self.origin_xy, self.last_set_down_xy)
         self._note(f"{name}" + (f" {subj}" if subj else ""))
 
     # -- apply one fresh answer set ---------------------------------------------------------------
@@ -425,6 +429,7 @@ class Brain:
                 if self.prim == "open_gripper":
                     if self.held and self.prev_prim in ("lower_to_place", "set_down_here"):
                         self.placed = (self.held, self.place if self.prev_prim == "lower_to_place" else "right here", now)
+                        self.last_set_down_xy = (world.arm.ee[0], world.arm.ee[1])
                         self.last_result = f"released {self.held} at {self.placed[1]}"
                     self.held = None
                 self._note(self.last_result)
