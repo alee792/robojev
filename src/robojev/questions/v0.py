@@ -23,7 +23,7 @@ def build(cfg: Config, w: World) -> dict:
         "type": "choice",
         "instructions": {
             "question": "Which object in `objects` does the user's request (`user_request.text`) refer to?",
-            "rules": "Judge by the description in `looks_like` and the words of the request. If the request names nothing present, or no object matches, choose none_of_these.",
+            "rules": "Objects are seen by a depth camera and described only by colour, size and shape, so e.g. a paper cup appears as a white or tan cup-like object. Pick the object that most plausibly matches the request. Choose none_of_these only when there is no request or nothing plausibly matches.",
         },
         "criteria": {**{l: None for l in labels}, NONE: "the request matches none of the listed objects, or there is no request"},
     }

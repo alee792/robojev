@@ -68,9 +68,15 @@ class RealArm:
         self.driver.set_all_positions(list(STAGED), 3.0, True)
         self.driver.set_gripper_position(0.04, 1.0, True)
         self._gripper_sent = 0.04
+        # From STAGED, one slow blocking move to the hover-start pose, pointing down. Streaming
+        # never starts from a pose whose orientation differs from the streamed one.
+        start = list(self.cfg.motion.hover_start) + [self.cfg.table_z + self.cfg.motion.safe_height]
+        start = list(self.cfg.workspace.clamp(start))
+        self.driver.set_cartesian_positions(start + list(self.cfg.motion.down_orientation),
+                                            trossen_arm.InterpolationSpace.joint, 4.0, True)
         pose = list(self.driver.get_cartesian_positions())
         self.mover.init_at(pose[:3])
-        self._event(f"staged at {[round(v, 3) for v in pose[:3]]}")
+        self._event(f"hover start at {[round(v, 3) for v in pose[:3]]} rot {[round(v, 2) for v in pose[3:]]}")
         self.watchdog.reset()
         self._thread = threading.Thread(target=self._run, daemon=True, name="arm-io")
         self._thread.start()

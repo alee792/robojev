@@ -35,12 +35,25 @@ class Entity:
     history: list = field(default_factory=list)   # (t, x, y) for motion estimate
     name: str | None = None      # operator override, e.g. "paper cup"
 
+    def kind(self) -> str:
+        """A shape-based guess; a depth camera cannot know what a thing is, only its silhouette."""
+        h, w = self.height, self.width
+        if h >= 0.06 and w <= 0.13 and h > 0.8 * w:
+            return "cup-like object"
+        if h < 0.04 and w >= 0.08:
+            return "flat object"
+        if h < 0.06 and w < 0.08:
+            return "small object"
+        return "boxy object"
+
     def label(self) -> str:
-        return f"{self.name} {self.id}" if self.name else f"{self.color} object {self.id}"
+        return f"{self.name} {self.id}" if self.name else f"{self.color} {self.kind()} {self.id}"
 
     def describe(self) -> str:
-        shape = "tall and narrow" if self.height > 1.2 * self.width else ("flat" if self.height < 0.04 else "boxy")
-        return f"{self.color}, {self.height*100:.0f} cm tall, {self.width*100:.0f} cm wide, {shape}"
+        shape = {"cup-like object": "upright, taller than wide, like a cup, can or bottle",
+                 "flat object": "flat and wide, like a phone, book or pad",
+                 "small object": "small, like a block or ball"}.get(self.kind(), "box-shaped")
+        return f"{self.color}, {self.height*100:.0f} cm tall, {self.width*100:.0f} cm wide; {shape}"
 
     def velocity(self, window_s: float = 1.0) -> float:
         h = [p for p in self.history if p[0] > self.last_seen - window_s]

@@ -188,6 +188,10 @@ class Brain:
             return sp, cap, "orders_violated: holding"
         tgt = world.entity(self.target) if self.target else None
         z = tz + m.hover_heights[self.hover_height]
+        # never lower than the tallest thing on the table plus clearance (a "low" hover over a
+        # 12 cm cup would otherwise hit it)
+        tallest = max([e.height_m for e in world.entities] + [0.0])
+        z = max(z, tz + tallest + m.object_clearance)
         if self.motion == "rise_away":
             return (sp[0], sp[1], tz + m.safe_height), cap, "rise_away"
         if tgt is None:
