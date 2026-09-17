@@ -28,8 +28,8 @@ def display_cameras(args):
     The name becomes a URL path segment (/cam/<name>.jpg), so it is kept to a plain word."""
     import re
     from robojev.perception.camclient import CamClient
-    out, seen = [], set()
-    for spec in (args.camera or []):
+    specs, seen = [], set()
+    for spec in (args.camera or []):            # every name checked before anything is dialled
         name, eq, url = spec.partition("=")
         name, url = name.strip(), url.strip()
         if not eq or not name or not url:
@@ -41,7 +41,14 @@ def display_cameras(args):
         if name in seen:
             sys.exit(f"--camera {name}: given twice, names must be unique")
         seen.add(name)
-        out.append((name, CamClient(url)))
+        specs.append((name, url))
+    out = []
+    for name, url in specs:
+        try:
+            out.append((name, CamClient(url)))
+        except Exception as e:
+            sys.exit(f"--camera {name}: cannot reach {url} ({type(e).__name__}). "
+                     f"Start it with scripts/camserver.sh <port>, or drop the flag.")
     return out
 
 
@@ -176,7 +183,14 @@ def calibrate_cmd(args, cfg):
         table_z = float(np.median(table)) if table else cfg.table_z
         ents = [(float(e.xyz[0]), float(e.xyz[1]), e.height) for e in tr.stable(min_seen=5)]
         print(f"table_z {table_z:.3f}; wrist sees {[(round(x,3), round(y,3), round(h,3)) for x, y, h in ents]}")
-        fo = over.frame()
+        fo = None
+        for _ in range(10):                      # the boom server may still be warming up
+            fo = over.frame()
+            if fo is not None:
+                break
+            time.sleep(0.5)
+        if fo is None:
+            sys.exit("no frame from the overhead camera")
         R, t, rep = calibrate.calibrate_from_frames(fo.color, fo.depth_m, Intrinsics(over.info), table_z, ents)
         print("report:", {k: v for k, v in rep.items() if k in ("residual_m", "pairs", "yaw_deg", "n_pairs", "warning", "error", "fixed_dets")})
         if R is None:

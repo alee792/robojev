@@ -14,6 +14,7 @@ dependencies = [
 real = ["trossen-arm==1.9.3"]
 sim = ["mujoco>=3.2"]
 vlm = ["anthropic>=1.0"]
+seg = ["ultralytics>=8.3"]
 cameras = [
   "pyrealsense2; sys_platform != 'darwin'",
   "pyrealsense2-macosx; sys_platform == 'darwin'",

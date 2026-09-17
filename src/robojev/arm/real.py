@@ -35,6 +35,8 @@ class RealArm:
         self.log = log
         self.mover = Mover(cfg.workspace, cfg.motion.hard_speed_cap)
         self._grip_mode = "position"
+        self._closing_until = None
+        self._grip_stop = None
         self._relaxed = False
         self._temps: tuple[float, ...] = ()
         self._temp_n = 0
@@ -180,7 +182,20 @@ class RealArm:
                     elif self._resting and hot < self.cfg.safety.temp_slow_c:
                         self._resting = False; self.mover.resume(); self._event(f"rotors cooled to {hot:.0f} C: resuming")
                     self.mover.thermal_cap = 0.03 if hot > self.cfg.safety.temp_slow_c else None
-                if self.watchdog.baseline is None or self.mover.frozen:
+                if self._closing_until is not None:
+                    if now < self._closing_until:
+                        sp = self.mover.setpoint      # stream paused: the force command must not be overridden
+                        last = now
+                    else:
+                        stop = float(joints[6])
+                        self.driver.set_gripper_mode(trossen_arm.Mode.position); self._grip_mode = "position"
+                        self.driver.set_gripper_position(max(0.0, stop - 0.002), 0.3, False)
+                        self._grip_stop = stop
+                        self._closing_until = None
+                        self._event(f"gripper closed by force, fingers stopped at {stop*1000:.0f} mm per side; holding there")
+                if self._closing_until is not None:
+                    pass
+                elif self.watchdog.baseline is None or self.mover.frozen:
                     sp = self.mover.setpoint          # hold: nothing is sent while baselining or frozen
                     last = now
                 else:
@@ -197,20 +212,25 @@ class RealArm:
                 if g is not None and g != self._gripper_sent:
                     if g < 0.036:
                         # close by force, not position: the fingers stop on the object and press with
-                        # grip_force_n instead of crushing a paper cup toward a position target
+                        # grip_force_n instead of crushing a paper cup toward a position target.
+                        # Streaming Cartesian commands re-sends the gripper's stored position goal and
+                        # overrides the force (demo run 1: the fingers never moved), so the stream
+                        # pauses for the close; then the stop width is held in position mode.
                         if self._grip_mode != "effort":
                             self.driver.set_gripper_mode(trossen_arm.Mode.external_effort); self._grip_mode = "effort"
                         self.driver.set_gripper_external_effort(-abs(self.cfg.motion.grip_force_n), 0.3, False)
+                        self._closing_until = time.perf_counter() + 1.1
                     else:
                         if self._grip_mode != "position":
                             self.driver.set_gripper_mode(trossen_arm.Mode.position); self._grip_mode = "position"
                         self.driver.set_gripper_position(float(g), 0.5, False)
+                        self._grip_stop = None; self._closing_until = None
                     self._gripper_sent = g
                     self._gripper_t = time.perf_counter()
                 # holding: asked to close, and the fingers stopped well short of closed
                 g = self._gripper_goal
                 # holding: asked to close (to any target) and the fingers stopped short of it on something
-                holding = g is not None and g < 0.036 and joints[6] > 0.006 and (time.perf_counter() - self._gripper_t) > 0.5
+                holding = g is not None and g < 0.036 and self._closing_until is None and self._grip_stop is not None and self._grip_stop > 0.006
                 with self._lock:
                     self._snap = ArmSnapshot(time.time(), tuple(pose[:3]), joints[6], joints=joints,
                                              ext_force=(fx, fy, fz), setpoint=sp or tuple(pose[:3]),

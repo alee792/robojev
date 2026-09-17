@@ -50,7 +50,7 @@ class Motion:
     grip_force_n: float = 6.0             # closing force (external-effort mode): -3 N barely moves the fingers, -6 N closes them; a paper cup is held, not crushed
     grip_squeeze: float = 0.035           # close to (object width - this) so a paper cup is held firmly, not crushed (it closed to 2.6 cm on a 7 cm cup: real run 11)
     place_gap: float = 0.04               # clearance between a placed object and its reference object
-    gripper_settle_s: float = 0.9         # must exceed the real backend's 0.5 s holding-detection delay (0.7 judged 'closed on nothing' while the fingers were still closing: real run 10)         # wait after a gripper command before judging the result
+    gripper_settle_s: float = 1.6         # must exceed the 1.1 s force-close (stream paused) and the real backend's 0.5 s holding-detection delay (0.7 judged 'closed on nothing' while the fingers were still closing: real run 10)         # wait after a gripper command before judging the result
     primitive_timeout_s: float = 10.0     # a primitive that has not finished by then is reported failed
     stall_s: float = 3.0                  # a primitive whose EE has not moved for this long (and is not done) is reported failed
     down_orientation: tuple[float, float, float] = (0.0, 1.309, 0.0)  # 75 deg pitch: far larger reachable envelope than straight down (see reachability map)

@@ -75,7 +75,7 @@ td.nw{white-space:nowrap}
 /* media and blobs ----------------------------------------------------------- */
 img.cam{display:block;width:100%;border-radius:6px;background:#000}
 #small{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
-#small .tile{flex:1 1 calc(50% - 8px);min-width:120px}
+#small .tile{flex:0 1 calc(50% - 4px);min-width:120px}   /* no grow: a lone small tile stays small */
 .tile .nm{font-size:var(--sm);color:var(--muted);letter-spacing:.04em;margin:0 0 4px}
 #big .tile+.tile{margin-top:8px}
 canvas{display:block;width:100%;height:40px;background:#0b0c0e;border-radius:4px;margin-top:8px}

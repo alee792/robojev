@@ -28,6 +28,7 @@ class Detection:
     camera: str | None = None             # which camera produced it
     flat: bool = False                    # a flat area on the table (a mat), found by colour, not height
     footprint: tuple | None = None        # (xmin, xmax, ymin, ymax) in base frame for flat areas
+    seg_label: str | None = None          # class name of the colour mask that split this blob out
 
 
 COLOR_NAMES = [  # (name, hsv centre) rough buckets
@@ -98,7 +99,7 @@ def fit_plane(points: np.ndarray, iters: int = 60, thresh: float = 0.008, rng=np
 class Detector:
     def __init__(self, intr: Intrinsics, workspace_xy=((0.10, 0.80), (-0.40, 0.40)),
                  min_height=0.02, max_height=0.30, stride=4, table_z: float | None = None,
-                 extrinsic=None, finger_mask: bool = True):
+                 extrinsic=None, finger_mask: bool = True, segmenter=None):
         self.intr = intr
         self.ws = workspace_xy
         self.min_h, self.max_h = min_height, max_height
@@ -107,6 +108,10 @@ class Detector:
         self.last_plane = None      # (normal, d) in base frame
         self.extrinsic = extrinsic or cam_to_base   # pose6 -> (R, t) of the camera in base frame
         self.finger_mask = finger_mask               # wrist camera: the fingers are always in view
+        # optional perception.segment.Segmenter (or anything with .run(bgr) -> list of masks):
+        # colour instance masks split a depth blob that holds two touching objects
+        self.segmenter = segmenter
+        self._seg_cache = None      # (colour array we segmented, label image, masks)
 
     def run(self, color: np.ndarray, depth_m: np.ndarray, pose6, holding: bool = False) -> tuple[list[Detection], dict]:
         pts_opt, uv = self.intr.deproject(depth_m, self.stride)
@@ -190,7 +195,30 @@ class Detector:
         Q, uvq, hq = P[sel], uv[sel], height[sel]
         # a top-down camera sees flat tops, so touching objects of different height separate at a
         # height gap; a wrist camera sees sloped walls, where height splitting only fragments objects
-        labels = _cluster_xy(Q[:, :2], cell=0.02, heights=None if self.finger_mask else hq, dh=0.035)
+        hsplit = None if self.finger_mask else hq
+        seg_names: dict[int, str] = {}
+        labels = None
+        if self.segmenter is not None:
+            # colour instance masks: depth alone merges a cup standing against a box into one blob.
+            # Every point whose pixel lands in a mask takes that mask's id as its cluster label;
+            # the rest fall through to the grid clustering below, offset past the mask ids.
+            try:
+                seg_lbl, masks = self._segment(color)
+            except Exception as e:      # never let the segmenter take the loop down: depth still works
+                info["seg_error"] = f"{type(e).__name__}: {e}"
+                seg_lbl, masks = None, []
+            if seg_lbl is not None:
+                info["n_masks"] = len(masks)
+                hit = seg_lbl[uvq[:, 1], uvq[:, 0]]      # uv is (u, v) = (col, row)
+                info["n_masked_points"] = int((hit > 0).sum())
+                labels = np.asarray(hit, int).copy()
+                free = hit == 0
+                if free.any():
+                    labels[free] = len(masks) + _cluster_xy(
+                        Q[free][:, :2], cell=0.02, heights=None if hsplit is None else hsplit[free], dh=0.035)
+                seg_names = {i + 1: m.label for i, m in enumerate(masks)}
+        if labels is None:
+            labels = _cluster_xy(Q[:, :2], cell=0.02, heights=hsplit, dh=0.035)
         dets = []
         for lab in np.unique(labels):
             k = labels == lab
@@ -231,9 +259,29 @@ class Detector:
             bgr = tuple(int(x) for x in np.median(patch, 0)) if len(patch) else (128, 128, 128)
             dets.append(Detection(xyz=(float(cx), float(cy), base_z + top / 2), base_xyz=(float(cx), float(cy), base_z),
                                   height=top, width=float(spread), color_bgr=bgr, color_name=color_name(bgr),
-                                  n_points=int(k.sum()), pixel=(u0, v0), partial=partial))
+                                  n_points=int(k.sum()), pixel=(u0, v0), partial=partial,
+                                  seg_label=seg_names.get(int(lab))))
         dets.sort(key=lambda d: -d.n_points)
         return dets + flat_dets, info
+
+    def _segment(self, color) -> tuple[np.ndarray | None, list]:
+        """(label image, masks) for this colour frame, cached so a re-run of the same frame is free.
+
+        Keyed on the array's identity (camclient hands out a fresh array per frame, and holding the
+        reference stops a freed array's id being reused). Returns (None, []) if the masks do not
+        match the depth image, since the pixel lookup would then be meaningless."""
+        if self._seg_cache is not None and self._seg_cache[0] is color:
+            return self._seg_cache[1], self._seg_cache[2]
+        masks = self.segmenter.run(color)
+        lbl = np.zeros(color.shape[:2], np.int32)
+        # ascending score, so where masks overlap the more confident one wins the pixel
+        for i in sorted(range(len(masks)), key=lambda j: masks[j].score):
+            if masks[i].mask.shape != lbl.shape:
+                self._seg_cache = (color, None, [])
+                return None, []
+            lbl[masks[i].mask] = i + 1
+        self._seg_cache = (color, lbl, masks)
+        return lbl, masks
 
     def _flat_regions(self, P, uv, height, color, inws) -> list[Detection]:
         """Large dark patches lying on the table plane (a mat): depth cannot see 3 mm, colour can.
