@@ -25,14 +25,14 @@ from robojev.perception.geometry import Intrinsics
 def _align_to_plane(normal, d, table_z):
     """(R1, t1) mapping camera-frame points into a frame where the table is z = table_z and up is +z."""
     n = np.asarray(normal, float); n = n / np.linalg.norm(n)
-    # in the camera's optical frame the table normal points roughly toward the camera (-z); we want
-    # the base-frame normal +z. Rotate n onto +z.
-    z = np.array([0, 0, 1.0])
-    if n @ z < 0:
+    # "up" is the plane normal pointing toward the camera (the origin): n.p + d = 0 puts the origin
+    # on the side sign(d), so orient n such that d > 0. Then rotate n onto +z.
+    if d < 0:
         n = -n; d = -d
+    z = np.array([0, 0, 1.0])
     v = np.cross(n, z); s = np.linalg.norm(v); c = float(n @ z)
     if s < 1e-9:
-        R1 = np.eye(3)
+        R1 = np.eye(3) if c > 0 else np.diag([1.0, -1.0, -1.0])   # antiparallel: 180 deg about x
     else:
         K = np.array([[0, -v[2], v[1]], [v[2], 0, -v[0]], [-v[1], v[0], 0]])
         R1 = np.eye(3) + K + K @ K * ((1 - c) / s**2)
@@ -69,8 +69,10 @@ def detect_aligned(color, depth_m, intr: Intrinsics, table_z: float):
     if nv is None:
         return [], None, None, {"error": "no plane"}
     R1, t1 = _align_to_plane(nv, d, table_z)
+    # objects are under 15 cm; the arm's links are higher, so a height ceiling keeps them out of
+    # the clustering (they cannot be masked by pose before the pose is known)
     det = Detector(intr, workspace_xy=((-1.0, 1.0), (-1.0, 1.0)), extrinsic=lambda p6: (R1, t1), finger_mask=False,
-                   table_z=table_z)
+                   table_z=table_z, max_height=0.15)
     # no arm mask here (pose unknown in this frame): pass an EE far away so the corridor is empty
     dets, info = det.run(color, depth_m, [5.0, 5.0, 5.0, 0, 0, 0])
     return dets, R1, t1, info | {"plane_inliers": int(inl.sum()), "normal": nv.tolist()}
@@ -81,25 +83,28 @@ def calibrate_from_frames(color, depth_m, intr: Intrinsics, table_z: float, wris
     dets, R1, t1, info = detect_aligned(color, depth_m, intr, table_z)
     if R1 is None:
         return None, None, info
-    cands = [(d.base_xyz[0], d.base_xyz[1], d.height) for d in dets if d.height > 0.015]
+    # tall clusters are the arm itself seen from above (it cannot be masked before the pose is known)
+    cands = [(d.base_xyz[0], d.base_xyz[1], d.height) for d in dets if 0.015 < d.height < 0.20]
     report = {"fixed_dets": [(round(x, 3), round(y, 3), round(h, 3)) for x, y, h in cands], "wrist": wrist_ents} | info
     if not cands or not wrist_ents:
         return None, None, report | {"error": "need objects seen by both cameras"}
     # assignment: try all injective maps wrist->fixed with height agreement, pick lowest residual
     best = None
-    k = min(len(wrist_ents), len(cands))
-    for wsub in itertools.combinations(range(len(wrist_ents)), k):
-        for perm in itertools.permutations(range(len(cands)), k):
-            if any(abs(wrist_ents[i][2] - cands[j][2]) > 0.05 for i, j in zip(wsub, perm)):
-                continue
-            A = [cands[j][:2] for j in perm]; B = [wrist_ents[i][:2] for i in wsub]
-            if k == 1:
-                Rm = np.eye(2); t = np.asarray(B[0]) - np.asarray(A[0])
-            else:
-                Rm, t = _rigid_2d(A, B)
-            res = float(np.mean([np.linalg.norm(Rm @ np.asarray(a) + t - np.asarray(b)) for a, b in zip(A, B)]))
-            if best is None or res < best[0]:
-                best = (res, Rm, t, list(zip(wsub, perm)))
+    for k in range(min(len(wrist_ents), len(cands)), 0, -1):   # prefer more pairs; fall back to fewer
+        for wsub in itertools.combinations(range(len(wrist_ents)), k):
+            for perm in itertools.permutations(range(len(cands)), k):
+                if any(abs(wrist_ents[i][2] - cands[j][2]) > 0.05 for i, j in zip(wsub, perm)):
+                    continue
+                A = [cands[j][:2] for j in perm]; B = [wrist_ents[i][:2] for i in wsub]
+                if k == 1:
+                    Rm = np.eye(2); t = np.asarray(B[0]) - np.asarray(A[0])
+                else:
+                    Rm, t = _rigid_2d(A, B)
+                res = float(np.mean([np.linalg.norm(Rm @ np.asarray(a) + t - np.asarray(b)) for a, b in zip(A, B)]))
+                if best is None or res < best[0]:
+                    best = (res, Rm, t, list(zip(wsub, perm)))
+        if best is not None:
+            break
     if best is None:
         return None, None, report | {"error": "no height-consistent assignment"}
     res, Rm, t2, pairs = best

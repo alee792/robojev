@@ -47,7 +47,13 @@ def build(args, cfg: Config):
         per = Perception(cfg, arm, cameras=[("wrist", wrist, None, True), ("overhead", over, over.extrinsic_fixed(), False)], log=log)
     else:
         from robojev.perception.camclient import CamClient
-        per = Perception(cfg, arm, camera=CamClient(args.camserver), log=log)
+        cams = [("wrist", CamClient(args.camserver), None, True)]
+        if args.overhead:
+            from robojev.perception.calibrate import load as load_calib
+            if not args.overhead_calib:
+                sys.exit("--overhead needs --overhead-calib <json> (run `robojev calibrate` first)")
+            cams.append(("overhead", CamClient(args.overhead), load_calib(args.overhead_calib), False))
+        per = Perception(cfg, arm, cameras=cams, log=log)
     loop = Loop(cfg, arm, per, log, use_jev=not args.no_jev, task=args.task, orders=args.orders or [])
     if args.arm == "sim" and args.scenario != "static":
         from robojev.arm.sim import Scenario
@@ -95,6 +101,47 @@ async def serve(args, cfg):
             print(f"run log: {log.dir}")
 
 
+def calibrate_cmd(args, cfg):
+    """Arm read-only (no motion), wrist camera detections accumulated for a few seconds, one overhead
+    frame, then the solve. Place two objects where both cameras see them, arm parked or aside."""
+    import time
+    import numpy as np
+    from robojev.arm.real import RealArmReadOnly
+    from robojev.perception.camclient import CamClient
+    from robojev.perception.detect import Detector
+    from robojev.perception.geometry import Intrinsics
+    from robojev.perception.memory import Tracker
+    from robojev.perception import calibrate
+    wrist, over = CamClient(args.camserver), CamClient(args.overhead)
+    arm = RealArmReadOnly(cfg)
+    arm.start()
+    try:
+        time.sleep(0.5)
+        det = Detector(Intrinsics(wrist.info))
+        tr = Tracker()
+        table = []
+        t0 = time.time()
+        while time.time() - t0 < args.seconds:
+            f = wrist.frame(); s = arm.snapshot()
+            dets, info = det.run(f.color, f.depth_m, list(s.ee) + list(s.rot))
+            if info.get("plane_z_at_origin") is not None and info.get("plane_tilt_deg", 99) < 6:
+                table.append(info["plane_z_at_origin"])
+            tr.update(dets)
+            time.sleep(0.1)
+        table_z = float(np.median(table)) if table else cfg.table_z
+        ents = [(float(e.xyz[0]), float(e.xyz[1]), e.height) for e in tr.stable(min_seen=5)]
+        print(f"table_z {table_z:.3f}; wrist sees {[(round(x,3), round(y,3), round(h,3)) for x, y, h in ents]}")
+        fo = over.frame()
+        R, t, rep = calibrate.calibrate_from_frames(fo.color, fo.depth_m, Intrinsics(over.info), table_z, ents)
+        print("report:", {k: v for k, v in rep.items() if k in ("residual_m", "pairs", "yaw_deg", "n_pairs", "warning", "error", "fixed_dets")})
+        if R is None:
+            sys.exit("calibration failed")
+        calibrate.save(args.out, R, t, rep | {"table_z": table_z})
+        print(f"saved {args.out}: camera at {np.round(t, 3).tolist()} in base frame")
+    finally:
+        arm.stop()
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="robojev")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -104,6 +151,8 @@ def main(argv=None):
     r.add_argument("--scenario", choices=["static", "drift"], default="static")
     r.add_argument("--scenario-start", type=float, default=10.0)
     r.add_argument("--camserver", default="http://127.0.0.1:8765")
+    r.add_argument("--overhead", default=None, help="second camserver URL (boom D455), e.g. http://127.0.0.1:8766")
+    r.add_argument("--overhead-calib", default=None, help="calibration json from `robojev calibrate`")
     r.add_argument("--task", default="")
     r.add_argument("--orders", action="append")
     r.add_argument("--port", type=int, default=8080)
@@ -111,6 +160,11 @@ def main(argv=None):
     r.add_argument("--no-jev", action="store_true")
     r.add_argument("--run-name", default=None)
     r.add_argument("--i-am-at-the-estop", action="store_true")
+    c = sub.add_parser("calibrate", help="solve the overhead camera's pose from the table plane + objects both cameras see")
+    c.add_argument("--camserver", default="http://127.0.0.1:8765")
+    c.add_argument("--overhead", default="http://127.0.0.1:8766")
+    c.add_argument("--out", default="overhead_calib.json")
+    c.add_argument("--seconds", type=float, default=3.0, help="how long to accumulate wrist detections")
     p = sub.add_parser("replay")
     p.add_argument("run_dir")
     p.add_argument("--questions", default=None)
@@ -119,6 +173,8 @@ def main(argv=None):
     args = ap.parse_args(argv)
     if args.cmd == "run":
         asyncio.run(serve(args, DEFAULT))
+    elif args.cmd == "calibrate":
+        calibrate_cmd(args, DEFAULT)
     else:
         from robojev.replay import replay
         asyncio.run(replay(args.run_dir, args.questions, args.limit, args.concurrency))
