@@ -144,6 +144,8 @@ def calibrate_cmd(args, cfg):
         print("report:", {k: v for k, v in rep.items() if k in ("residual_m", "pairs", "yaw_deg", "n_pairs", "warning", "error", "fixed_dets")})
         if R is None:
             sys.exit("calibration failed")
+        if rep.get("n_pairs", 0) < 2:
+            sys.exit("calibration not saved: only one object seen by both cameras, so the yaw is unknown (the fit flips between runs). Add a second object 8 cm+ tall and rerun.")
         calibrate.save(args.out, R, t, rep | {"table_z": table_z})
         print(f"saved {args.out}: camera at {np.round(t, 3).tolist()} in base frame")
     finally:
