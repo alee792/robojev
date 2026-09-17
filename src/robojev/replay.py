@@ -42,15 +42,19 @@ async def replay(run_dir: str, questions: str | None, limit: int | None, concurr
     await asyncio.gather(*(one(t) for t in ticks))
     await client.close()
     agree = defaultdict(Counter)
+    first_err = None
     for tick, r in sorted(results.items()):
         if not r.ok:
             agree["_errors"]["n"] += 1
+            first_err = first_err or f"{r.status} {r.error}"
             continue
         rec = recorded.get(tick)
         for k, a in r.answers.items():
             new = _pick(a)
             old = _pick(rec[k]) if rec and k in rec else None
             agree[k]["same" if old == new else ("no_record" if old is None else "different")] += 1
+    if first_err:
+        print("first error:", first_err)
     print(json.dumps({k: dict(v) for k, v in agree.items()}, indent=1))
     return results
 
