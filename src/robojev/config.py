@@ -59,7 +59,8 @@ class Motion:
     side_standoff: float = 0.06           # approach point: this far behind the object's near edge, wrist level
     side_grasp_height: float = 0.02       # tips 2 cm up: the pads (1.4-6.9 cm behind the tips, tilted) then meet a tapered cup where it is narrowest
     advance_push_n: float = 6.0           # F_x rise above the pre-advance baseline that means the fingers are shoving the object      # fingertips this far above the table for a side grasp (a tapered cup is narrowest low down)
-    side_grasp_depth: float = 0.01        # fingertip centre this far short of the object's centre when closing
+    side_grasp_depth: float = -0.03       # tips this far short of the object's centre when closing: negative = past it, so the pads (1.4-6.9 cm behind the tips) straddle the centre
+    side_pitch_advance: float = 0.35      # flatter wrist while sliding around the object: the pads span less height, so they meet the cup where it is narrower
     real_tick_hz: float = 20.0            # arm I/O thread rate (real)
     real_goal_time: float = 0.1           # per-command interpolation horizon (0.001..0.2 = linear)
     sim_physics_dt: float = 0.002
@@ -108,7 +109,7 @@ class Bands:
     distance: tuple[tuple[str, float], ...] = (
         ("touching", 0.03), ("very close", 0.10), ("near", 0.25), ("mid-range", 0.50), ("far", float("inf")))
     height: tuple[tuple[str, float], ...] = (
-        ("at table level", 0.03), ("just above", 0.08), ("low", 0.16), ("high", 0.30), ("very high", float("inf")))
+        ("very low, just above the table", 0.03), ("just above", 0.08), ("low", 0.16), ("high", 0.30), ("very high", float("inf")))
 
 
 @dataclass(frozen=True)

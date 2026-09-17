@@ -44,6 +44,8 @@ class Entity:
     def kind(self) -> str:
         """A shape-based guess; a depth camera cannot know what a thing is, only its silhouette."""
         h, w = self.height, self.width
+        if w < 0.035 and h >= 0.05:
+            return "thin post-like object (an edge, cable or rod, not something to pick up)"
         if h >= 0.06 and w <= 0.13 and h > 0.8 * w:
             return "cup-like object"
         if h < 0.04 and w >= 0.08:

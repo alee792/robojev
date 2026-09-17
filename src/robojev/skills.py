@@ -59,8 +59,9 @@ def side_z(cfg: Config, w: World) -> float:
 
 def _level(w: World, tol: float = 0.12, cfg: Config | None = None) -> bool:
     """Wrist at the side-grasp pitch (the setpoint has arrived there)."""
-    want = cfg.motion.side_pitch if cfg else 0.5
-    return w.arm.pitch is not None and abs(w.arm.pitch - want) < tol
+    hi = cfg.motion.side_pitch if cfg else 0.5
+    lo = cfg.motion.side_pitch_advance if cfg else 0.35
+    return w.arm.pitch is not None and (lo - tol) < w.arm.pitch < (hi + tol)
 
 
 def _behind(w: World, e, max_back: float, dy_tol: float = 0.03) -> bool:
@@ -187,7 +188,7 @@ def goal_for(cfg: Config, w: World, brain, now: float):
         e = w.entity(subj)
         if e is None:
             return sp, None, False, f"{subj} is no longer known", "advance: lost subject"
-        brain.pitch = cfg.motion.side_pitch
+        brain.pitch = cfg.motion.side_pitch_advance
         goal = cfg.workspace.clamp((e.xyz[0] - cfg.motion.side_grasp_depth, e.xyz[1], side_z(cfg, w)))
         if brain.advance_f0 is None and age > 1.0:
             brain.advance_f0 = float(w.arm.ext_force[0])

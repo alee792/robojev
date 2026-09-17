@@ -235,7 +235,9 @@ class Brain:
                         status = "gated"
                     elif ch in SAFETY_PRIMS:
                         running = self.prim_status == "running" and self.prim not in SAFETY_PRIMS
-                        if running and pmax < th.next_interrupt_p:
+                        if running and self.prim in ("close_gripper", "open_gripper"):
+                            status = "busy"   # a gripper action takes 1 s and is never worth interrupting half way (rise_away at 0.9 mid-close, real run 7)
+                        elif running and pmax < th.next_interrupt_p:
                             status = "busy"   # a lukewarm "hold" must not stutter a primitive in progress
                             self._streak_ok("next", ch, 99)   # still counts toward a streak
                         elif running and pmax < 0.9 and not self._streak_ok("next", ch, th.next_consecutive):
