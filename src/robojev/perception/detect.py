@@ -163,7 +163,9 @@ class Detector:
         if sel.sum() < 10:
             return [], info
         Q, uvq, hq = P[sel], uv[sel], height[sel]
-        labels = _cluster_xy(Q[:, :2], cell=0.02, heights=hq, dh=0.035)
+        # a top-down camera sees flat tops, so touching objects of different height separate at a
+        # height gap; a wrist camera sees sloped walls, where height splitting only fragments objects
+        labels = _cluster_xy(Q[:, :2], cell=0.02, heights=None if self.finger_mask else hq, dh=0.035)
         dets = []
         for lab in np.unique(labels):
             k = labels == lab
@@ -196,25 +198,32 @@ def _cluster_xy(xy: np.ndarray, cell: float, heights: np.ndarray | None = None, 
     if heights is None:
         n, comp = cv2.connectedComponents(occ, connectivity=8)
         return comp[g[:, 0], g[:, 1]]
+    # plain components first, then split any component whose per-cell top heights show a clear gap
     top = np.full((H, W), -1.0)
     np.maximum.at(top, (g[:, 0], g[:, 1]), heights)
-    # union-find over occupied cells with height agreement
-    idx = -np.ones((H, W), int)
-    cells = np.argwhere(occ > 0)
-    idx[cells[:, 0], cells[:, 1]] = np.arange(len(cells))
-    parent = np.arange(len(cells))
-    def find(a):
-        while parent[a] != a:
-            parent[a] = parent[parent[a]]; a = parent[a]
-        return a
-    for k, (i, j) in enumerate(cells):
-        for di, dj in ((0, 1), (1, 0), (1, 1), (1, -1)):
-            ni, nj = i + di, j + dj
-            if 0 <= ni < H and 0 <= nj < W and idx[ni, nj] >= 0 and abs(top[i, j] - top[ni, nj]) < dh:
-                ra, rb = find(k), find(idx[ni, nj])
-                if ra != rb:
-                    parent[rb] = ra
-    roots = np.array([find(k) for k in range(len(cells))])
-    comp = np.zeros((H, W), int)
-    comp[cells[:, 0], cells[:, 1]] = roots + 1
-    return comp[g[:, 0], g[:, 1]]
+    n, comp = cv2.connectedComponents(occ, connectivity=8)
+    out = np.zeros((H, W), int)
+    next_id = 1
+    for c in range(1, n):
+        cells = np.argwhere(comp == c)
+        tops = top[cells[:, 0], cells[:, 1]]
+        order = np.argsort(tops)
+        st = tops[order]
+        gaps = np.diff(st)
+        split_at = None
+        if len(st) >= 8:
+            k = int(np.argmax(gaps))
+            if gaps[k] >= dh and 4 <= k + 1 <= len(st) - 4:
+                split_at = st[k]
+        if split_at is None:
+            out[cells[:, 0], cells[:, 1]] = next_id; next_id += 1
+        else:
+            low = tops <= split_at
+            # each side re-clustered on its own so two low objects on either side of a tall one stay apart
+            for mask in (low, ~low):
+                sub = np.zeros((H, W), np.uint8)
+                sub[cells[mask, 0], cells[mask, 1]] = 1
+                m, sc = cv2.connectedComponents(sub, connectivity=8)
+                for q in range(1, m):
+                    out[sc == q] = next_id; next_id += 1
+    return out[g[:, 0], g[:, 1]]
