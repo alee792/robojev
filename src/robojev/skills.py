@@ -97,7 +97,8 @@ def resolve_place(cfg: Config, w: World, place: str | None, origin_xy, last_set_
             d_obj = min([math.hypot(x - e.xyz[0], y - e.xyz[1]) for e in w.entities if e.label != w.holding_label] + [9.0])
             if d_origin < 0.15 or d_obj < 0.12:
                 continue
-            score = d_origin + d_obj
+            cx0, cy0 = (ws.x[0] + ws.x[1]) / 2, 0.0
+            score = min(d_origin, 0.25) + min(d_obj, 0.20) - 0.8 * math.hypot(x - cx0, y - cy0)
             if best is None or score > best[0]:
                 best = (score, x, y)
         return (best[1], best[2]) if best else None
@@ -219,7 +220,9 @@ def goal_for(cfg: Config, w: World, brain, now: float):
         fail = None
         if done and w.holding_label is None:
             fail = "closed on nothing"
-        return sp, 0.0, done, fail, "close_gripper"
+        e = w.entity(subj) if subj else None
+        target = max(0.0, min(0.035, ((e.width_m if e else 0.0) - cfg.motion.grip_squeeze) / 2))   # per-carriage travel: the pads stop on the object before reaching it
+        return sp, target, done, fail, "close_gripper"
     if name == "lift":
         goal = (sp[0], sp[1], carry_z(cfg, w))
         return goal, None, near(goal), None, f"lift {subj}"

@@ -168,7 +168,8 @@ class RealArm:
                     self._gripper_t = time.perf_counter()
                 # holding: asked to close, and the fingers stopped well short of closed
                 g = self._gripper_goal
-                holding = g is not None and g < 0.01 and joints[6] > 0.006 and (time.perf_counter() - self._gripper_t) > 0.5
+                # holding: asked to close (to any target) and the fingers stopped short of it on something
+                holding = g is not None and g < 0.036 and joints[6] > g + 0.004 and (time.perf_counter() - self._gripper_t) > 0.5
                 with self._lock:
                     self._snap = ArmSnapshot(time.time(), tuple(pose[:3]), joints[6], joints=joints,
                                              ext_force=(fx, fy, fz), setpoint=sp or tuple(pose[:3]),

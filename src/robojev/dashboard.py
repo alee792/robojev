@@ -40,11 +40,12 @@ h2.sec{margin-top:14px}
  font-size:var(--sm);border-top:1px solid var(--line);padding-top:8px}
 
 /* panels -------------------------------------------------------------------- */
-main{display:grid;grid-template-columns:minmax(300px,1fr) minmax(400px,1.3fr) minmax(300px,1fr);
+main{display:grid;grid-template-columns:minmax(280px,0.9fr) minmax(420px,1.6fr) minmax(280px,1fr);
  gap:12px;padding:12px;align-items:start}
 #bottom{padding:0 12px 12px}
 @media(max-width:1180px){main{grid-template-columns:1fr}}
-.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px}
+main>section{min-width:0}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px;overflow:hidden}
 .card+.card{margin-top:12px}
 
 /* controls ------------------------------------------------------------------ */
@@ -60,9 +61,12 @@ input,textarea{width:100%;font-family:inherit;font-size:var(--sm);background:#0b
 /* tables -------------------------------------------------------------------- */
 table{border-collapse:collapse;width:100%;font-size:var(--sm)}
 th{text-align:left;font-weight:600;color:var(--muted);padding:4px 6px;border-bottom:1px solid var(--line);white-space:nowrap}
-td{padding:4px 6px;vertical-align:top;border-bottom:1px solid var(--sep)}
-.dist{display:flex;flex-direction:column;gap:2px}
+td{padding:4px 6px;vertical-align:top;border-bottom:1px solid var(--sep);word-break:break-word}
+.dist{display:flex;flex-direction:column;gap:2px;width:150px}
+.tw{overflow-x:auto}
+td.nw{white-space:nowrap}
 .d{display:flex;align-items:center;gap:6px;white-space:nowrap}
+.d .o{min-width:0;overflow:hidden;text-overflow:ellipsis}
 .bar{flex:0 0 auto;width:54px;height:5px;background:#2a2e33;border-radius:3px;overflow:hidden}
 .bar i{display:block;height:100%;background:var(--accent)}
 .kv{display:grid;grid-template-columns:auto 1fr;gap:3px 14px;font-size:var(--sm)}
@@ -124,7 +128,7 @@ summary{cursor:pointer;font-size:var(--sm);color:var(--muted)}
 </section>
 
 <section>
- <div class=card><h2>Judgments <span id=qs></span></h2><table id=j></table></div>
+ <div class=card><h2>Judgments <span id=qs></span></h2><div class=tw><table id=j></table></div></div>
 </section>
 
 <section>
@@ -276,11 +280,11 @@ g('qs').textContent=`${txt(s.question_set)} · ${txt(s.model)} · in flight ${s.
 let h='<tr><th>Question</th><th>Pick</th><th>p / conf</th><th>Status</th><th>Age</th><th>Distribution</th></tr>';
 for(const k in js){const q=js[k];
   const ps=Object.entries(q.probabilities||{}).sort((x,y)=>y[1]-x[1]).slice(0,5);
-  const d=ps.map(([o,p])=>`<div class=d>${bar(p)}<span class="${o==q.chosen?'ch':''}">${esc(o)}</span><span class=muted>${num(p,2)}</span></div>`).join('');
+  const d=ps.map(([o,p])=>`<div class=d>${bar(p)}<span class="o ${o==q.chosen?'ch':''}">${esc(o)}</span><span class=muted>${num(p,2)}</span></div>`).join('');
   h+=`<tr><td>${esc(k)}</td><td class=ch>${esc(txt(q.chosen))}</td>`+
      `<td>${num(q.p,2)}${q.confidence!=null?' / '+num(q.confidence,2):''}</td>`+
      `<td class=${statusClass(q.applied)}>${esc(txt(q.applied))}</td>`+
-     `<td>${num(q.age_ms,0,' ms')}</td><td><div class=dist>${d}</div></td></tr>`}
+     `<td class=nw>${num(q.age_ms,0,' ms')}</td><td><div class=dist>${d}</div></td></tr>`}
 g('j').innerHTML=h;
 g('graphc').innerHTML=buildGraph(s);
 // ---- brain, jev, events, objects ----

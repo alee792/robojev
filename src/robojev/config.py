@@ -46,6 +46,7 @@ class Motion:
     carry_height: float = 0.12            # above the table while carrying (base z 0.10: well inside the reachable envelope)
     grasp_fraction: float = 0.5           # grasp at this fraction of the object's height
     shift_distance: float = 0.15          # how far a 'move it to the left/right/away/closer' place is from the pickup spot
+    grip_squeeze: float = 0.035           # close to (object width - this) so a paper cup is held firmly, not crushed (it closed to 2.6 cm on a 7 cm cup: real run 11)
     place_gap: float = 0.04               # clearance between a placed object and its reference object
     gripper_settle_s: float = 0.9         # must exceed the real backend's 0.5 s holding-detection delay (0.7 judged 'closed on nothing' while the fingers were still closing: real run 10)         # wait after a gripper command before judging the result
     primitive_timeout_s: float = 10.0     # a primitive that has not finished by then is reported failed

@@ -190,19 +190,19 @@ class SimArm:
                     width = float(np.clip((self.data.qpos[self.grip_q] - 0.022) / 0.022 * 0.04, 0.0, 0.04))
                     # grasp model: closing with an object between the fingers attaches it to the EE;
                     # opening releases it onto the table where it is
-                    if self.attached is None and self.gripper_cmd < 0.01 and width < 0.03:
+                    if self.attached is None and self.gripper_cmd < 0.036 and width < self.gripper_cmd + 0.006:
                         for name, bid in self.mocap.items():
                             mid = self.model.body_mocapid[bid]; op = self.data.mocap_pos[mid]
                             if math.hypot(op[0] - p[0], op[1] - p[1]) < 0.035 and abs(op[2] - p[2]) < 0.06:
                                 self.attached = name; self._event(f"grasped {name}"); break
                     if self.attached is not None:
                         mid = self.model.body_mocapid[self.mocap[self.attached]]
-                        if self.gripper_cmd > 0.03:
+                        if self.gripper_cmd > 0.036:
                             self.data.mocap_pos[mid][2] = TABLE_Z + self.half_h[self.attached]
                             self._event(f"released {self.attached}"); self.attached = None
                         else:
                             self.data.mocap_pos[mid][:] = [p[0], p[1], p[2]]
-                    holding = self.attached is not None and width < 0.03
+                    holding = self.attached is not None
                     # contact force on the arm approximated as zero (mocap objects do not collide)
                     lag = math.dist(p, sp) if sp is not None else 0.0
                     self._snap = ArmSnapshot(time.time(), tuple(float(v) for v in p), width,
