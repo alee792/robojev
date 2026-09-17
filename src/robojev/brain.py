@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import math
 import time
+from collections import Counter
 from dataclasses import dataclass
 
 from robojev import skills
@@ -14,6 +15,9 @@ from robojev.world import World
 
 NONE = "none_of_these"
 CONSERVATIVE_MOTION = {"hold", "back_off", "rise_away"}
+# the `next` guard is asked three ways (same options, differently worded); a pick counts only
+# with a majority. Fan-out costs no latency (01-jev-facts, patterns/fan-out).
+NEXT_VARIANTS = ("next", "next_b", "next_c")
 SAFETY_PRIMS = set(skills.SAFETY)
 
 
@@ -25,9 +29,10 @@ class Judgment:
     confidence: float | None
     probabilities: dict
     gated: bool
-    applied: str                  # applied | gated | pending_confirmation | override | busy
+    applied: str                  # applied | gated | pending_confirmation | override | busy | disagree
     tag: int
     age_ms: float
+    votes: dict | None = None     # `next` only: {variant: {"choice": ..., "p": ...}}
 
 
 class Brain:
@@ -52,6 +57,11 @@ class Brain:
         self.done = False
         self.last_applied_t: float | None = None
         self.last_applied_tag = -1
+        # the silence ladder counts time since the last request that got a fresh answer applied OR
+        # was intentionally skipped because nothing had changed. A sent-and-failed request never
+        # refreshes it, so a real outage still walks hold -> rise.
+        self.last_fresh_t: float | None = None
+        self.last_sent_tag = -1
         self.recent: list[str] = []
         self.judgments: dict[str, Judgment] = {}
         self._streak: dict[str, tuple[str, int]] = {}
@@ -76,18 +86,43 @@ class Brain:
         self._streak.pop("task_done", None)
         self._note("new request")
 
-    def state(self) -> dict:
-        now = time.time()
+    # -- freshness bookkeeping for the silence ladder ----------------------------------------
+    def note_sent(self, tag: int) -> None:
+        """A request was actually put on the wire."""
+        self.last_sent_tag = tag
+
+    def note_skipped(self, now: float | None = None) -> bool:
+        """An intentionally skipped tick (nothing material changed since the last request).
+
+        It refreshes the ladder only when no request is outstanding or has failed since the last
+        applied answer, i.e. `last_sent_tag == last_applied_tag`. Otherwise a dead API plus a static
+        scene would stay "fresh" for ever: the forced max-silence requests would fail silently while
+        the skips in between kept the ladder green.
+        """
+        if self.last_sent_tag != self.last_applied_tag:
+            return False
+        self.last_fresh_t = now if now is not None else time.time()
+        return True
+
+    def note_applied(self, tag: int, now: float | None = None) -> None:
+        now = now if now is not None else time.time()
+        self.last_applied_t = self.last_fresh_t = now
+        self.last_applied_tag = tag
+        self.applied_count += 1
+
+    def state(self, now: float | None = None) -> dict:
+        now = now if now is not None else time.time()
         age = None if self.last_applied_t is None else now - self.last_applied_t
+        fresh_age = None if self.last_fresh_t is None else now - self.last_fresh_t
         ladder = "fresh"
-        if age is None or age > self.cfg.safety.silence_rise_s:
+        if fresh_age is None or fresh_age > self.cfg.safety.silence_rise_s:
             ladder = "rise"
-        elif age > self.cfg.safety.silence_hold_s:
+        elif fresh_age > self.cfg.safety.silence_hold_s:
             ladder = "hold"
         return {"target": self.target, "motion": self.motion, "hover_position": self.hover_position,
                 "hover_height": self.hover_height, "speed_name": self.cfg.motion.speed_names[self.speed_level],
                 "speed_level": self.speed_level, "override": self.override, "avoid": self.avoid, "ladder": ladder,
-                "answer_age_s": age, "recent": list(self.recent),
+                "answer_age_s": age, "fresh_age_s": fresh_age, "recent": list(self.recent),
                 "prim": self.prim, "prim_subject": self.prim_subject, "prim_status": self.prim_status,
                 "prim_age": (now - self.prim_started_t) if self.prim_started_t else None,
                 "last_result": self.last_result, "place": self.place, "held": self.held, "done": self.done}
@@ -150,29 +185,46 @@ class Brain:
                     status = "pending_confirmation"
             J["place"] = Judgment("place", ch, pmax, a.get("confidence"), probs, pmax >= th.place_p_max, status, tag, age_ms)
 
-        a = answers.get("next")
-        if a and a.get("type") == "choice":
-            probs, ch = a["probabilities"], a["choice"]
-            pmax = max(probs.values()) if probs else 0.0
-            status = "gated"
-            if pmax >= th.next_p_max:
-                if ch not in self.offered_keys:
-                    status = "gated"
-                elif ch in SAFETY_PRIMS:
-                    running = self.prim_status == "running" and self.prim not in SAFETY_PRIMS
-                    if running and pmax < th.next_interrupt_p:
-                        status = "busy"       # a lukewarm "hold" must not stutter a primitive in progress
+        # `next` is the critical guard: three paraphrases of the same question, majority rules.
+        ballots = {}
+        for k in NEXT_VARIANTS:
+            a = answers.get(k)
+            if a and a.get("type") == "choice":
+                probs = a.get("probabilities") or {}
+                ballots[k] = (a["choice"], max(probs.values()) if probs else 0.0, probs, a.get("confidence"))
+        if ballots:
+            votes = {k: {"choice": v[0], "p": v[1]} for k, v in ballots.items()}
+            ch, n = Counter(v[0] for v in ballots.values()).most_common(1)[0]
+            # 2 of 3 normally; a single answering variant (old logs, dropped questions) still counts,
+            # degraded, so the sequencer does not stall
+            agreed = n >= 2 or len(ballots) == 1
+            winners = [v for v in ballots.values() if v[0] == ch]
+            pmax = sum(v[1] for v in winners) / len(winners)
+            probs = winners[0][2]
+            conf = winners[0][3]
+            if not agreed:
+                status = "disagree"           # no majority: nothing changes, no streak is counted
+                J["next"] = Judgment("next", ch, pmax, conf, probs, False, status, tag, age_ms, votes)
+            else:
+                status = "gated"
+                if pmax >= th.next_p_max:
+                    if ch not in self.offered_keys:
+                        status = "gated"
+                    elif ch in SAFETY_PRIMS:
+                        running = self.prim_status == "running" and self.prim not in SAFETY_PRIMS
+                        if running and pmax < th.next_interrupt_p:
+                            status = "busy"   # a lukewarm "hold" must not stutter a primitive in progress
+                        else:
+                            status = "applied"
+                            if self.prim != ch:
+                                self._start(ch, world)
+                    elif self.prim_status == "running" and self.prim not in SAFETY_PRIMS:
+                        status = "busy"
+                    elif self._streak_ok("next", ch, th.next_consecutive):
+                        status = "applied"; self._start(ch, world)
                     else:
-                        status = "applied"
-                        if self.prim != ch:
-                            self._start(ch, world)
-                elif self.prim_status == "running" and self.prim not in SAFETY_PRIMS:
-                    status = "busy"
-                elif self._streak_ok("next", ch, th.next_consecutive):
-                    status = "applied"; self._start(ch, world)
-                else:
-                    status = "pending_confirmation"
-            J["next"] = Judgment("next", ch, pmax, a.get("confidence"), probs, pmax >= th.next_p_max, status, tag, age_ms)
+                        status = "pending_confirmation"
+                J["next"] = Judgment("next", ch, pmax, conf, probs, pmax >= th.next_p_max, status, tag, age_ms, votes)
 
         a = answers.get("motion")
         if a and a.get("type") == "choice":
@@ -280,8 +332,7 @@ class Brain:
                                       p >= th.task_done_p, status, tag, age_ms)
 
         self.judgments.update(J)
-        self.last_applied_t, self.last_applied_tag = now, tag
-        self.applied_count += 1
+        self.note_applied(tag, now)
 
     # -- compose the persistent command -------------------------------------------------------------
     def compose(self, world: World, now: float | None = None):

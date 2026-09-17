@@ -14,7 +14,10 @@ code change. Research bundle: `context/`. API probes: `experiments/`.
   back away from a drifting object (first avoid command 0.2 s after injection; min distance 5 cm
   without the order vs 13 cm with it); "move very slowly" drops the speed cap; task text switches
   the target; a 6 s Jev outage walks the hold -> rise ladder and recovers.
-- **Rates**: 10 Hz, one request per tick, ~1.8k tokens/call, p50 ~125 ms, p95 ~240 ms, ~$2.8/hr.
+- **Rates**: 10 Hz tick. Requests are event-driven: one is sent only when an entity moved > 2 cm,
+  an entity appeared/disappeared, the arm's phase facts, orders, task or offered primitives changed,
+  or 1 s of silence elapsed (`--clocked` restores one request per tick). A 30 s sim run sent 48
+  requests in 300 ticks. ~2.8k tokens/call, p50 ~145 ms, p95 ~256 ms.
 
 ## Layout
 | Path | Role |
@@ -24,6 +27,7 @@ code change. Research bundle: `context/`. API probes: `experiments/`.
 | `src/robojev/state.py` | World -> situation report (orders first, glossary, user text, facts with bands) |
 | `src/robojev/brain.py` | answers -> commands: gates, hysteresis, avoid (dodge) override, silence ladder |
 | `src/robojev/loop.py` | 10 Hz tick, in-flight/stale/out-of-order handling, perception thread, logging |
+| `src/robojev/events.py` | change detector: what makes a tick worth a Jev request |
 | `src/robojev/arm/` | one interface; `fake`, `sim` (MuJoCo), `real` (trossen driver, own thread, park-on-exit) |
 | `src/robojev/perception/` | D405 camserver/client, camera->base geometry, depth tabletop detector, tracker with object permanence, fixed-camera calibration |
 | `src/robojev/dashboard.py` | live judgments, confidence, latency, cameras, orders/task/STOP inputs |

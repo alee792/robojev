@@ -11,6 +11,7 @@ import argparse
 import asyncio
 import signal
 import sys
+from dataclasses import replace
 
 from aiohttp import web
 
@@ -148,7 +149,7 @@ def main(argv=None):
     r = sub.add_parser("run")
     r.add_argument("--arm", choices=["fake", "sim", "real-ro", "real"], default="fake")
     r.add_argument("--perception", choices=["virtual", "simcam", "camera"], default="virtual")
-    r.add_argument("--scenario", choices=["static", "drift"], default="static")
+    r.add_argument("--scenario", choices=["static", "drift", "intruder"], default="static")
     r.add_argument("--scenario-start", type=float, default=10.0)
     r.add_argument("--camserver", default="http://127.0.0.1:8765")
     r.add_argument("--overhead", default=None, help="second camserver URL (boom D455), e.g. http://127.0.0.1:8766")
@@ -158,6 +159,8 @@ def main(argv=None):
     r.add_argument("--port", type=int, default=8080)
     r.add_argument("--duration", type=float, default=None)
     r.add_argument("--no-jev", action="store_true")
+    r.add_argument("--clocked", action="store_true",
+                   help="one request per tick (pre-event-driven behaviour) instead of asking only on change")
     r.add_argument("--run-name", default=None)
     r.add_argument("--i-am-at-the-estop", action="store_true")
     c = sub.add_parser("calibrate", help="solve the overhead camera's pose from the table plane + objects both cameras see")
@@ -172,7 +175,10 @@ def main(argv=None):
     p.add_argument("--concurrency", type=int, default=4)
     args = ap.parse_args(argv)
     if args.cmd == "run":
-        asyncio.run(serve(args, DEFAULT))
+        cfg = DEFAULT
+        if args.clocked:
+            cfg = replace(DEFAULT, loop=replace(DEFAULT.loop, event_driven=False))
+        asyncio.run(serve(args, cfg))
     elif args.cmd == "calibrate":
         calibrate_cmd(args, DEFAULT)
     else:

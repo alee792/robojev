@@ -104,6 +104,10 @@ class Loop:
     perception_hz: float = 10.0
     remembered_ttl_s: float = 120.0       # drop remembered entities unseen for this long
     out_of_view_s: float = 1.0            # unseen for this long -> status "out of view"
+    # event-driven requests: tick at tick_hz, but only ask Jev when something material changed
+    event_driven: bool = True             # False (CLI --clocked) = one request per tick, as before
+    max_silence_s: float = 1.0            # ask anyway if this long has passed since the last sent request
+    entity_move_m: float = 0.02           # an entity moving more than this is a material change
 
 
 @dataclass(frozen=True)

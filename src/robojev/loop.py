@@ -1,7 +1,11 @@
 """The Doom-style loop: perception thread -> world -> state -> battery -> Jev -> brain -> arm.
 
 Timing model (08 §E2: at 10 Hz most answers arrive after the next tick starts):
-  * a request is fired every tick if fewer than max_in_flight are outstanding, else the tick is skipped
+  * event-driven (Loop.event_driven, the default): a request is fired only when something material
+    changed since the last request that was actually sent, or after Loop.max_silence_s of silence;
+    otherwise the tick is logged "skipped_no_change" and nothing is sent. `--clocked` restores one
+    request per tick.
+  * a request is fired only if fewer than max_in_flight are outstanding, else the tick is skipped
   * each request carries a tag (tick number) and the wall time of its state snapshot
   * an answer is applied only if its tag is newer than the last applied and its snapshot is not
     older than stale_answer_s; otherwise it is logged as dropped
@@ -19,6 +23,7 @@ import numpy as np
 
 from robojev.brain import Brain
 from robojev.config import Config
+from robojev.events import ChangeDetector
 from robojev.jev import JevClient
 from robojev.log import RunLog
 from robojev.perception.memory import Tracker
@@ -133,6 +138,7 @@ class Stats:
     errors: int = 0
     timeouts: int = 0
     skipped: int = 0
+    skipped_no_change: int = 0
     dropped_stale: int = 0
     dropped_order: int = 0
     latencies: list = field(default_factory=list)
@@ -148,6 +154,7 @@ class Stats:
     def view(self):
         L = self.latencies[-200:]; A = self.ages[-200:]
         return {"sent": self.sent, "ok": self.ok, "errors": self.errors, "timeouts": self.timeouts, "skipped": self.skipped,
+                "skipped_no_change": self.skipped_no_change,
                 "dropped_stale": self.dropped_stale, "dropped_order": self.dropped_order,
                 "latency_p50": self.pct(L, 50), "latency_p95": self.pct(L, 95), "latency_max": max(L) if L else None,
                 "age_p50": self.pct(A, 50), "age_p95": self.pct(A, 95), "tokens": self.tokens,
@@ -165,6 +172,7 @@ class Loop:
         self.task = task
         self.orders = list(orders or [])
         self.stats = Stats()
+        self.detector = ChangeDetector(move_m=cfg.loop.entity_move_m, max_silence_s=cfg.loop.max_silence_s)
         self.tick = 0
         self.in_flight: dict[int, float] = {}
         self.last_state = None
@@ -237,13 +245,26 @@ class Loop:
                                                                 if hasattr(self.arm, "object_xy") else None)},
                        state=state, questions=questions, brain=self.brain.state(), in_flight=len(self.in_flight))
         if self.jev and not self.paused:
-            if len(self.in_flight) < self.cfg.safety.max_in_flight:
+            # the keys actually offered in *this* request, not last tick's
+            offered_now = list((questions.get("next") or {}).get("criteria", {}))
+            ask, why = self.detector.should_ask(world, offered_now, now)
+            if not self.cfg.loop.event_driven:
+                ask, why = True, "clocked"
+            if not ask:
+                # an intentional skip is not silence: the situation the last answer described still holds
+                self.stats.skipped_no_change += 1
+                fresh = self.brain.note_skipped(now)
+                self.log.write("answers", tick=self.tick, outcome="skipped_no_change", reason=why, refreshed=fresh)
+            elif len(self.in_flight) < self.cfg.safety.max_in_flight:
+                self.detector.mark_sent(now)
+                self.brain.note_sent(self.tick)
                 self.in_flight[self.tick] = now
                 self.stats.sent += 1
                 asyncio.get_event_loop().create_task(self._ask(self.tick, state, questions, world))
             else:
+                # wanted to ask and could not: the change stays pending and the ladder keeps walking
                 self.stats.skipped += 1
-                self.log.write("answers", tick=self.tick, outcome="skipped_in_flight")
+                self.log.write("answers", tick=self.tick, outcome="skipped_in_flight", reason=why)
         # compose every tick, whether or not anything new arrived
         goal, cap, gripper, reason = self.brain.compose(world, now)
         self.per.held_label = self.brain.held if snap.holding else None
@@ -265,6 +286,7 @@ class Loop:
             self.stats.errors += 1
             if res.error and res.error.startswith("timeout"):
                 self.stats.timeouts += 1
+            self._retry_if_newest(tag)
             self.log.write("answers", outcome="error", error=res.error, **rec)
             return
         self.stats.ok += 1
@@ -276,11 +298,19 @@ class Loop:
             return
         if age_ms is not None and age_ms > self.cfg.safety.stale_answer_s * 1000:
             self.stats.dropped_stale += 1
+            self._retry_if_newest(tag)
             self.log.write("answers", outcome="dropped_stale", answers=res.answers, **rec)
             return
         self.stats.ages.append(age_ms or 0)
         self.brain.apply(res.answers, world, tag, age_ms or 0.0, now)
         self.log.write("answers", outcome="applied", answers=res.answers, brain=self.brain.state(), **rec)
+
+    def _retry_if_newest(self, tag: int) -> None:
+        """A request that produced no usable answer leaves this situation unanswered. Re-ask at once
+        unless a newer request is already out (dropped_out_of_order does not qualify: a newer answer
+        already superseded this one)."""
+        if tag == self.brain.last_sent_tag:
+            self.detector.retry = True
 
     # -- dashboard view ----------------------------------------------------------------------------
     def view(self) -> dict:

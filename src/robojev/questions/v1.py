@@ -43,13 +43,33 @@ def build(cfg: Config, w: World, brain=None) -> dict:
         "criteria": place_opts,
     }
     prims = offered(cfg, w, brain) if brain is not None else []
+    next_criteria = {p.key: p.text for p in prims}
+    # `next` is the guard that moves the arm, so it is asked three ways. Same options, same state,
+    # different wording; the brain acts only on a 2-of-3 majority. Extra questions in one request are
+    # evaluated in parallel and cost essentially no latency (01-jev-facts, patterns/fan-out).
     q["next"] = {
         "type": "choice",
         "instructions": {
             "question": f"The user's request is `user_request.text`. Given `arm` (what the gripper holds, what it is above, the current primitive and its last result) and the standing orders, which primitive should run next?",
             "rules": "Only feasible primitives are listed. A pick-and-place goes: move above the object, descend to grasp, close gripper, lift, move to place, lower to place, open gripper, retreat. If the request is complete, or nothing useful can be done, choose hold. If a primitive just failed, choose what recovers (e.g. open the gripper and try again).",
         },
-        "criteria": {p.key: p.text for p in prims},
+        "criteria": dict(next_criteria),
+    }
+    q["next_b"] = {
+        "type": "choice",
+        "instructions": {
+            "question": "What is the single best next step towards finishing `user_request.text`, starting from the situation in `arm` and `objects`?",
+            "rules": "Every listed step is possible right now. Think of the usual order for moving an object: get above it, come down around it, close on it, raise it, carry it to where it goes, set it down, let go, back away. Pick the one step that follows from what has already happened (`arm.primitive.last_result`). If the request is already satisfied, or no listed step helps, pick staying put.",
+        },
+        "criteria": dict(next_criteria),
+    }
+    q["next_c"] = {
+        "type": "choice",
+        "instructions": {
+            "question": "Which of the listed actions would a careful operator run now, given `user_request.text`, `standing_orders`, `arm` and `objects`?",
+            "rules": "A careful operator does not skip a stage, does not move on until the last action reported success, and stops rather than guessing. Weigh the standing orders first. If the last action failed, choose the action that recovers from it. If nothing listed is clearly the right move, or the request is finished, choose to stay put.",
+        },
+        "criteria": dict(next_criteria),
     }
     q["speed"] = {
         "type": "score",

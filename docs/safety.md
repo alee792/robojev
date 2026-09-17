@@ -20,11 +20,20 @@ Jev picks among options; code decides whether and how the arm moves.
   start, then tracked by a 3 s EMA while calm; a deviation > 40 N for 5 ticks freezes. The
   driver's estimate shifts ~25 N with motion direction, so this only catches hard pushes.
   Neither detector will notice a paper cup; the z floor and the box are what keep the arm off objects.
-- **Jev silence ladder**: no fresh answer for 0.5 s → hold; for 2 s → rise to 22 cm above the table
-  at 1 cm/s. Any request error, timeout or 529 simply counts as silence.
+- **Jev silence ladder**: 0.5 s without a *fresh* tick → hold; 2 s → rise to 22 cm above the table
+  at 1 cm/s. A tick is fresh if an answer was applied, or if the loop deliberately sent no request
+  because nothing material had changed since the last one it did send (see `events.py`) *and* no
+  request is outstanding or failed since the last applied answer. Any request error, timeout, 529,
+  stale/out-of-order drop, in-flight skip or pause counts as silence, exactly as before — an
+  intentional skip only counts as fresh while the channel is demonstrably healthy.
 - **Confidence gates and hysteresis** (`Thresholds`): conservative picks (hold, back off, rise,
   slower, offset hover, high hover) latch on one answer; aggressive picks (approach, faster,
   directly above, low hover, switching target) need 3 consecutive answers.
+- **Majority on `next`**: the primitive that actually moves the arm is asked three ways in the same
+  request (`next`, `next_b`, `next_c` — same options, different wording; fan-out costs no latency).
+  A pick counts only with 2 of 3 agreeing; its probability is the mean p_max of the agreeing
+  variants. No majority → `disagree`: nothing changes and no hysteresis streak is counted. The
+  `next_p_max` gate, `next_consecutive` and `next_interrupt_p` still apply on top.
 - **`orders_violated` override**: P(yes) ≥ 0.7 holds the arm for that tick.
 - **STOP** (dashboard or Ctrl-C): freeze the setpoint; Ctrl-C then parks.
 - **Park on exit**: STAGED then SLEEP, 3 s each, on normal exit, on any exception in the arm
