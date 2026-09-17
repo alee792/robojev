@@ -60,20 +60,33 @@ class JevClient:
         except Exception:
             pass
 
+    RETRY_BUDGET_MS = 250   # one immediate retry on 529/connection errors, only if the first attempt failed fast
+
     async def ask(self, tag: int, state, questions: dict) -> JevResult:
+        """One request, at most one fast retry. Never waits on Retry-After: a control loop cannot
+        stall (the SDK's default policy stalls up to 30 s)."""
         t0 = time.perf_counter()
-        try:
-            resp = await self._client.post(URL, json={"state": state, "model": self.model, "questions": questions})
-        except httpx.TimeoutException as e:
-            return JevResult(tag, False, None, (time.perf_counter() - t0) * 1000, error=f"timeout: {e.__class__.__name__}")
-        except Exception as e:
-            return JevResult(tag, False, None, (time.perf_counter() - t0) * 1000, error=f"{e.__class__.__name__}: {e}"[:200])
+        body = {"state": state, "model": self.model, "questions": questions}
+        attempt = 0
+        while True:
+            attempt += 1
+            try:
+                resp = await self._client.post(URL, json=body)
+            except httpx.TimeoutException as e:
+                return JevResult(tag, False, None, (time.perf_counter() - t0) * 1000, error=f"timeout: {e.__class__.__name__}")
+            except Exception as e:
+                if attempt == 1 and (time.perf_counter() - t0) * 1000 < self.RETRY_BUDGET_MS:
+                    continue
+                return JevResult(tag, False, None, (time.perf_counter() - t0) * 1000, error=f"{e.__class__.__name__}: {e}"[:200])
+            if resp.status_code == 529 and attempt == 1 and (time.perf_counter() - t0) * 1000 < self.RETRY_BUDGET_MS:
+                continue
+            break
         latency = (time.perf_counter() - t0) * 1000
         up = resp.headers.get("x-envoy-upstream-service-time")
         rid = resp.headers.get("x-typesafe-request-id")
         if resp.status_code != 200:
-            return JevResult(tag, False, resp.status_code, latency, error=resp.text[:200], request_id=rid,
-                             upstream_ms=float(up) if up else None)
+            return JevResult(tag, False, resp.status_code, latency, error=resp.text[:200] + (f" (after {attempt} attempts)" if attempt > 1 else ""),
+                             request_id=rid, upstream_ms=float(up) if up else None)
         body = resp.json()
         return JevResult(tag, True, 200, latency, answers=body.get("answers", {}), request_id=rid,
                          upstream_ms=float(up) if up else None,
