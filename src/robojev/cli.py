@@ -167,6 +167,7 @@ def main(argv=None):
     r.add_argument("--port", type=int, default=8080)
     r.add_argument("--duration", type=float, default=None)
     r.add_argument("--no-jev", action="store_true")
+    r.add_argument("--no-evade", action="store_true", help="pickup only: no default standing orders, evade/orders_violated never act")
     r.add_argument("--clocked", action="store_true",
                    help="one request per tick (pre-event-driven behaviour) instead of asking only on change")
     r.add_argument("--run-name", default=None)
@@ -185,7 +186,9 @@ def main(argv=None):
     if args.cmd == "run":
         cfg = DEFAULT
         if args.clocked:
-            cfg = replace(DEFAULT, loop=replace(DEFAULT.loop, event_driven=False))
+            cfg = replace(cfg, loop=replace(cfg.loop, event_driven=False))
+        if args.no_evade:
+            cfg = replace(cfg, loop=replace(cfg.loop, evade_enabled=False), orders=replace(cfg.orders, default=()))
         asyncio.run(serve(args, cfg))
     elif args.cmd == "calibrate":
         calibrate_cmd(args, DEFAULT)

@@ -121,6 +121,7 @@ class Orders:
 
 @dataclass(frozen=True)
 class Loop:
+    evade_enabled: bool = True            # False: the evade / orders_violated channels are logged but never act (pickup-only demos)
     tick_hz: float = 10.0
     question_set: str = "v1"
     model: str = "jev-1.13.0"

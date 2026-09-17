@@ -125,7 +125,7 @@ class Tracker:
                 e.last_speed = e.velocity()
                 e.last_pixel = (getattr(d, "camera", None), d.pixel[0], d.pixel[1])
         for d in unmatched:
-            if d.width > MAX_NEW_WIDTH or d.partial:
+            if d.width > MAX_NEW_WIDTH or d.width < 0.02 or d.partial:   # slivers (cables, frame edges) are not objects
                 continue   # merged blobs and border-cut blobs must not become objects
             if carried_xy is not None and np.hypot(d.base_xyz[0] - carried_xy[0], d.base_xyz[1] - carried_xy[1]) < 0.15:
                 continue

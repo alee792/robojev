@@ -301,7 +301,7 @@ class Brain:
             J["speed"] = Judgment("speed", self.cfg.motion.speed_names[lvl], s, a.get("confidence"), a.get("probabilities", {}), True, status, tag, age_ms)
 
         a = answers.get("evade")
-        if a and a.get("type") == "choice":
+        if a and a.get("type") == "choice" and self.cfg.loop.evade_enabled:
             probs, ch = a["probabilities"], a["choice"]
             pmax = max(probs.values()) if probs else 0.0
             status = "gated"
@@ -335,7 +335,7 @@ class Brain:
             J["evade"] = Judgment("evade", ch, pmax, a.get("confidence"), probs, pmax >= th.evade_p_max, status, tag, age_ms)
 
         a = answers.get("orders_violated")
-        if a and a.get("type") == "noul":
+        if a and a.get("type") == "noul" and self.cfg.loop.evade_enabled:
             p = float(a["noul"])
             self.override = p >= th.orders_violated_p
             if self.override:

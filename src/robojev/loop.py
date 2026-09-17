@@ -214,6 +214,7 @@ class Loop:
         self.events: list[dict] = []
         self.stop_requested = False
         self.started_t = time.time()
+        self.live_t = None      # when the arm first went live: the 'just appeared' grace counts from here, not from process start
         self.paused = False
         self._world = None
 
@@ -266,7 +267,7 @@ class Loop:
         snap = self.arm.snapshot()
         entities, in_view = self.per.entities()
         world = build_world(self.cfg, snap, entities, in_view, self.per.table_z, self.task, self.orders, self.brain.state(), now,
-                            loop_start=self.started_t)
+                            loop_start=self.live_t or self.started_t)
         self._world = world
         state = render(self.cfg, world)
         questions = (self.qmod.build(self.cfg, world, self.brain) if self.qmod.VERSION != "v0" else self.qmod.build(self.cfg, world))
@@ -304,6 +305,8 @@ class Loop:
         goal, cap, gripper, reason = self.brain.compose(world, now)
         self.per.held_label = self.brain.held if snap.holding else None
         self.last_reason = reason
+        if snap.status == "live" and self.live_t is None:
+            self.live_t = time.time()
         if snap.status in ("live", "frozen", "baselining"):
             self.arm.command(goal, cap, gripper, self.brain.pitch)
         self.log.write("commands", tick=self.tick, goal=goal, speed_cap=cap, gripper=gripper, pitch=self.brain.pitch, reason=reason,
