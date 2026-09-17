@@ -156,7 +156,7 @@ class Brain:
         if name == "close_gripper":
             self.held = world.above_label
         if name == "advance_to_grasp":
-            self.advance_f0 = float(world.arm.ext_force[0])
+            self.advance_f0 = None   # set by the skill once the arm is moving (the effort estimate shifts ~10 N with direction)
         if name == "move_to_place":
             self.place_xy = skills.resolve_place(self.cfg, world, self.place, self.origin_xy, self.last_set_down_xy)
         self._note(f"{name}" + (f" {subj}" if subj else ""))
@@ -237,6 +237,9 @@ class Brain:
                         running = self.prim_status == "running" and self.prim not in SAFETY_PRIMS
                         if running and pmax < th.next_interrupt_p:
                             status = "busy"   # a lukewarm "hold" must not stutter a primitive in progress
+                            self._streak_ok("next", ch, 99)   # still counts toward a streak
+                        elif running and pmax < 0.9 and not self._streak_ok("next", ch, th.next_consecutive):
+                            status = "pending_confirmation"   # one answer alternating with its opposite must not flap the arm (real run 6)
                         else:
                             status = "applied"
                             if self.prim != ch:

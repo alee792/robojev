@@ -189,8 +189,11 @@ def goal_for(cfg: Config, w: World, brain, now: float):
             return sp, None, False, f"{subj} is no longer known", "advance: lost subject"
         brain.pitch = cfg.motion.side_pitch
         goal = cfg.workspace.clamp((e.xyz[0] - cfg.motion.side_grasp_depth, e.xyz[1], side_z(cfg, w)))
+        if brain.advance_f0 is None and age > 1.0:
+            brain.advance_f0 = float(w.arm.ext_force[0])
         fx = float(w.arm.ext_force[0]) - (brain.advance_f0 if brain.advance_f0 is not None else float(w.arm.ext_force[0]))
-        if fx > cfg.motion.advance_push_n and age > 0.5:
+        close_enough = (e.xyz[0] - ee[0]) < e.width_m / 2 + 0.04   # contact is only plausible near the object
+        if fx > cfg.motion.advance_push_n and age > 1.3 and close_enough:
             return sp, 0.04, False, f"the fingers are pushing {subj} (F_x +{fx:.0f} N)", "advance: pushing"
         return goal, 0.04, near(goal, 0.012, 0.01), None, f"advance_to_grasp {subj}"
     if name == "close_gripper":
