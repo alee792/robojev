@@ -113,6 +113,11 @@ class Detector:
         # smears along the rays into 16 cm 'objects' beside the gripper (survey calibration, run 15).
         # Nothing we care about is ever closer than 11 cm.
         m = (pts_opt[:, 2] > 0.11) & (pts_opt[:, 2] < 1.0)
+        if self.finger_mask:
+            # the pads fill the lower corners of the wrist image and, closer than the camera's minimum
+            # range, return garbage depths that land as 16 cm columns beside the gripper: drop the
+            # lower band of the image outright (the table there is right under the gripper anyway)
+            m &= uv[:, 1] < 0.6 * self.intr.h
         pts_opt, uv = pts_opt[m], uv[m]
         R, t = self.extrinsic(pose6)
         P = pts_opt @ R.T + t
