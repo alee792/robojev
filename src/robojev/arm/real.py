@@ -263,7 +263,7 @@ class RealArmReadOnly(RealArm):
     def _default_factory(ip):
         import trossen_arm
         d = trossen_arm.TrossenArmDriver()
-        d.configure(trossen_arm.Model.wxai_v0, trossen_arm.StandardEndEffector.wxai_v0_follower, ip, False)
+        d.configure(trossen_arm.Model.wxai_v0, trossen_arm.StandardEndEffector.wxai_v0_follower, ip, True)   # a previous run's trip leaves an error on the controller; reading is harmless
         return d
 
     def start(self):
