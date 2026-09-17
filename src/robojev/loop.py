@@ -51,6 +51,7 @@ class Perception(threading.Thread):
         self.fps = 0.0
         self.frames = {}   # name -> latest jpeg
         self.held_label: str | None = None   # set by the loop from the brain; the track follows the EE
+        self.raw: dict = {}                  # name -> last raw detections (for the tick log)
         if self.cameras:
             from robojev.perception.detect import Detector
             from robojev.perception.geometry import Intrinsics
@@ -86,6 +87,7 @@ class Perception(threading.Thread):
                             info[name] = {k: (round(v, 3) if isinstance(v, float) else v) for k, v in inf.items()}
                             if "plane_z_at_origin" in inf and "plane_z_at_origin" not in info:
                                 info["plane_z_at_origin"], info["plane_tilt_deg"] = inf["plane_z_at_origin"], inf.get("plane_tilt_deg", 0)
+                        self.raw[name] = [(round(det.base_xyz[0], 3), round(det.base_xyz[1], 3), round(det.height, 3), round(det.width, 3)) for det in d]
                         img = f.color.copy()
                         for det in d:
                             cv2.circle(img, det.pixel, 8, (0, 0, 255), 2)
@@ -230,7 +232,7 @@ class Loop:
                                                       "status": snap.status, "frozen": snap.frozen,
                                                       "entities": [{"id": e.id, "label": e.label(), "xyz": e.xyz.tolist(), "h": e.height, "w": e.width,
                                                                     "color": e.color, "last_seen": e.last_seen} for e in entities],
-                                                      "table_z": self.per.table_z,
+                                                      "table_z": self.per.table_z, "raw": dict(self.per.raw), "holding": snap.holding,
                                                       "truth": ({n: self.arm.object_xy(n) for n in self.arm.mocap}
                                                                 if hasattr(self.arm, "object_xy") else None)},
                        state=state, questions=questions, brain=self.brain.state(), in_flight=len(self.in_flight))

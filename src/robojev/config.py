@@ -63,7 +63,7 @@ class Safety:
     silence_rise_s: float = 2.0           # ... this long -> rise to safe_height at slowest speed
     stale_answer_s: float = 0.4           # ignore answers whose state snapshot is older than this
     request_timeout_s: float = 0.7
-    max_in_flight: int = 3
+    max_in_flight: int = 4
 
 
 @dataclass(frozen=True)

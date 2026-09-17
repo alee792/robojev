@@ -115,7 +115,9 @@ class Detector:
         if holding:
             # the carried object rides with the gripper; code knows where it is, and its points must
             # not pollute other tracks (it dragged the phone's track 4 cm in pick-and-place run 2)
-            carried = np.hypot(P[:, 0] - ee[0], P[:, 1] - ee[1]) < 0.08
+            # a cylinder around the gripper, but only down to ~10 cm below the EE point: flat objects
+            # the arm flies over must keep their points (the 8 cm disc ate half the phone in run 3)
+            carried = (np.hypot(P[:, 0] - ee[0], P[:, 1] - ee[1]) < 0.06) & (P[:, 2] > ee[2] - 0.10)
             P, uv = P[~carried], uv[~carried]
         if self.finger_mask:
             # the fingers hang from the flange down to the EE point: a column above ee_z.

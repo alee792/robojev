@@ -65,7 +65,7 @@ def resolve_place(cfg: Config, w: World, place: str | None, origin_xy) -> tuple[
     x, y = e.xyz[0] + dx * gap, e.xyz[1] + dy * gap
     # keep the spot inside the box; a spot that had to move more than 6 cm is not that place any more
     cx, cy, _ = cfg.workspace.clamp((x, y, cfg.workspace.z[0] + 0.001))
-    if math.hypot(cx - x, cy - y) > 0.06:
+    if math.hypot(cx - x, cy - y) > 0.08:
         return None
     return (cx, cy)
 
