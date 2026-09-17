@@ -1,0 +1,162 @@
+"""Depth-based tabletop detector: table plane -> points above it -> clusters -> entities.
+
+Colour-agnostic (a white paper cup on a pale table is a bad colour target), which is why the
+depth image is the primary cue. Each cluster gets a centroid in base frame, footprint, height and
+a mean colour name; labels are assigned by the tracker (memory.py), not here.
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+import cv2
+import numpy as np
+
+from robojev.perception.geometry import Intrinsics, cam_to_base
+
+
+@dataclass
+class Detection:
+    xyz: tuple[float, float, float]     # centroid, base frame (z = mid height)
+    base_xyz: tuple[float, float, float]  # footprint centre on the table plane
+    height: float
+    width: float                          # footprint diameter (m)
+    color_bgr: tuple[int, int, int]
+    color_name: str
+    n_points: int
+    pixel: tuple[int, int]                # image centre of the blob
+
+
+COLOR_NAMES = [  # (name, hsv centre) rough buckets
+    ("white", None), ("black", None), ("gray", None),
+    ("red", 0), ("orange", 15), ("yellow", 28), ("green", 60), ("cyan", 90), ("blue", 115), ("purple", 140), ("pink", 165),
+]
+
+
+def color_name(bgr) -> str:
+    hsv = cv2.cvtColor(np.uint8([[list(bgr)]]), cv2.COLOR_BGR2HSV)[0, 0]
+    h, s, v = int(hsv[0]), int(hsv[1]), int(hsv[2])
+    if v < 50:
+        return "black"
+    if s < 45:
+        return "white" if v > 160 else "gray"
+    best, bd = "red", 999
+    for name, hc in COLOR_NAMES:
+        if hc is None:
+            continue
+        d = min(abs(h - hc), 180 - abs(h - hc))
+        if d < bd:
+            best, bd = name, d
+    return best
+
+
+def fit_plane(points: np.ndarray, iters: int = 60, thresh: float = 0.008, rng=np.random):
+    """RANSAC plane. Returns (normal, d) with n.p + d = 0, normal pointing +z, and inlier mask."""
+    best = (None, None, np.zeros(len(points), bool))
+    n = len(points)
+    if n < 50:
+        return best
+    for _ in range(iters):
+        idx = rng.choice(n, 3, replace=False)
+        p0, p1, p2 = points[idx]
+        nv = np.cross(p1 - p0, p2 - p0)
+        norm = np.linalg.norm(nv)
+        if norm < 1e-9:
+            continue
+        nv /= norm
+        d = -nv @ p0
+        dist = np.abs(points @ nv + d)
+        inl = dist < thresh
+        if inl.sum() > best[2].sum():
+            best = (nv, d, inl)
+    nv, d, inl = best
+    if nv is None:
+        return best
+    # refine with SVD on inliers
+    P = points[inl]
+    c = P.mean(0)
+    _, _, vt = np.linalg.svd(P - c, full_matrices=False)
+    nv = vt[-1]
+    if nv[2] < 0:
+        nv = -nv
+    d = -nv @ c
+    inl = np.abs(points @ nv + d) < thresh
+    return nv, d, inl
+
+
+class Detector:
+    def __init__(self, intr: Intrinsics, workspace_xy=((0.10, 0.80), (-0.40, 0.40)),
+                 min_height=0.02, max_height=0.30, stride=4, table_z: float | None = None,
+                 ee_mask_radius: float = 0.10):
+        self.intr = intr
+        self.ws = workspace_xy
+        self.min_h, self.max_h = min_height, max_height
+        self.stride = stride
+        self.table_z = table_z      # if known, use it instead of fitting every frame
+        self.last_plane = None      # (normal, d) in base frame
+        self.ee_mask_radius = ee_mask_radius  # the gripper fingers are always in view; drop points this close to the EE
+
+    def run(self, color: np.ndarray, depth_m: np.ndarray, pose6) -> tuple[list[Detection], dict]:
+        pts_opt, uv = self.intr.deproject(depth_m, self.stride)
+        # D405 valid range ~0.07..0.5+ m; drop far/noisy points
+        m = (pts_opt[:, 2] > 0.07) & (pts_opt[:, 2] < 1.0)
+        pts_opt, uv = pts_opt[m], uv[m]
+        R, t = cam_to_base(pose6)
+        P = pts_opt @ R.T + t
+        ee = np.asarray(pose6[:3], float)
+        far_from_ee = np.linalg.norm(P - ee, axis=1) > self.ee_mask_radius
+        P, uv = P[far_from_ee], uv[far_from_ee]
+        info = {"n_points": int(len(P))}
+        if len(P) < 100:
+            return [], info | {"error": "too few depth points"}
+        if self.table_z is None:
+            # fit the plane on points in the workspace footprint, lowish
+            cand = (P[:, 0] > self.ws[0][0]) & (P[:, 0] < self.ws[0][1]) & (P[:, 1] > self.ws[1][0]) & (P[:, 1] < self.ws[1][1])
+            nv, d, inl = fit_plane(P[cand]) if cand.sum() > 50 else (None, None, None)
+            if nv is None:
+                return [], info | {"error": "no table plane"}
+            self.last_plane = (nv, d)
+            info["plane_normal"] = [round(float(x), 3) for x in nv]
+            info["plane_z_at_origin"] = float(-d / nv[2]) if abs(nv[2]) > 1e-6 else None
+            info["plane_tilt_deg"] = float(np.degrees(np.arccos(min(1.0, abs(nv[2])))))
+            height = P @ nv + d
+        else:
+            height = P[:, 2] - self.table_z
+            info["plane_z_at_origin"] = self.table_z
+        above = (height > self.min_h) & (height < self.max_h)
+        inws = (P[:, 0] > self.ws[0][0]) & (P[:, 0] < self.ws[0][1]) & (P[:, 1] > self.ws[1][0]) & (P[:, 1] < self.ws[1][1])
+        sel = above & inws
+        info["n_above"] = int(sel.sum())
+        if sel.sum() < 10:
+            return [], info
+        Q, uvq, hq = P[sel], uv[sel], height[sel]
+        labels = _cluster_xy(Q[:, :2], cell=0.02)
+        dets = []
+        for lab in np.unique(labels):
+            k = labels == lab
+            if k.sum() < 15:
+                continue
+            pts, px, hh = Q[k], uvq[k], hq[k]
+            cx, cy = pts[:, 0].mean(), pts[:, 1].mean()
+            top = float(np.percentile(hh, 95))
+            base_z = float(cx * 0 + (self.table_z if self.table_z is not None else -(self.last_plane[1] + self.last_plane[0][0] * cx + self.last_plane[0][1] * cy) / self.last_plane[0][2]))
+            spread = np.percentile(np.hypot(pts[:, 0] - cx, pts[:, 1] - cy), 90) * 2
+            u0, v0 = int(px[:, 0].mean()), int(px[:, 1].mean())
+            patch = color[max(0, v0 - 6):v0 + 6, max(0, u0 - 6):u0 + 6].reshape(-1, 3)
+            bgr = tuple(int(x) for x in np.median(patch, 0)) if len(patch) else (128, 128, 128)
+            dets.append(Detection(xyz=(float(cx), float(cy), base_z + top / 2), base_xyz=(float(cx), float(cy), base_z),
+                                  height=top, width=float(spread), color_bgr=bgr, color_name=color_name(bgr),
+                                  n_points=int(k.sum()), pixel=(u0, v0)))
+        dets.sort(key=lambda d: -d.n_points)
+        return dets, info
+
+
+def _cluster_xy(xy: np.ndarray, cell: float) -> np.ndarray:
+    """Grid-based connected components in the xy plane (8-neighbour). Cheap and good enough for
+    a few objects 5+ cm apart."""
+    g = np.floor(xy / cell).astype(int)
+    g -= g.min(0)
+    H, W = g[:, 0].max() + 1, g[:, 1].max() + 1
+    occ = np.zeros((H, W), np.uint8)
+    occ[g[:, 0], g[:, 1]] = 1
+    n, comp = cv2.connectedComponents(occ, connectivity=8)
+    return comp[g[:, 0], g[:, 1]]
