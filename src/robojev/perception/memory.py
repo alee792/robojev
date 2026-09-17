@@ -57,16 +57,22 @@ class Entity:
                  "small object": "small, like a block or ball"}.get(self.kind(), "box-shaped")
         return f"{self.color}, {self.height*100:.0f} cm tall, {self.width*100:.0f} cm wide; {shape}"
 
-    def velocity(self, window_s: float = 1.0) -> float:
+    def velocity(self, window_s: float = 1.5) -> float:
+        """Speed from the displacement between the medians of the older and newer halves of the
+        recent history, so two cameras disagreeing by 3 cm does not read as motion."""
         h = [p for p in self.history if p[0] > self.last_seen - window_s]
-        if len(h) < 2:
+        if len(h) < 6:
             return 0.0
-        (t0, x0, y0), (t1, x1, y1) = h[0], h[-1]
-        dt = t1 - t0
-        return float(np.hypot(x1 - x0, y1 - y0) / dt) if dt > 0.2 else 0.0
+        a, b = h[: len(h) // 2], h[len(h) // 2:]
+        ax, ay = np.median([p[1] for p in a]), np.median([p[2] for p in a])
+        bx, by = np.median([p[1] for p in b]), np.median([p[2] for p in b])
+        dt = np.median([p[0] for p in b]) - np.median([p[0] for p in a])
+        d = float(np.hypot(bx - ax, by - ay))
+        return d / dt if dt > 0.3 and d > 0.03 else 0.0
 
 
 CONFIRM = 10          # sightings before an entity's description is frozen
+MAX_NEW_WIDTH = 0.16  # m: wider detections are merged neighbours, not new objects (tabletop scale)
 UNCONFIRMED_TTL = 2.0  # s: an entity with fewer than CONFIRM sightings that stops being seen is a phantom
 
 
@@ -93,6 +99,8 @@ class Tracker:
             if np.hypot(d.base_xyz[0] - e.xyz[0], d.base_xyz[1] - e.xyz[1]) <= self.match_radius:
                 unmatched.remove(d)
                 a = self.ema
+                if e.frozen and d.width > 1.6 * e.width:
+                    a = 0.1   # a blob much wider than this object is a merge with a neighbour: barely trust its centre
                 e.xyz = a * np.asarray(d.base_xyz) + (1 - a) * e.xyz
                 if not e.frozen:
                     e.dims.append((d.height, d.width, d.color_name))
@@ -105,6 +113,8 @@ class Tracker:
                 e.history.append((now, float(e.xyz[0]), float(e.xyz[1])))
                 e.history = e.history[-40:]
         for d in unmatched:
+            if d.width > MAX_NEW_WIDTH:
+                continue   # merged blobs (hand+cup came out 21 cm wide) must not become objects
             eid = letter(self._n); self._n += 1
             self.entities[eid] = Entity(eid, np.asarray(d.base_xyz, float), d.height, d.width, d.color_name, now, now,
                                         history=[(now, d.base_xyz[0], d.base_xyz[1])], name=self.names.get(eid),

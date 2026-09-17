@@ -116,7 +116,7 @@ class Loop:
     question_set: str = "v1"
     model: str = "jev-1.13.0"
     perception_hz: float = 10.0
-    remembered_ttl_s: float = 120.0       # drop remembered entities unseen for this long
+    remembered_ttl_s: float = 20.0        # drop remembered entities unseen for this long (a hand that left is gone)
     out_of_view_s: float = 1.0            # unseen for this long -> status "out of view"
     # event-driven requests: tick at tick_hz, but only ask Jev when something material changed
     event_driven: bool = True             # False (CLI --clocked) = one request per tick, as before
