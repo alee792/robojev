@@ -22,7 +22,7 @@ h2.sec{margin-top:14px}
 .muted{color:var(--muted)}
 .ok{color:var(--ok)}.warn{color:var(--warn)}.bad{color:var(--bad)}.pend{color:var(--pend)}
 .ch{color:#fff;font-weight:600}
-.hidden{display:none}
+.hidden{display:none!important}
 
 /* top band ------------------------------------------------------------------ */
 #band{background:var(--panel);border-bottom:1px solid var(--line);padding:12px 14px;

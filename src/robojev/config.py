@@ -47,7 +47,7 @@ class Motion:
     grasp_fraction: float = 0.5           # grasp at this fraction of the object's height
     shift_distance: float = 0.15          # how far a 'move it to the left/right/away/closer' place is from the pickup spot
     place_gap: float = 0.04               # clearance between a placed object and its reference object
-    gripper_settle_s: float = 0.7         # wait after a gripper command before judging the result
+    gripper_settle_s: float = 0.9         # must exceed the real backend's 0.5 s holding-detection delay (0.7 judged 'closed on nothing' while the fingers were still closing: real run 10)         # wait after a gripper command before judging the result
     primitive_timeout_s: float = 10.0     # a primitive that has not finished by then is reported failed
     stall_s: float = 3.0                  # a primitive whose EE has not moved for this long (and is not done) is reported failed
     down_orientation: tuple[float, float, float] = (0.0, 1.309, 0.0)  # 75 deg pitch: far larger reachable envelope than straight down (see reachability map)
