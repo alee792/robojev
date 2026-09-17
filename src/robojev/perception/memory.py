@@ -67,7 +67,7 @@ class Entity:
 
 
 CONFIRM = 10          # sightings before an entity's description is frozen
-UNCONFIRMED_TTL = 6.0  # s: an entity with fewer than CONFIRM sightings that stops being seen is a phantom
+UNCONFIRMED_TTL = 2.0  # s: an entity with fewer than CONFIRM sightings that stops being seen is a phantom
 
 
 class Tracker:
@@ -142,4 +142,6 @@ class Tracker:
         return now - e.last_seen < self.oov
 
     def stable(self, min_seen: int = CONFIRM) -> list[Entity]:
-        return [e for e in self.entities.values() if e.seen_count >= min_seen]
+        """Confirmed tracks: enough sightings, spread over at least a second (a burst of fragments
+        from one pose does not make an object)."""
+        return [e for e in self.entities.values() if e.seen_count >= min_seen and e.last_seen - e.first_seen >= 1.0]
