@@ -60,9 +60,12 @@ class Perception(threading.Thread):
                 else:
                     f = self.cam.frame()
                     snap = self.arm.snapshot()
-                    pose6 = self._pose6(snap)
-                    dets, info = self.detector.run(f.color, f.depth_m, pose6)
                     frame = f.color
+                    if snap.rot is None or snap.status not in ("live", "frozen", "baselining"):
+                        dets, info = [], {"waiting": f"arm {snap.status}; no pose yet"}
+                    else:
+                        pose6 = self._pose6(snap)
+                        dets, info = self.detector.run(f.color, f.depth_m, pose6)
                 if info.get("plane_z_at_origin") is not None and info.get("plane_tilt_deg", 0) < 6:
                     self._table_samples.append(info["plane_z_at_origin"])
                     self._table_samples = self._table_samples[-15:]

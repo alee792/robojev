@@ -48,8 +48,6 @@ async def serve(args, cfg):
     arm, per, loop, log = build(args, cfg)
     print(f"run log: {log.dir}")
     per.start()
-    arm.start()
-    app = web.Application() if False else None
     from robojev.dashboard import make_app
     runner = web.AppRunner(make_app(loop))
     await runner.setup()
@@ -66,6 +64,13 @@ async def serve(args, cfg):
         except NotImplementedError:
             pass
     try:
+        if args.perception == "camera":
+            # let the plane fit settle so the arm's hover-start height uses the measured table
+            await asyncio.sleep(1.5)
+            if per._table_samples:
+                object.__setattr__(cfg, "table_z", per.table_z)
+                print(f"table_z from camera: {per.table_z:.3f}")
+        await asyncio.to_thread(arm.start)
         await loop.run(duration_s=args.duration)
     finally:
         print("stopping: parking arm, closing log")

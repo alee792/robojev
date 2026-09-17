@@ -43,6 +43,8 @@ class RealArm:
         self._lock = threading.Lock()
         self._snap = ArmSnapshot(time.time(), (0, 0, 0), 0.0, status="init")
         self.events = []  # (t, text) recent events for the dashboard
+        self.last_step_m = 0.0
+        self.max_step_m = 0.0   # largest setpoint delta ever sent in one tick (speed-cap evidence)
 
     @staticmethod
     def _default_factory(ip):
@@ -123,9 +125,16 @@ class RealArm:
                 if self.watchdog.tripped(dev) and not self.mover.frozen:
                     self.mover.freeze(f"external force deviation {dev:.1f} N")
                     self._event(f"FROZEN: force deviation {dev:.1f} N (baseline {self.watchdog.baseline})")
-                sp = self.mover.step(now - last)
-                last = now
-                if sp is not None and self.watchdog.baseline is not None:
+                if self.watchdog.baseline is None:
+                    sp = self.mover.setpoint          # hold: nothing walks until we can watch forces
+                    last = now
+                else:
+                    prev = self.mover.setpoint
+                    sp = self.mover.step(now - last)
+                    last = now
+                    step_m = math.dist(prev, sp) if prev is not None else 0.0
+                    self.last_step_m = step_m
+                    self.max_step_m = max(self.max_step_m, step_m)
                     self.driver.set_cartesian_positions(list(sp) + orient, space, goal_time, False)
                 g = self._gripper_goal
                 if g is not None and g != self._gripper_sent:

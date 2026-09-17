@@ -30,15 +30,19 @@ arm = RealArm(cfg, log=log)
 trace = []
 def sample(label):
     s = arm.snapshot()
-    rec = {"t": time.time(), "label": label, "ee": s.ee, "sp": s.setpoint, "goal": s.goal, "F": s.ext_force, "status": s.status, "frozen": s.frozen}
+    rec = {"t": time.time(), "label": label, "ee": s.ee, "rot": s.rot, "sp": s.setpoint, "goal": s.goal, "F": s.ext_force,
+           "status": s.status, "frozen": s.frozen, "step_m": arm.last_step_m}
     trace.append(rec); log.write("trace", **rec)
 try:
     arm.start()
     print("staged + hover start; baselining force ...")
     t0 = time.time()
-    while arm.snapshot().status == "baselining" and time.time() - t0 < 5:
+    while arm.snapshot().status != "live" and time.time() - t0 < 8:
         sample("baseline"); time.sleep(0.05)
-    print("baseline", arm.watchdog.baseline, "status", arm.snapshot().status)
+    s = arm.snapshot()
+    print("baseline", arm.watchdog.baseline, "status", s.status, "rot", s.rot)
+    if s.status != "live":
+        raise SystemExit(f"arm never went live (status {s.status} {s.error}); parking")
     for i, c in enumerate(corners):
         arm.command(c, args.speed)
         print(f"corner {i}: goal {tuple(round(v,3) for v in c)}")
@@ -59,4 +63,9 @@ finally:
 lags = [math.dist(r["ee"], r["sp"]) for r in trace if r["label"].startswith("leg")]
 if lags:
     lags.sort(); print(f"ee-vs-setpoint lag: p50 {1000*lags[len(lags)//2]:.1f} mm  p95 {1000*lags[int(len(lags)*0.95)]:.1f} mm  max {1000*lags[-1]:.1f} mm")
+    print(f"largest setpoint step sent in one tick: {1000*arm.max_step_m:.2f} mm (cap {1000*args.speed/cfg.motion.real_tick_hz:.2f} mm)")
+    rots = [r["rot"] for r in trace if r["rot"]]
+    if rots:
+        dev = max(math.dist(r, cfg.motion.down_orientation) for r in rots)
+        print(f"max orientation deviation from pointing-down: {dev:.3f} rad")
 print("trace:", log.dir / "trace.jsonl")
