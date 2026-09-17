@@ -117,7 +117,7 @@ class Orders:
     """Operator baseline standing orders, always present and listed before the user's runtime
     orders (Doom's +guide strategy text). Anthony's runtime orders are appended by the dashboard."""
     default: tuple[str, ...] = (
-        "Never touch, bump or pass over a hand, an arm, or any object that just appeared or is moving; keep at least 10 cm from it and wait for it to leave.",
+        "Never touch, bump or pass over a human hand or arm. If one is in view, slow right down and keep at least 10 cm from it; if it is in the way, wait for it to leave.",
         "Never drop a held object anywhere but on the table.",
     )
 

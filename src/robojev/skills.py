@@ -84,6 +84,23 @@ def resolve_place(cfg: Config, w: World, place: str | None, origin_xy, last_set_
         return tuple(origin_xy) if origin_xy else None
     if place == "where_it_was_set_down":
         return tuple(last_set_down_xy) if last_set_down_xy else None
+    if place == "somewhere_else":
+        if not origin_xy:
+            return None
+        import random
+        ws = cfg.workspace
+        rng = random.Random(int(origin_xy[0] * 1000) ^ int(origin_xy[1] * 1000) ^ int(w.t * 10))
+        best = None
+        for _ in range(200):
+            x = rng.uniform(ws.x[0] + 0.03, ws.x[1] - 0.03); y = rng.uniform(ws.y[0] + 0.03, ws.y[1] - 0.03)
+            d_origin = math.hypot(x - origin_xy[0], y - origin_xy[1])
+            d_obj = min([math.hypot(x - e.xyz[0], y - e.xyz[1]) for e in w.entities if e.label != w.holding_label] + [9.0])
+            if d_origin < 0.15 or d_obj < 0.12:
+                continue
+            score = d_origin + d_obj
+            if best is None or score > best[0]:
+                best = (score, x, y)
+        return (best[1], best[2]) if best else None
     if place in SHIFTS:
         if not origin_xy:
             return None

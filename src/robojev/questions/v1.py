@@ -29,6 +29,7 @@ def build(cfg: Config, w: World, brain=None) -> dict:
     }
     place_opts = {"unspecified": "the request does not say where to put the object, or it is not a moving task",
                   "where_it_was": "back where the object was picked up",
+                  "somewhere_else": "anywhere else on the table, a different spot from where it is now (the request just wants it moved, kept moving, or put somewhere else)",
                   "where_it_was_set_down": "back to the spot where the robot itself set an object down earlier (the request says to put it back after someone moved it)"}
     for k, words in SHIFT_WORDS.items():
         place_opts[k] = words
