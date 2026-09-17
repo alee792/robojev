@@ -72,6 +72,7 @@ class Brain:
         self._streak: dict[str, tuple[str, int]] = {}
         self.applied_count = 0
         self.offered_keys: list[str] = []
+        self._ee_hist: list = []   # (t, ee) for stall detection
 
     # -- helpers -----------------------------------------------------------------------------
     def _streak_ok(self, key: str, candidate: str, needed: int) -> bool:
@@ -357,6 +358,16 @@ class Brain:
         st = self.state()
         slowest = m.speed_levels[0]
         self.offered_keys = [p.key for p in skills.offered(self.cfg, world, self)]
+        # timeouts and stalls are judged whatever else is going on (an evade used to hide a stuck lift for 25 s)
+        self._ee_hist.append((now, ee)); self._ee_hist = [h for h in self._ee_hist if now - h[0] <= 4.0]
+        if self.prim_status == "running" and self.prim not in SAFETY_PRIMS:
+            age = now - (self.prim_started_t or now)
+            if age > m.primitive_timeout_s:
+                self.prim_status, self.last_result = "failed", f"{self.prim} failed: timed out after {age:.0f} s"; self._note(self.last_result)
+            elif age > m.stall_s and not (self.avoid or self.evade or self.override):
+                old = [h for h in self._ee_hist if now - h[0] >= m.stall_s]
+                if old and math.dist(old[-1][1], ee) < 0.01 and self.prim not in ("close_gripper", "open_gripper"):
+                    self.prim_status, self.last_result = "failed", f"{self.prim} failed: the arm stalled (goal may be unreachable)"; self._note(self.last_result)
         if st["ladder"] == "rise":
             return (sp[0], sp[1], min(ws.z[1], tz + m.safe_height)), slowest, None, "no fresh answers: rising to safe height"
         if st["ladder"] == "hold":
@@ -397,8 +408,7 @@ class Brain:
                         self.last_result = f"released {self.held} at {self.placed[1]}"
                     self.held = None
                 self._note(self.last_result)
-            elif age > m.primitive_timeout_s and self.prim not in SAFETY_PRIMS:
-                self.prim_status, self.last_result = "failed", f"{self.prim} failed: timed out after {age:.0f} s"; self._note(self.last_result)
+
         if self.prim_status in ("done", "failed") and self.prim in ("move_above", "descend_to_grasp", "move_to_place", "lower_to_place", "set_down_here", "lift", "retreat", "rise_away", "back_off"):
             goal = sp   # finished primitives hold position until the next pick
         return goal, cap, gripper, reason

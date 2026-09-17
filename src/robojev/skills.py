@@ -35,13 +35,14 @@ def _above(w: World, label: str, tol: float = 0.025) -> bool:
 
 
 def carry_z(cfg: Config, w: World) -> float:
-    tallest = max([e.height_m for e in w.entities] + [0.0])
-    return min(cfg.workspace.z[1], w.table_z + max(cfg.motion.carry_height, tallest + cfg.motion.object_clearance + 0.05))
+    # the box's top edge is at the envelope's limit; keep 2 cm inside it so goals stay reachable
+    tallest = max([e.height_m for e in w.entities if e.label != w.holding_label] + [0.0])
+    return min(cfg.workspace.z[1] - 0.02, w.table_z + max(cfg.motion.carry_height, tallest + cfg.motion.object_clearance + 0.03))
 
 
 def hover_z(cfg: Config, w: World) -> float:
     tallest = max([e.height_m for e in w.entities] + [0.0])
-    return min(cfg.workspace.z[1], w.table_z + max(cfg.motion.hover_heights["high"], tallest + cfg.motion.object_clearance))
+    return min(cfg.workspace.z[1] - 0.02, w.table_z + max(cfg.motion.hover_heights["high"], tallest + cfg.motion.object_clearance))
 
 
 def grasp_z(cfg: Config, w: World, label: str) -> float:

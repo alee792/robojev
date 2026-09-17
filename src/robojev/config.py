@@ -43,11 +43,12 @@ class Motion:
     avoid_distance: float = 0.16          # keep the gripper this far (horizontally) from an avoided object
     evade_step: float = 0.10              # how far a directional evade moves, per latch
     evade_min_s: float = 0.6              # an evade holds at least this long before it can clear
-    carry_height: float = 0.16            # above the table while carrying
+    carry_height: float = 0.14            # above the table while carrying (base z 0.12: inside the reachable envelope)
     grasp_fraction: float = 0.5           # grasp at this fraction of the object's height
     place_gap: float = 0.04               # clearance between a placed object and its reference object
     gripper_settle_s: float = 1.0         # wait after a gripper command before judging the result
     primitive_timeout_s: float = 10.0     # a primitive that has not finished by then is reported failed
+    stall_s: float = 3.0                  # a primitive whose EE has not moved for this long (and is not done) is reported failed
     down_orientation: tuple[float, float, float] = (0.0, 1.309, 0.0)  # 75 deg pitch: far larger reachable envelope than straight down (see reachability map)
     real_tick_hz: float = 20.0            # arm I/O thread rate (real)
     real_goal_time: float = 0.1           # per-command interpolation horizon (0.001..0.2 = linear)
