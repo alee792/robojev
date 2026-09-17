@@ -19,7 +19,9 @@ jev-askable-arm, are contrast points, not blueprints.
 | `04-doom-questions.md` | Their question battery, the composition graph, and open sequencing questions |
 | `05-design-space.md` | Fixed constraints plus open design axes (approach-neutral) |
 | `06-prior-art.md` | Third-party Jev arm/drone/Doom projects and language-to-robot literature |
-| `07-experiments-to-run.md` | Questions only real API calls can answer |
+| `07-experiments-to-run.md` | Questions only real API calls can answer (with run status) |
+| `08-experiment-results.md` | **Measured** latency, rate limits, confidence formula, jitter stability, spatial accuracy, standing orders |
+| `09-sim-and-sdk-notes.md` | MuJoCo sim ground truth/control, frame conventions, sim vs real arm, bay config, SDK pitfalls |
 
 ## Raw material
 | Path | Contents |
@@ -34,7 +36,7 @@ jev-askable-arm, are contrast points, not blueprints.
 | `media/keyframes/` | Extracted frames, listed in `INDEX.md`. These replace the pasted screenshots, which only existed as chat attachments |
 
 ## Evidence tags used
-**[verified]** = read in the primary docs · **[seen]** = legible in a video frame · **[inferred]** =
+**[measured]** = our own API experiments · **[verified]** = read in the primary docs · **[seen]** = legible in a video frame · **[inferred]** =
 reasoning from evidence · **[read]/[snippet]/[known]** in `06-prior-art.md` = what the research
 sub-agent actually opened, with details summarized by a small model, so re-check them.
 
@@ -46,4 +48,4 @@ sub-agent actually opened, with details summarized by a small model, so re-check
   plus `mcp__widowx__*` tools (movej/movel/gripper/trajectory). Read `widowx:readiness` and
   `widowx:move` before designing actuation. The MuJoCo twin is a likely place to develop against before
   touching the bay.
-- No TypeSafe API key was used. All numbers are from the docs or the video.
+- Experiments used a real API key (about $0.41). The code lives in `../experiments/` (uv project; set `TYPESAFE_API_KEY` or `../.env`), and raw logs in `../experiments/results/`.

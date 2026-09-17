@@ -1,5 +1,7 @@
 # Experiments only an API key can answer
 
+**Status 2026-09-17:** 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 (partial) run — results in `08-experiment-results.md`, code in `experiments/`. Not yet run: 10 (label style), 11, 12.
+
 Cheap (fractions of a cent each). Run before committing to an architecture. Needs `TYPESAFE_API_KEY`.
 
 1. **Latency from this bay.** p50/p95/p99 for 1, 6, 12, and 40 questions at 1k, 6k, and 20k state
