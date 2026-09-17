@@ -9,7 +9,7 @@ from __future__ import annotations
 from robojev.config import Config
 from robojev.world import World, band, bearing_words
 
-STATE_VERSION = "v0"
+STATE_VERSION = "v1"
 
 
 def glossary(cfg: Config) -> dict:
@@ -21,7 +21,8 @@ def glossary(cfg: Config) -> dict:
         "bearing": "horizontal direction from the gripper: 0 is straight ahead (away from the robot base), positive is left, negative is right",
         "height": "the gripper's height above the table surface",
         "control": "decisions update every 0.1 s; a decision persists until the next one arrives; code enforces speed and workspace limits",
-        "task_scope": "the arm hovers above objects; it does not grasp in this task",
+        "primitives": "the arm acts by running one primitive at a time (move above, descend to grasp, close gripper, lift, move to place, lower to place, open gripper, retreat); each runs until done or failed, then the next is chosen",
+        "gripper": "the gripper can hold one object; `holding` says which",
     }
 
 
@@ -65,7 +66,13 @@ def render(cfg: Config, w: World) -> dict:
             "hover_height_setting": w.hover_height,
             "speed_setting": w.speed_name,
             "height_above_table": f"{h*100:.0f} cm ({band(h, cfg.bands.height)})",
-            "gripper": "open" if w.arm.gripper > 0.03 else "closed",
+            "gripper": w.gripper_state,
+            "holding": w.holding_label or "nothing",
+            "directly_above": w.above_label or "nothing",
+            "place_for_the_object": w.place or "not decided",
+            "current_primitive": (f"{w.prim['name']}" + (f" {w.prim['subject']}" if w.prim.get('subject') else "")
+                                  + f" ({w.prim['status']}, {w.prim['age_s'] or 0:.1f} s)") if w.prim.get("name") else "none",
+            "last_result": w.prim.get("last_result") or "none yet",
             "state": "frozen by the safety layer" if w.arm.frozen else ("holding (no fresh decisions)" if w.ladder != "fresh" else "operating"),
         },
         "objects": objects,

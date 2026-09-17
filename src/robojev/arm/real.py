@@ -39,6 +39,7 @@ class RealArm:
         self.driver = None
         self._gripper_goal = None
         self._gripper_sent = None
+        self._gripper_t = 0.0
         self._stop = threading.Event()
         self._thread = None
         self._lock = threading.Lock()
@@ -159,9 +160,14 @@ class RealArm:
                 if g is not None and g != self._gripper_sent:
                     self.driver.set_gripper_position(float(g), 0.5, False)
                     self._gripper_sent = g
+                    self._gripper_t = time.perf_counter()
+                # holding: asked to close, and the fingers stopped well short of closed
+                g = self._gripper_goal
+                holding = g is not None and g < 0.01 and joints[6] > 0.006 and (time.perf_counter() - self._gripper_t) > 0.8
                 with self._lock:
                     self._snap = ArmSnapshot(time.time(), tuple(pose[:3]), joints[6], joints=joints,
                                              ext_force=(fx, fy, fz), setpoint=sp or tuple(pose[:3]),
+                                             holding=holding, gripper_goal=g,
                                              goal=self.mover.goal or tuple(pose[:3]), speed_cap=self.mover.speed_cap,
                                              frozen=self.mover.frozen, rot=tuple(pose[3:6]),
                                              status="frozen" if self.mover.frozen else ("live" if self.watchdog.baseline else "baselining"))

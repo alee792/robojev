@@ -26,6 +26,8 @@ class ArmSnapshot:
     status: str = "init"                           # init | staging | live | frozen | parking | stopped | error
     error: str | None = None
     rot: tuple[float, float, float] | None = None  # EE orientation, angle-axis, as the driver reports it
+    holding: bool = False                          # something is between the closed fingers
+    gripper_goal: float | None = None              # last commanded width (0 closed .. 0.04 open)
 
 
 class ArmBackend(Protocol):

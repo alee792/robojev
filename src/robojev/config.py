@@ -41,6 +41,11 @@ class Motion:
     standoff: float = 0.08                # lateral offset for hover_position != directly_above
     back_off_distance: float = 0.08       # how far back_off retreats from the target, horizontally
     avoid_distance: float = 0.16          # keep the gripper this far (horizontally) from an avoided object
+    carry_height: float = 0.16            # above the table while carrying
+    grasp_fraction: float = 0.5           # grasp at this fraction of the object's height
+    place_gap: float = 0.06               # clearance between a placed object and its reference object
+    gripper_settle_s: float = 1.0         # wait after a gripper command before judging the result
+    primitive_timeout_s: float = 10.0     # a primitive that has not finished by then is reported failed
     down_orientation: tuple[float, float, float] = (0.0, 1.309, 0.0)  # 75 deg pitch: far larger reachable envelope than straight down (see reachability map)
     real_tick_hz: float = 20.0            # arm I/O thread rate (real)
     real_goal_time: float = 0.1           # per-command interpolation horizon (0.001..0.2 = linear)
@@ -70,6 +75,11 @@ class Thresholds:
     hover_height_conf: float = 0.40
     orders_violated_p: float = 0.70
     avoid_p_max: float = 0.50             # dynamic option count -> gate on p_max
+    next_p_max: float = 0.45              # next-primitive pick (dynamic option count)
+    next_consecutive: int = 2             # non-safety primitives need this many consecutive picks
+    place_p_max: float = 0.50
+    task_done_p: float = 0.80
+    task_done_consecutive: int = 3
     avoid_clear_consecutive: int = 3      # answers of no_avoidance_needed before an avoid latch clears
     # hysteresis: conservative picks latch on 1 answer; aggressive picks need N consecutive
     aggressive_consecutive: int = 3
@@ -88,7 +98,7 @@ class Bands:
 @dataclass(frozen=True)
 class Loop:
     tick_hz: float = 10.0
-    question_set: str = "v0"
+    question_set: str = "v1"
     model: str = "jev-1.13.0"
     perception_hz: float = 10.0
     remembered_ttl_s: float = 120.0       # drop remembered entities unseen for this long

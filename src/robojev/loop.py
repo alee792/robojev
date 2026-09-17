@@ -182,6 +182,7 @@ class Loop:
 
     def set_task(self, text: str):
         self.task = text.strip()
+        self.brain.reset_task()
         self.event("task", text=self.task)
 
     def stop(self, reason="operator STOP"):
@@ -220,7 +221,7 @@ class Loop:
         world = build_world(self.cfg, snap, entities, in_view, self.per.table_z, self.task, self.orders, self.brain.state(), now)
         self._world = world
         state = render(self.cfg, world)
-        questions = self.qmod.build(self.cfg, world)
+        questions = (self.qmod.build(self.cfg, world, self.brain) if self.qmod.VERSION != "v0" else self.qmod.build(self.cfg, world))
         self.last_state, self.last_questions = state, questions
         self.log.write("ticks", tick=self.tick, obs={"ee": snap.ee, "gripper": snap.gripper, "ext_force": snap.ext_force,
                                                       "status": snap.status, "frozen": snap.frozen,
@@ -239,11 +240,13 @@ class Loop:
                 self.stats.skipped += 1
                 self.log.write("answers", tick=self.tick, outcome="skipped_in_flight")
         # compose every tick, whether or not anything new arrived
-        goal, cap, reason = self.brain.compose(world, now)
+        goal, cap, gripper, reason = self.brain.compose(world, now)
         self.last_reason = reason
         if snap.status in ("live", "frozen", "baselining"):
-            self.arm.command(goal, cap)
-        self.log.write("commands", tick=self.tick, goal=goal, speed_cap=cap, reason=reason, ladder=self.brain.state()["ladder"])
+            self.arm.command(goal, cap, gripper)
+        self.log.write("commands", tick=self.tick, goal=goal, speed_cap=cap, gripper=gripper, reason=reason,
+                       ladder=self.brain.state()["ladder"], prim=self.brain.prim, prim_status=self.brain.prim_status,
+                       offered=self.brain.offered_keys)
 
     async def _ask(self, tag: int, state, questions, world):
         res = await self.jev.ask(tag, state, questions)
@@ -285,6 +288,7 @@ class Loop:
             "brain": self.brain.state(), "reason": self.last_reason,
             "judgments": {k: j.__dict__ for k, j in self.brain.judgments.items()},
             "entities": [e.__dict__ | {"xyz": list(e.xyz)} for e in (w.entities if w else [])],
+            "offered": self.brain.offered_keys,
             "perception": self.per.info | {"fps": round(self.per.fps, 1), "table_z": self.per.table_z},
             "stats": self.stats.view(), "in_flight": len(self.in_flight),
             "orders": self.orders, "task": self.task, "events": self.events[-15:],

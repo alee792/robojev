@@ -45,6 +45,7 @@ class EntityView:
     last_seen_s: float
     speed_mps: float
     reachable: bool
+    width_m: float = 0.08
 
 
 @dataclass
@@ -63,6 +64,11 @@ class World:
     ladder: str                           # "fresh" | "hold" | "rise"
     recent: list[str] = field(default_factory=list)
     avoiding: str | None = None
+    gripper_state: str = "open"          # open | closed | closed on something | moving
+    holding_label: str | None = None
+    above_label: str | None = None
+    prim: dict = field(default_factory=dict)   # current primitive: name, subject, status, age, last_result
+    place: str | None = None
 
     def entity(self, label: str) -> EntityView | None:
         for e in self.entities:
@@ -101,9 +107,28 @@ def build_world(cfg: Config, arm: ArmSnapshot, entities: list[Entity], in_view_f
         bearing = math.degrees(math.atan2(dy, dx))
         reach = cfg.workspace.contains((e.xyz[0], e.xyz[1], cfg.workspace.z[0] + 0.001), margin=0.0)
         views.append(EntityView(e.id, e.label(), e.describe(), (float(e.xyz[0]), float(e.xyz[1]), float(e.xyz[2])),
-                                horiz, bearing, e.height, in_view_fn(e, now), now - e.last_seen, e.velocity(), reach))
+                                horiz, bearing, e.height, in_view_fn(e, now), now - e.last_seen, e.velocity(), reach, e.width))
     views.sort(key=lambda v: v.horizontal_m)
+    # phase facts, all from code
+    w_ = arm.gripper
+    if arm.holding:
+        gripper_state = "closed on something"
+    elif w_ > 0.03:
+        gripper_state = "open"
+    elif w_ < 0.008:
+        gripper_state = "closed"
+    else:
+        gripper_state = "moving" if arm.gripper_goal is not None and abs(arm.gripper_goal - w_) > 0.006 else "partly open"
+    nearest = min(views, key=lambda v: v.horizontal_m) if views else None
+    above = nearest.label if nearest and nearest.horizontal_m < 0.025 else None
+    holding_label = None
+    if arm.holding:
+        # the held object is the one riding with the gripper (its track sits under the EE)
+        holding_label = brain_state.get("held") or (nearest.label if nearest and nearest.horizontal_m < 0.05 else "an object")
     return World(now, arm, views, table_z, user_task, orders, brain_state.get("target"), brain_state.get("motion", "hold"),
                  brain_state.get("hover_position", "directly_above"), brain_state.get("hover_height", "high"),
                  brain_state.get("speed_name", "slow"), brain_state.get("ladder", "fresh"), brain_state.get("recent", []),
-                 brain_state.get("avoid"))
+                 brain_state.get("avoid"), gripper_state, holding_label, above,
+                 {"name": brain_state.get("prim"), "subject": brain_state.get("prim_subject"), "status": brain_state.get("prim_status"),
+                  "age_s": brain_state.get("prim_age"), "last_result": brain_state.get("last_result")},
+                 brain_state.get("place"))

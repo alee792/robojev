@@ -81,4 +81,5 @@ def _rebuild(qmod, cfg, t):
     orders = [] if st["standing_orders"] == ["(none)"] else st["standing_orders"]
     task = "" if st["user_request"]["text"] == "(none yet)" else st["user_request"]["text"]
     w = build_world(cfg, snap, ents, lambda e, now: True, o["table_z"], task, orders, t.get("brain", {}), t["t"])
-    return qmod.build(cfg, w)
+    from robojev.brain import Brain
+    return qmod.build(cfg, w, Brain(cfg)) if qmod.VERSION != 'v0' else qmod.build(cfg, w)

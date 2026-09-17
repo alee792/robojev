@@ -88,7 +88,10 @@ class SimArm:
         self.mocap = {name: mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_BODY, name) for name, *_ in OBJECTS}
         self.R_target = rot_y(cfg.motion.down_orientation[1])
         self.mover = Mover(cfg.workspace, cfg.motion.hard_speed_cap)
-        self.gripper_goal = 0.044
+        self.gripper_goal = 0.044     # sim ctrl units (0.022 closed .. 0.044 open)
+        self.gripper_cmd = 0.04       # real units (0 .. 0.04)
+        self.attached = None          # object name held (kinematic attach: the fingers have no collision geoms)
+        self.half_h = {name: (size[1] if kind == "cylinder" else size[2]) for name, kind, _, size, _ in OBJECTS}
         self.lock = threading.Lock()          # guards data for renders
         self._snap = ArmSnapshot(time.time(), (0, 0, 0), 0.044, status="init")
         self._stop = threading.Event()
@@ -181,10 +184,27 @@ class SimArm:
                     mj.mj_step(self.model, self.data)
                     n += 1
                     p, R = self.ee()
+                    width = float(np.clip((self.data.qpos[self.grip_q] - 0.022) / 0.022 * 0.04, 0.0, 0.04))
+                    # grasp model: closing with an object between the fingers attaches it to the EE;
+                    # opening releases it onto the table where it is
+                    if self.attached is None and self.gripper_cmd < 0.01 and width < 0.03:
+                        for name, bid in self.mocap.items():
+                            mid = self.model.body_mocapid[bid]; op = self.data.mocap_pos[mid]
+                            if math.hypot(op[0] - p[0], op[1] - p[1]) < 0.035 and abs(op[2] - p[2]) < 0.05:
+                                self.attached = name; self._event(f"grasped {name}"); break
+                    if self.attached is not None:
+                        mid = self.model.body_mocapid[self.mocap[self.attached]]
+                        if self.gripper_cmd > 0.03:
+                            self.data.mocap_pos[mid][2] = TABLE_Z + self.half_h[self.attached]
+                            self._event(f"released {self.attached}"); self.attached = None
+                        else:
+                            self.data.mocap_pos[mid][:] = [p[0], p[1], p[2]]
+                    holding = self.attached is not None and width < 0.03
                     # contact force on the arm approximated as zero (mocap objects do not collide)
                     lag = math.dist(p, sp) if sp is not None else 0.0
-                    self._snap = ArmSnapshot(time.time(), tuple(float(v) for v in p), float(self.data.qpos[self.grip_q]),
+                    self._snap = ArmSnapshot(time.time(), tuple(float(v) for v in p), width,
                                              joints=tuple(float(v) for v in self.data.qpos[self.qadr]), setpoint=sp or tuple(p),
+                                             holding=holding, gripper_goal=self.gripper_cmd,
                                              goal=self.mover.goal or tuple(p), speed_cap=self.mover.speed_cap,
                                              frozen=self.mover.frozen, status="frozen" if self.mover.frozen else "live",
                                              rot=R_to_angle_axis(R))
@@ -206,7 +226,8 @@ class SimArm:
     def command(self, goal, speed_cap, gripper=None):
         self.mover.set_goal(goal, speed_cap)
         if gripper is not None:
-            self.gripper_goal = 0.022 + max(0.0, min(0.04, gripper)) * (0.022 / 0.04)
+            self.gripper_cmd = max(0.0, min(0.04, float(gripper)))
+            self.gripper_goal = 0.022 + self.gripper_cmd * (0.022 / 0.04)
 
     def freeze(self, reason):
         self.mover.freeze(reason); self._event(f"freeze: {reason}")
