@@ -121,8 +121,19 @@ def calibrate_cmd(args, cfg):
     from robojev.perception.memory import Tracker
     from robojev.perception import calibrate
     wrist, over = CamClient(args.camserver), CamClient(args.overhead)
-    arm = RealArmReadOnly(cfg)
-    arm.start()
+    if args.survey:
+        # move to the survey pose (camera looking across the table) and hold there: from the parked
+        # pose the wrist camera sees little of the table
+        from robojev.arm.real import RealArm
+        arm = RealArm(cfg)
+        arm.start()
+        t_wait = time.time()
+        while arm.snapshot().status != "live" and time.time() - t_wait < 30:
+            time.sleep(0.2)
+        print("arm at the survey pose:", arm.snapshot().status)
+    else:
+        arm = RealArmReadOnly(cfg)
+        arm.start()
     try:
         time.sleep(0.5)
         det = Detector(Intrinsics(wrist.info))
@@ -179,6 +190,8 @@ def main(argv=None):
     c.add_argument("--overhead", default="http://127.0.0.1:8766")
     c.add_argument("--out", default="overhead_calib.json")
     c.add_argument("--seconds", type=float, default=3.0, help="how long to accumulate wrist detections")
+
+    c.add_argument("--survey", action="store_true", help="drive the arm to the survey pose first (it moves!), park after")
     p = sub.add_parser("replay")
     p.add_argument("run_dir")
     p.add_argument("--questions", default=None)

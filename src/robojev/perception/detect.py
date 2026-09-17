@@ -109,7 +109,10 @@ class Detector:
     def run(self, color: np.ndarray, depth_m: np.ndarray, pose6, holding: bool = False) -> tuple[list[Detection], dict]:
         pts_opt, uv = self.intr.deproject(depth_m, self.stride)
         # D405 valid range ~0.07..0.5+ m; drop far/noisy points
-        m = (pts_opt[:, 2] > 0.07) & (pts_opt[:, 2] < 1.0)
+        # the D405's minimum range is ~7 cm and the open finger pads sit 8 cm from it: their depth
+        # smears along the rays into 16 cm 'objects' beside the gripper (survey calibration, run 15).
+        # Nothing we care about is ever closer than 11 cm.
+        m = (pts_opt[:, 2] > 0.11) & (pts_opt[:, 2] < 1.0)
         pts_opt, uv = pts_opt[m], uv[m]
         R, t = self.extrinsic(pose6)
         P = pts_opt @ R.T + t
