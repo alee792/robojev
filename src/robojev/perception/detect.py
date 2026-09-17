@@ -11,7 +11,7 @@ from dataclasses import dataclass
 import cv2
 import numpy as np
 
-from robojev.perception.geometry import Intrinsics, cam_to_base
+from robojev.perception.geometry import angle_axis_to_R, Intrinsics, cam_to_base
 
 
 @dataclass
@@ -114,6 +114,9 @@ class Detector:
         R, t = self.extrinsic(pose6)
         P = pts_opt @ R.T + t
         ee = np.asarray(pose6[:3], float)
+        axis = R[:, 2]                                   # optical axis in base frame
+        oblique = bool(self.finger_mask and axis[2] > -0.82)   # more than ~35 deg off vertical: a side view
+        look_u = axis[:2] / max(1e-6, float(np.hypot(*axis[:2])))
         if holding:
             # the carried object rides with the gripper; code knows where it is, and its points must
             # not pollute other tracks (it dragged the phone's track 4 cm in pick-and-place run 2)
@@ -122,9 +125,16 @@ class Detector:
             carried = (np.hypot(P[:, 0] - ee[0], P[:, 1] - ee[1]) < 0.07) & (P[:, 2] > ee[2] - 0.12)
             P, uv = P[~carried], uv[~carried]
         if self.finger_mask:
-            # the fingers hang from the flange down to the EE point: a column above ee_z.
-            # (a sphere around the EE also deleted the target under the gripper - sim run 1)
-            fingers = (np.abs(P[:, 0] - ee[0]) < 0.055) & (np.abs(P[:, 1] - ee[1]) < 0.055) & (P[:, 2] > ee[2] - 0.03)
+            # the fingers, gripper body and wrist lie along the tool axis behind the fingertips
+            # (the EE point): mask a cylinder from 2 cm ahead of the tips to 22 cm behind them.
+            # Pointing down this is the old column above the EE; tilted for a side grasp it is the
+            # slanted body that showed up as three "black cup-like objects" (real run 4).
+            # Nothing ahead of the tips is masked, so a target under or in front of the gripper stays.
+            d = angle_axis_to_R(pose6[3:6])[:, 0]
+            v = P - ee
+            along = v @ d
+            perp = np.linalg.norm(v - np.outer(along, d), axis=1)
+            fingers = (along > -0.22) & (along < 0.02) & (perp < 0.065)
             P, uv = P[~fingers], uv[~fingers]
         else:
             # a fixed camera sees the whole arm: mask the base column and everything at or above
@@ -178,6 +188,20 @@ class Detector:
             top = float(np.percentile(hh, 95))
             base_z = float(cx * 0 + (self.table_z if self.table_z is not None else -(self.last_plane[1] + self.last_plane[0][0] * cx + self.last_plane[0][1] * cy) / self.last_plane[0][2]))
             spread = np.percentile(np.hypot(pts[:, 0] - cx, pts[:, 1] - cy), 90) * 2
+            if oblique:
+                # looking across the table, a blob's points are its near wall plus the inside of its
+                # far wall: the centroid drifts away from the camera as the camera comes closer
+                # (the cup "moved" 5 cm ahead of the advancing gripper, real run 4). The near edge
+                # and the width across the view are what the camera measures well: place the
+                # centre one half-width behind the near edge, along the look direction.
+                along = pts[:, :2] @ look_u
+                across = pts[:, 0] * look_u[1] - pts[:, 1] * look_u[0]
+                width_across = float(np.percentile(across, 95) - np.percentile(across, 5))
+                near = float(np.percentile(along, 5))
+                mid_across = float(np.median(across))
+                c = near + width_across / 2
+                cx, cy = float(c * look_u[0] - mid_across * look_u[1]), float(c * look_u[1] + mid_across * look_u[0])
+                spread = width_across
             u0, v0 = int(px[:, 0].mean()), int(px[:, 1].mean())
             margin = 3 * self.stride
             partial = bool(px[:, 0].min() < margin or px[:, 1].min() < margin
