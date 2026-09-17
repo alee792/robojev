@@ -87,7 +87,7 @@ class SimArm:
         self.grip_q = m.jnt_qposadr[mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_JOINT, "left_carriage_joint")]
         self.lo = np.array([m.jnt_range[j][0] for j in jids]); self.hi = np.array([m.jnt_range[j][1] for j in jids])
         self.mocap = {name: mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_BODY, name) for name, *_ in OBJECTS}
-        self.R_target = rot_y(cfg.motion.down_orientation[1])
+        self.R_target = rot_y(cfg.motion.hover_pitch)
         self.mover = Mover(cfg.workspace, cfg.motion.hard_speed_cap, cfg.motion.pitch_rate)
         self.gripper_goal = 0.044     # sim ctrl units (0.022 closed .. 0.044 open)
         self.gripper_cmd = 0.04       # real units (0 .. 0.04)
@@ -155,7 +155,7 @@ class SimArm:
             self.data.qvel[:] = 0
             mj.mj_forward(self.model, self.data)
             p, R = self.ee()
-            self.mover.init_at(tuple(p), self.cfg.motion.down_orientation[1])
+            self.mover.init_at(tuple(p), self.cfg.motion.hover_pitch)
             self._event(f"sim staged at {[round(v, 3) for v in p]} (asked {[round(v, 3) for v in start]}, miss {1000*math.dist(p, start):.0f} mm)")
         self._thread = threading.Thread(target=self._run, daemon=True, name="sim")
         self._thread.start()

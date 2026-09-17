@@ -53,6 +53,7 @@ class Motion:
     pitch_rate: float = 0.6               # rad/s: how fast the wrist pitch setpoint may change
     gripper_opening: float = 0.08         # m between the pads fully open (two 4 cm carriages)
     side_grasp_min_width: float = 0.045   # objects at least this wide are grasped from the side, not from above
+    hover_pitch: float = 0.5              # staging/hover wrist pitch: the camera surveys the table instead of the patch under the fingers
     side_pitch: float = 0.5               # rad below level for a side grasp: fully level is unreachable low over the table (sim IK map), 0.5 is solid everywhere
     side_standoff: float = 0.06           # approach point: this far behind the object's near edge, wrist level
     side_grasp_height: float = 0.045      # fingertips this far above the table for a side grasp (a tapered cup is narrowest low down)

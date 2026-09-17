@@ -78,11 +78,12 @@ class RealArm:
         # never starts from a pose whose orientation differs from the streamed one.
         start = list(self.cfg.motion.hover_start) + [self.cfg.table_z + self.cfg.motion.safe_height]
         start = list(self.cfg.workspace.clamp(start))
-        self.driver.set_cartesian_positions(start + list(self.cfg.motion.down_orientation),
+        survey = [0.0, self.cfg.motion.hover_pitch, 0.0]
+        self.driver.set_cartesian_positions(start + survey,
                                             trossen_arm.InterpolationSpace.joint, 4.0, True)
         pose = list(self.driver.get_cartesian_positions())
-        self.mover.init_at(pose[:3], self.cfg.motion.down_orientation[1])
-        want = list(self.cfg.motion.down_orientation)
+        self.mover.init_at(pose[:3], self.cfg.motion.hover_pitch)
+        want = survey
         got = pose[3:6]
         miss = math.dist(start, pose[:3]); rmiss = math.dist(want, got)
         self._event(f"hover start at {[round(v, 3) for v in pose[:3]]} rot {[round(v, 2) for v in got]}"

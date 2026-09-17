@@ -12,7 +12,7 @@ class FakeArm:
     def __init__(self, cfg: Config, start_at=(0.25, 0.0, 0.20), rate_hz: float = 100.0):
         self.cfg = cfg
         self.mover = Mover(cfg.workspace, cfg.motion.hard_speed_cap, cfg.motion.pitch_rate)
-        self.mover.init_at(start_at, cfg.motion.down_orientation[1])
+        self.mover.init_at(start_at, cfg.motion.hover_pitch)
         self.gripper = 0.04
         self.rate = rate_hz
         self._stop = threading.Event()
