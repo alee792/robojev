@@ -7,7 +7,7 @@ lets the loop go idle. Still one request per tick, still text only.
 from __future__ import annotations
 
 from robojev.config import Config
-from robojev.skills import PLACE_WORDS, offered
+from robojev.skills import PLACE_WORDS, offered, SHIFT_WORDS
 from robojev.world import World
 
 VERSION = "v1"
@@ -30,6 +30,8 @@ def build(cfg: Config, w: World, brain=None) -> dict:
     place_opts = {"unspecified": "the request does not say where to put the object, or it is not a moving task",
                   "where_it_was": "back where the object was picked up",
                   "where_it_was_set_down": "back to the spot where the robot itself set an object down earlier (the request says to put it back after someone moved it)"}
+    for k, words in SHIFT_WORDS.items():
+        place_opts[k] = words
     for l in labels:
         if l == tgt:
             continue

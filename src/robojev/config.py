@@ -45,6 +45,7 @@ class Motion:
     evade_min_s: float = 0.6              # an evade holds at least this long before it can clear
     carry_height: float = 0.12            # above the table while carrying (base z 0.10: well inside the reachable envelope)
     grasp_fraction: float = 0.5           # grasp at this fraction of the object's height
+    shift_distance: float = 0.15          # how far a 'move it to the left/right/away/closer' place is from the pickup spot
     place_gap: float = 0.04               # clearance between a placed object and its reference object
     gripper_settle_s: float = 1.0         # wait after a gripper command before judging the result
     primitive_timeout_s: float = 10.0     # a primitive that has not finished by then is reported failed

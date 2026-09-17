@@ -150,7 +150,7 @@ class Brain:
         self.prim_started_t, self.prim_status = time.time(), "running"
         self.prim_active_s = 0.0
         self.prim_budget_s = 0.0
-        if name == "descend_to_grasp":
+        if name in ("descend_to_grasp", "advance_to_grasp"):
             e = world.entity(subj)
             self.origin_xy = tuple(e.xyz[:2]) if e else None
         if name == "close_gripper":

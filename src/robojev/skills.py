@@ -17,6 +17,9 @@ SAFETY = {"hold": "stay where it is", "back_off": "move horizontally away from t
           "rise_away": "go up, away from the table and everything on it"}
 
 PLACE_RELATIONS = {"left_of": (0.0, 1.0), "right_of": (0.0, -1.0), "in_front_of": (-1.0, 0.0), "behind": (1.0, 0.0)}
+SHIFTS = {"shift_left": (0.0, 1.0), "shift_right": (0.0, -1.0), "shift_away": (1.0, 0.0), "shift_closer": (-1.0, 0.0)}
+SHIFT_WORDS = {"shift_left": "a short way to the robot's left of where it was picked up", "shift_right": "a short way to the robot's right of where it was picked up",
+               "shift_away": "a short way further from the robot than where it was picked up", "shift_closer": "a short way closer to the robot than where it was picked up"}
 PLACE_WORDS = {"left_of": "to the robot's left of", "right_of": "to the robot's right of",
                "in_front_of": "in front of (between the robot and)", "behind": "behind (further from the robot than)"}
 
@@ -80,6 +83,13 @@ def resolve_place(cfg: Config, w: World, place: str | None, origin_xy, last_set_
         return tuple(origin_xy) if origin_xy else None
     if place == "where_it_was_set_down":
         return tuple(last_set_down_xy) if last_set_down_xy else None
+    if place in SHIFTS:
+        if not origin_xy:
+            return None
+        dx, dy = SHIFTS[place]
+        x, y = origin_xy[0] + dx * cfg.motion.shift_distance, origin_xy[1] + dy * cfg.motion.shift_distance
+        cx, cy, _ = cfg.workspace.clamp((x, y, cfg.workspace.z[0] + 0.001))
+        return (cx, cy) if math.hypot(cx - origin_xy[0], cy - origin_xy[1]) > 0.06 else None
     rel, _, label = place.partition(":")
     e = w.entity(label)
     if e is None or rel not in PLACE_RELATIONS:
