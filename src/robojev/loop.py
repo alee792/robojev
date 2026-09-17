@@ -114,7 +114,8 @@ class Perception(threading.Thread):
                     self.table_z = float(np.median(self._table_samples))
                 with self.lock:
                     closing = snap.gripper_goal is not None and snap.gripper_goal < 0.02
-                    self.tracker.update(dets, t, carried_xy=(snap.ee[:2] if (self.cameras and (snap.holding or closing)) else None))
+                    self.tracker.update(dets, t, carried_xy=(snap.ee[:2] if (self.cameras and (snap.holding or closing)) else None),
+                                        ee_xy=(snap.ee[:2] if self.cameras else None))
                     if self.cameras and self.held_label and snap.holding:
                         self.tracker.pin(self.held_label, snap.ee[:2], t)
                     if self.vlm is not None:

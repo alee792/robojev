@@ -92,7 +92,7 @@ class Tracker:
         self._n = 0
         self.names: dict[str, str] = {}
 
-    def update(self, dets: list[Detection], now: float | None = None, carried_xy=None) -> None:
+    def update(self, dets: list[Detection], now: float | None = None, carried_xy=None, ee_xy=None) -> None:
         """`carried_xy`: the gripper position while it holds something; detections there are the
         carried object leaking past the mask and must not become new tracks (run 6: a phantom 2 cm
         from the gripper made the policy flee into a corner)."""
@@ -111,7 +111,10 @@ class Tracker:
             if np.hypot(d.base_xyz[0] - e.xyz[0], d.base_xyz[1] - e.xyz[1]) <= self.match_radius:
                 unmatched.remove(d)
                 a = self.ema
-                if (e.frozen and d.width > 1.6 * e.width) or d.partial:
+                near_gripper = ee_xy is not None and np.hypot(d.base_xyz[0] - ee_xy[0], d.base_xyz[1] - ee_xy[1]) < 0.15
+                if (e.frozen and d.width > 1.6 * e.width) or d.partial or (e.frozen and near_gripper):
+                    # ... and a view from right next to the gripper is too close and too oblique to
+                    # trust (it put a just-released cup 3 cm short and the pads closed on air: real run 11)
                     a = 0.0   # a merged or partial blob confirms the object is there but says nothing about where
                               # (0.1 per frame at 10 Hz converged on the biased centre in ~2 s)
                 e.xyz = a * np.asarray(d.base_xyz) + (1 - a) * e.xyz

@@ -40,7 +40,7 @@ h2.sec{margin-top:14px}
  font-size:var(--sm);border-top:1px solid var(--line);padding-top:8px}
 
 /* panels -------------------------------------------------------------------- */
-main{display:grid;grid-template-columns:minmax(280px,0.9fr) minmax(420px,1.6fr) minmax(280px,1fr);
+main{display:grid;grid-template-columns:minmax(280px,0.85fr) minmax(420px,1.9fr) minmax(260px,0.95fr);
  gap:12px;padding:12px;align-items:start}
 #bottom{padding:0 12px 12px}
 @media(max-width:1180px){main{grid-template-columns:1fr}}
@@ -61,7 +61,7 @@ input,textarea{width:100%;font-family:inherit;font-size:var(--sm);background:#0b
 /* tables -------------------------------------------------------------------- */
 table{border-collapse:collapse;width:100%;font-size:var(--sm)}
 th{text-align:left;font-weight:600;color:var(--muted);padding:4px 6px;border-bottom:1px solid var(--line);white-space:nowrap}
-td{padding:4px 6px;vertical-align:top;border-bottom:1px solid var(--sep);word-break:break-word}
+td{padding:4px 6px;vertical-align:top;border-bottom:1px solid var(--sep);overflow-wrap:anywhere}
 .dist{display:flex;flex-direction:column;gap:2px;width:150px}
 .tw{overflow-x:auto}
 td.nw{white-space:nowrap}
@@ -135,11 +135,12 @@ summary{cursor:pointer;font-size:var(--sm);color:var(--muted)}
  <div class=card><h2>Brain</h2><div id=brain></div></div>
  <div class=card><h2>Jev</h2><div id=stats class=muted></div><canvas id=spark width=300 height=40></canvas></div>
  <div class=card><h2>Events</h2><pre id=ev></pre></div>
- <div class=card><h2>Objects (base frame, metres)</h2><table id=ent></table></div>
 </section>
 </main>
 
-<section id=bottom><div class=card>
+<section id=bottom>
+<div class=card><h2>Objects (base frame, metres)</h2><table id=ent></table></div>
+<div class=card>
  <h2>Graph</h2>
  <svg id=graph viewBox="0 0 1200 400" preserveAspectRatio="xMidYMid meet">
  <defs><marker id=arrow markerWidth=8 markerHeight=8 refX=7 refY=4 orient=auto><path d="M0,0 L8,4 L0,8 z" fill="#78859c"/></marker>
@@ -281,9 +282,9 @@ let h='<tr><th>Question</th><th>Pick</th><th>p / conf</th><th>Status</th><th>Age
 for(const k in js){const q=js[k];
   const ps=Object.entries(q.probabilities||{}).sort((x,y)=>y[1]-x[1]).slice(0,5);
   const d=ps.map(([o,p])=>`<div class=d>${bar(p)}<span class="o ${o==q.chosen?'ch':''}">${esc(o)}</span><span class=muted>${num(p,2)}</span></div>`).join('');
-  h+=`<tr><td>${esc(k)}</td><td class=ch>${esc(txt(q.chosen))}</td>`+
+  h+=`<tr><td class=nw>${esc(k)}</td><td class=ch>${esc(txt(q.chosen))}</td>`+
      `<td>${num(q.p,2)}${q.confidence!=null?' / '+num(q.confidence,2):''}</td>`+
-     `<td class=${statusClass(q.applied)}>${esc(txt(q.applied))}</td>`+
+     `<td class="nw ${statusClass(q.applied)}">${esc(txt(q.applied))}</td>`+
      `<td class=nw>${num(q.age_ms,0,' ms')}</td><td><div class=dist>${d}</div></td></tr>`}
 g('j').innerHTML=h;
 g('graphc').innerHTML=buildGraph(s);
