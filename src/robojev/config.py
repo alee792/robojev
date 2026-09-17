@@ -35,7 +35,7 @@ class Motion:
     speed_names: tuple[str, ...] = ("very slow", "slow", "normal", "fast")
     hard_speed_cap: float = 0.10          # never exceeded whatever Jev says
     hover_heights: dict = field(default_factory=lambda: {"low": 0.10, "high": 0.16})  # above table plane
-    safe_height: float = 0.20             # rise here on ladder step 2 / effort trip
+    safe_height: float = 0.18             # rise here on ladder step 2 / effort trip
     object_clearance: float = 0.05        # z floor while moving = tallest object + this
     hover_start: tuple[float, float] = (0.28, 0.0)  # xy where streaming begins after staging
     standoff: float = 0.08                # lateral offset for hover_position != directly_above

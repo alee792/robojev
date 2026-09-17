@@ -18,7 +18,7 @@ args = ap.parse_args()
 cfg = DEFAULT
 z = cfg.table_z + cfg.motion.safe_height
 x0, y0 = cfg.motion.hover_start
-corners = [(x0 + args.side, y0, z), (x0 + args.side, y0 + args.side, z), (x0, y0 + args.side, z), (x0, y0, z)]
+corners = [cfg.workspace.clamp(c) for c in [(x0 + args.side, y0, z), (x0 + args.side, y0 + args.side, z), (x0, y0 + args.side, z), (x0, y0, z)]]
 print("plan: stage -> hover start", (x0, y0, round(z, 3)), "-> square", [tuple(round(v, 3) for v in c) for c in corners], f"at {args.speed*100:.0f} cm/s -> park")
 print("workspace", cfg.workspace, "\nwatchdog trip", cfg.safety.effort_trip_n, "N")
 if not args.go:
