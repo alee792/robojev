@@ -71,6 +71,7 @@ class World:
     above_label: str | None = None
     prim: dict = field(default_factory=dict)   # current primitive: name, subject, status, age, last_result
     place: str | None = None
+    placed: tuple | None = None                 # (label, place, t) once an object has been put down at the place
 
     def entity(self, label: str) -> EntityView | None:
         for e in self.entities:
@@ -137,4 +138,4 @@ def build_world(cfg: Config, arm: ArmSnapshot, entities: list[Entity], in_view_f
                  brain_state.get("avoid"), (now - loop_start) if loop_start else 999.0, gripper_state, holding_label, above,
                  {"name": brain_state.get("prim"), "subject": brain_state.get("prim_subject"), "status": brain_state.get("prim_status"),
                   "age_s": brain_state.get("prim_age"), "last_result": brain_state.get("last_result")},
-                 brain_state.get("place"))
+                 brain_state.get("place"), brain_state.get("placed"))

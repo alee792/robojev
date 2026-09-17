@@ -75,6 +75,8 @@ def render(cfg: Config, w: World) -> dict:
             "current_primitive": (f"{w.prim['name']}" + (f" {w.prim['subject']}" if w.prim.get('subject') else "")
                                   + f" ({w.prim['status']}, {w.prim['age_s'] or 0:.1f} s)") if w.prim.get("name") else "none",
             "last_result": w.prim.get("last_result") or "none yet",
+            "completed_so_far": (f"{w.placed[0]} was picked up and put down at {w.placed[1]} {w.t - w.placed[2]:.0f} s ago"
+                                 if w.placed else "nothing placed yet"),
             "state": "frozen by the safety layer" if w.arm.frozen else ("holding (no fresh decisions)" if w.ladder != "fresh" else "operating"),
         },
         "objects": objects,

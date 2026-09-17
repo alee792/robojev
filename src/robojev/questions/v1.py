@@ -51,7 +51,7 @@ def build(cfg: Config, w: World, brain=None) -> dict:
         "type": "choice",
         "instructions": {
             "question": f"The user's request is `user_request.text`. Given `arm` (what the gripper holds, what it is above, the current primitive and its last result) and the standing orders, which primitive should run next?",
-            "rules": "Only feasible primitives are listed. A pick-and-place goes: move above the object, descend to grasp, close gripper, lift, move to place, lower to place, open gripper, retreat. If the request is complete, or nothing useful can be done, choose hold. If a primitive just failed, choose what recovers (e.g. open the gripper and try again).",
+            "rules": "Only feasible primitives are listed. A pick-and-place goes: move above the object, descend to grasp, close gripper, lift, move to place, lower to place, open gripper, retreat. If `arm.completed_so_far` shows the request has been carried out, choose retreat if the gripper is still low, otherwise hold; do not start the task again. If a primitive just failed, choose what recovers (e.g. open the gripper and try again).",
         },
         "criteria": dict(next_criteria),
     }
@@ -97,7 +97,7 @@ def build(cfg: Config, w: World, brain=None) -> dict:
     }
     q["task_done"] = {
         "type": "noul",
-        "instructions": "Has the user's request (`user_request.text`) been completed, judging by `arm` and `objects`?",
+        "instructions": "Has the user's request (`user_request.text`) been completed? Judge from `arm.completed_so_far`, `arm.holding` and `objects`. If the request asked to move or place an object and `arm.completed_so_far` says it was put down at the requested place, the request is complete.",
         "criteria": {"true": "everything the request asked for has happened (e.g. the object has been placed and released where asked)",
                      "false": "something the request asked for has not happened yet, or there is no request"},
     }

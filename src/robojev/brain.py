@@ -57,6 +57,8 @@ class Brain:
         self.place: str | None = None
         self.origin_xy = None                    # where the held object was picked up
         self.held: str | None = None             # label of the object we closed on
+        self.placed: tuple[str, str, float] | None = None   # (label, place, t) after a release at the place
+        self.prev_prim: str | None = None
         self.done = False
         self.last_applied_t: float | None = None
         self.last_applied_tag = -1
@@ -86,6 +88,7 @@ class Brain:
     def reset_task(self):
         self.done = False
         self.place = None
+        self.placed = None
         self._streak.pop("task_done", None)
         self._note("new request")
 
@@ -128,10 +131,12 @@ class Brain:
                 "answer_age_s": age, "fresh_age_s": fresh_age, "recent": list(self.recent),
                 "prim": self.prim, "prim_subject": self.prim_subject, "prim_status": self.prim_status,
                 "prim_age": (now - self.prim_started_t) if self.prim_started_t else None,
-                "last_result": self.last_result, "place": self.place, "held": self.held, "done": self.done}
+                "last_result": self.last_result, "place": self.place, "held": self.held, "done": self.done,
+                "placed": self.placed}
 
     def _start(self, key: str, world: World):
         name, _, subj = key.partition(":")
+        self.prev_prim = self.prim
         self.prim, self.prim_subject = name, (subj or None)
         self.prim_started_t, self.prim_status = time.time(), "running"
         if name == "descend_to_grasp":
@@ -387,6 +392,9 @@ class Brain:
                 if self.prim == "close_gripper" and world.holding_label:
                     self.last_result = f"grasped {world.holding_label}"
                 if self.prim == "open_gripper":
+                    if self.held and self.prev_prim in ("lower_to_place", "set_down_here"):
+                        self.placed = (self.held, self.place if self.prev_prim == "lower_to_place" else "right here", now)
+                        self.last_result = f"released {self.held} at {self.placed[1]}"
                     self.held = None
                 self._note(self.last_result)
             elif age > m.primitive_timeout_s and self.prim not in SAFETY_PRIMS:
