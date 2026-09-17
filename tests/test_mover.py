@@ -7,8 +7,10 @@ def test_mover_never_exceeds_cap_and_clamps():
     m.init_at((0.25, 0.0, 0.19))
     m.set_goal((0.9, 0.0, 0.2), speed_cap=0.5)  # outside box, cap above hard cap
     assert m.goal == (0.40, 0.0, 0.19)
-    sp = m.step(0.1)
-    assert abs(sp[0] - 0.26) < 1e-9  # 0.1 m/s * 0.1 s
+    sp = m.step(0.05)
+    assert abs(sp[0] - 0.255) < 1e-9  # 0.1 m/s * 0.05 s
+    sp = m.step(0.5)
+    assert abs(sp[0] - 0.2625) < 1e-9  # late tick clamped to 0.075 s
     for _ in range(100):
         sp = m.step(0.1)
     assert sp == (0.40, 0.0, 0.19)
