@@ -13,7 +13,7 @@ class Workspace:
     """Axis-aligned box in the arm base frame (+x forward, +y left, +z up) the EE may occupy."""
     # From the MuJoCo reachability map (2026-09-17, gripper pitched 75 deg): x 0.18-0.42 is solid
     # up to base z 0.20; straight-down (90 deg) only reaches z 0.15. Table is at base z ~ -0.02.
-    x: tuple[float, float] = (0.18, 0.40)
+    x: tuple[float, float] = (0.18, 0.44)
     y: tuple[float, float] = (-0.18, 0.18)
     z: tuple[float, float] = (0.05, 0.19)
 
