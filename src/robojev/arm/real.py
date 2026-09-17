@@ -44,6 +44,7 @@ class RealArm:
         self._snap = ArmSnapshot(time.time(), (0, 0, 0), 0.0, status="init")
         self.events = []  # (t, text) recent events for the dashboard
         self.last_step_m = 0.0
+        self.stream_orient = list(cfg.motion.down_orientation)
         self.max_step_m = 0.0   # largest setpoint delta ever sent in one tick (speed-cap evidence)
 
     @staticmethod
@@ -78,7 +79,18 @@ class RealArm:
                                             trossen_arm.InterpolationSpace.joint, 4.0, True)
         pose = list(self.driver.get_cartesian_positions())
         self.mover.init_at(pose[:3])
-        self._event(f"hover start at {[round(v, 3) for v in pose[:3]]} rot {[round(v, 2) for v in pose[3:]]}")
+        want = list(self.cfg.motion.down_orientation)
+        got = pose[3:6]
+        miss = math.dist(start, pose[:3]); rmiss = math.dist(want, got)
+        self._event(f"hover start at {[round(v, 3) for v in pose[:3]]} rot {[round(v, 2) for v in got]}"
+                    f" (asked {[round(v, 3) for v in start]}, miss {miss*1000:.0f} mm / {rmiss:.2f} rad)")
+        # stream the orientation the arm actually reached, never one it could not: fighting an
+        # unreachable orientation showed up as a 68 N phantom force on the first run
+        self.stream_orient = got if rmiss > 0.05 else want
+        if rmiss > 0.05:
+            self._event(f"WARNING: streaming the reached orientation {[round(v, 2) for v in got]} instead of {want}")
+        if miss > 0.02:
+            self._event(f"WARNING: hover start missed by {miss*1000:.0f} mm; pose may be unreachable")
         self.watchdog.reset()
         self._thread = threading.Thread(target=self._run, daemon=True, name="arm-io")
         self._thread.start()
@@ -111,7 +123,7 @@ class RealArm:
         import trossen_arm
         dt = 1 / self.cfg.motion.real_tick_hz
         goal_time = self.cfg.motion.real_goal_time
-        orient = list(self.cfg.motion.down_orientation)
+        orient = list(self.stream_orient)
         space = trossen_arm.InterpolationSpace.cartesian
         next_t = time.perf_counter()
         last = next_t
@@ -125,8 +137,8 @@ class RealArm:
                 if self.watchdog.tripped(dev) and not self.mover.frozen:
                     self.mover.freeze(f"external force deviation {dev:.1f} N")
                     self._event(f"FROZEN: force deviation {dev:.1f} N (baseline {self.watchdog.baseline})")
-                if self.watchdog.baseline is None:
-                    sp = self.mover.setpoint          # hold: nothing walks until we can watch forces
+                if self.watchdog.baseline is None or self.mover.frozen:
+                    sp = self.mover.setpoint          # hold: nothing is sent while baselining or frozen
                     last = now
                 else:
                     prev = self.mover.setpoint

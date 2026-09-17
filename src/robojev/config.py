@@ -11,9 +11,11 @@ from dataclasses import dataclass, field, asdict
 @dataclass(frozen=True)
 class Workspace:
     """Axis-aligned box in the arm base frame (+x forward, +y left, +z up) the EE may occupy."""
-    x: tuple[float, float] = (0.15, 0.42)
-    y: tuple[float, float] = (-0.22, 0.22)
-    z: tuple[float, float] = (0.06, 0.32)
+    # From the MuJoCo reachability map (2026-09-17, gripper pitched 75 deg): x 0.18-0.42 is solid
+    # up to base z 0.20; straight-down (90 deg) only reaches z 0.15. Table is at base z ~ -0.02.
+    x: tuple[float, float] = (0.18, 0.40)
+    y: tuple[float, float] = (-0.18, 0.18)
+    z: tuple[float, float] = (0.05, 0.19)
 
     def clamp(self, p):
         return (min(max(p[0], self.x[0]), self.x[1]),
@@ -32,13 +34,13 @@ class Motion:
     speed_levels: tuple[float, ...] = (0.01, 0.03, 0.06, 0.10)
     speed_names: tuple[str, ...] = ("very slow", "slow", "normal", "fast")
     hard_speed_cap: float = 0.10          # never exceeded whatever Jev says
-    hover_heights: dict = field(default_factory=lambda: {"low": 0.10, "high": 0.18})  # above table plane
-    safe_height: float = 0.22             # rise here on ladder step 2 / effort trip
+    hover_heights: dict = field(default_factory=lambda: {"low": 0.10, "high": 0.16})  # above table plane
+    safe_height: float = 0.20             # rise here on ladder step 2 / effort trip
     object_clearance: float = 0.05        # z floor while moving = tallest object + this
-    hover_start: tuple[float, float] = (0.25, 0.0)  # xy where streaming begins after staging
+    hover_start: tuple[float, float] = (0.28, 0.0)  # xy where streaming begins after staging
     standoff: float = 0.08                # lateral offset for hover_position != directly_above
     back_off_distance: float = 0.08       # how far back_off retreats from the target, horizontally
-    down_orientation: tuple[float, float, float] = (0.0, 1.5708, 0.0)  # angle-axis == rpy for pure pitch
+    down_orientation: tuple[float, float, float] = (0.0, 1.309, 0.0)  # 75 deg pitch: far larger reachable envelope than straight down (see reachability map)
     real_tick_hz: float = 20.0            # arm I/O thread rate (real)
     real_goal_time: float = 0.1           # per-command interpolation horizon (0.001..0.2 = linear)
     sim_physics_dt: float = 0.002
