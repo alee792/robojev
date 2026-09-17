@@ -34,6 +34,7 @@ class RealArm:
         self._driver_factory = driver_factory or self._default_factory
         self.log = log
         self.mover = Mover(cfg.workspace, cfg.motion.hard_speed_cap)
+        self._grip_mode = "position"
         self.pitch_ok = False   # True when the arm reached the staged orientation exactly: then pitch may be streamed
         self.watchdog = EffortWatchdog(cfg.safety.effort_trip_n, cfg.safety.effort_baseline_s, persist=cfg.safety.effort_persist_ticks)
         self._lag_over = 0
@@ -110,6 +111,12 @@ class RealArm:
         if self.driver is None:
             return
         self._set_status("parking")
+        import trossen_arm
+        try:
+            if self._grip_mode != "position":
+                self.driver.set_gripper_mode(trossen_arm.Mode.position); self._grip_mode = "position"
+        except Exception as e:
+            self._event(f"gripper mode reset failed: {e!r}")
         try:
             for goal_time, goal in PARK:
                 self.driver.set_all_positions(list(goal), goal_time, True)
@@ -163,13 +170,22 @@ class RealArm:
                     self.driver.set_cartesian_positions(list(sp) + orient, space, goal_time, False)
                 g = self._gripper_goal
                 if g is not None and g != self._gripper_sent:
-                    self.driver.set_gripper_position(float(g), 0.5, False)
+                    if g < 0.036:
+                        # close by force, not position: the fingers stop on the object and press with
+                        # grip_force_n instead of crushing a paper cup toward a position target
+                        if self._grip_mode != "effort":
+                            self.driver.set_gripper_mode(trossen_arm.Mode.external_effort); self._grip_mode = "effort"
+                        self.driver.set_gripper_external_effort(-abs(self.cfg.motion.grip_force_n), 0.3, False)
+                    else:
+                        if self._grip_mode != "position":
+                            self.driver.set_gripper_mode(trossen_arm.Mode.position); self._grip_mode = "position"
+                        self.driver.set_gripper_position(float(g), 0.5, False)
                     self._gripper_sent = g
                     self._gripper_t = time.perf_counter()
                 # holding: asked to close, and the fingers stopped well short of closed
                 g = self._gripper_goal
                 # holding: asked to close (to any target) and the fingers stopped short of it on something
-                holding = g is not None and g < 0.036 and joints[6] > g + 0.004 and (time.perf_counter() - self._gripper_t) > 0.5
+                holding = g is not None and g < 0.036 and joints[6] > 0.006 and (time.perf_counter() - self._gripper_t) > 0.5
                 with self._lock:
                     self._snap = ArmSnapshot(time.time(), tuple(pose[:3]), joints[6], joints=joints,
                                              ext_force=(fx, fy, fz), setpoint=sp or tuple(pose[:3]),

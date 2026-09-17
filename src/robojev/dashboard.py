@@ -11,7 +11,7 @@ PAGE = r"""<!doctype html><html><head><meta charset=utf-8><title>robojev</title>
 :root{
  --bg:#0e0f11;--panel:#16181b;--line:#282c31;--sep:#1e2126;--fg:#e7e9ec;--muted:#8a929b;
  --ok:#5fd08a;--warn:#e0a850;--bad:#ff6058;--pend:#d8d05a;--accent:#7f9ad6;
- --lg:26px;--md:15px;--sm:12px;
+ --lg:30px;--md:15px;--sm:12px;
  --font:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
 }
 *{box-sizing:border-box}
@@ -40,7 +40,7 @@ h2.sec{margin-top:14px}
  font-size:var(--sm);border-top:1px solid var(--line);padding-top:8px}
 
 /* panels -------------------------------------------------------------------- */
-main{display:grid;grid-template-columns:minmax(280px,0.85fr) minmax(420px,1.9fr) minmax(260px,0.95fr);
+main{display:grid;grid-template-columns:minmax(300px,1.15fr) minmax(420px,1.7fr) minmax(260px,0.8fr);
  gap:12px;padding:12px;align-items:start}
 #bottom{padding:0 12px 12px}
 @media(max-width:1180px){main{grid-template-columns:1fr}}
@@ -111,10 +111,10 @@ summary{cursor:pointer;font-size:var(--sm);color:var(--muted)}
  <div class=card>
   <h2>Wrist camera</h2>
   <img id=cam class="cam hidden" src="/frame.jpg"><div class="noframe muted" id=cam_no>No frame</div>
-  <h2 class=sec>Overhead camera</h2>
-  <img id=over class="cam hidden" src="/frame2.jpg"><div class="noframe muted" id=over_no>No frame</div>
-  <h2 class=sec>Third camera</h2>
-  <img id=third class="cam hidden" src="/third.jpg"><div class="noframe muted" id=third_no>No frame</div>
+  <div id=over_blk class=hidden><h2 class=sec>Overhead camera</h2>
+   <img id=over class="cam hidden" src="/frame2.jpg"><div class="noframe muted" id=over_no>No frame</div></div>
+  <div id=third_blk class=hidden><h2 class=sec>Third camera</h2>
+   <img id=third class="cam hidden" src="/third.jpg"><div class="noframe muted" id=third_no>No frame</div></div>
  </div>
  <div class=card><h2>Arm detail</h2><div class=kv id=armkv></div></div>
  <div class=card>
@@ -315,10 +315,11 @@ async function poll(){try{const r=await fetch('/api/snapshot');const s=await r.j
 function freshness(){const e=g('v_age');
  if(lastOk==null){e.textContent='waiting for the run';e.className='warn';return}
  const dt=(Date.now()-lastOk)/1000;e.textContent='updated '+dt.toFixed(1)+' s ago';e.className=dt>2?'bad':'muted'}
-// a camera endpoint with no frame answers with no image; hide the img instead of showing it broken.
-for(const id of ['cam','over','third']){const im=g(id),no=g(id+'_no');
- im.addEventListener('load',()=>{im.classList.remove('hidden');no.classList.add('hidden')});
- im.addEventListener('error',()=>{im.classList.add('hidden');no.classList.remove('hidden')})}
+// A camera endpoint with no frame answers with no image: hide the img instead of showing it broken.
+// The wrist block always stays, so a dropped wrist frame reads as a fault; the other two go away entirely.
+for(const id of ['cam','over','third']){const im=g(id),no=g(id+'_no'),blk=g(id+'_blk');
+ im.addEventListener('load',()=>{im.classList.remove('hidden');no.classList.add('hidden');if(blk)blk.classList.remove('hidden')});
+ im.addEventListener('error',()=>{im.classList.add('hidden');no.classList.remove('hidden');if(blk)blk.classList.add('hidden')})}
 setInterval(poll,250);setInterval(freshness,250);
 setInterval(()=>{const t=Date.now();g('cam').src='/frame.jpg?'+t;g('third').src='/third.jpg?'+t;g('over').src='/frame2.jpg?'+t},200);
 poll();freshness();

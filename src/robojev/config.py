@@ -47,6 +47,7 @@ class Motion:
     grasp_fraction: float = 0.5           # grasp at this fraction of the object's height
     place_region: tuple[tuple[float, float], tuple[float, float]] = ((0.30, 0.55), (-0.16, 0.16))   # 'somewhere else' stays where the survey pose can see it
     shift_distance: float = 0.15          # how far a 'move it to the left/right/away/closer' place is from the pickup spot
+    grip_force_n: float = 6.0             # closing force (external-effort mode): -3 N barely moves the fingers, -6 N closes them; a paper cup is held, not crushed
     grip_squeeze: float = 0.035           # close to (object width - this) so a paper cup is held firmly, not crushed (it closed to 2.6 cm on a 7 cm cup: real run 11)
     place_gap: float = 0.04               # clearance between a placed object and its reference object
     gripper_settle_s: float = 0.9         # must exceed the real backend's 0.5 s holding-detection delay (0.7 judged 'closed on nothing' while the fingers were still closing: real run 10)         # wait after a gripper command before judging the result

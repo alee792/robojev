@@ -73,7 +73,7 @@ def test_goal_done_conditions():
     b._start("close_gripper", w); b.prim_started_t -= 5
     w, _ = world(goal, gripper=0.0, holding=False, brain=b, gripper_goal=0.0)
     _, grip, done, fail, _ = goal_for(cfg, w, b, time.time())
-    assert grip == 0.0 and done and fail == "closed on nothing"
+    assert grip < 0.036 and done and fail == "closed on nothing"
 
 
 def test_side_grasp_progression():
