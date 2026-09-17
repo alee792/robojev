@@ -163,7 +163,7 @@ class Detector:
         if sel.sum() < 10:
             return [], info
         Q, uvq, hq = P[sel], uv[sel], height[sel]
-        labels = _cluster_xy(Q[:, :2], cell=0.02)
+        labels = _cluster_xy(Q[:, :2], cell=0.02, heights=hq, dh=0.035)
         dets = []
         for lab in np.unique(labels):
             k = labels == lab
@@ -184,13 +184,37 @@ class Detector:
         return dets, info
 
 
-def _cluster_xy(xy: np.ndarray, cell: float) -> np.ndarray:
-    """Grid-based connected components in the xy plane (8-neighbour). Cheap and good enough for
-    a few objects 5+ cm apart."""
+def _cluster_xy(xy: np.ndarray, cell: float, heights: np.ndarray | None = None, dh: float = 0.035) -> np.ndarray:
+    """Grid-based connected components in the xy plane (8-neighbour), height-aware: two occupied
+    cells join only if their top heights agree within `dh`, so a hand touching a cup stays a
+    separate object (a flat grid merged hand+cup+phone into one 26 cm blob in the intruder run)."""
     g = np.floor(xy / cell).astype(int)
     g -= g.min(0)
     H, W = g[:, 0].max() + 1, g[:, 1].max() + 1
     occ = np.zeros((H, W), np.uint8)
     occ[g[:, 0], g[:, 1]] = 1
-    n, comp = cv2.connectedComponents(occ, connectivity=8)
+    if heights is None:
+        n, comp = cv2.connectedComponents(occ, connectivity=8)
+        return comp[g[:, 0], g[:, 1]]
+    top = np.full((H, W), -1.0)
+    np.maximum.at(top, (g[:, 0], g[:, 1]), heights)
+    # union-find over occupied cells with height agreement
+    idx = -np.ones((H, W), int)
+    cells = np.argwhere(occ > 0)
+    idx[cells[:, 0], cells[:, 1]] = np.arange(len(cells))
+    parent = np.arange(len(cells))
+    def find(a):
+        while parent[a] != a:
+            parent[a] = parent[parent[a]]; a = parent[a]
+        return a
+    for k, (i, j) in enumerate(cells):
+        for di, dj in ((0, 1), (1, 0), (1, 1), (1, -1)):
+            ni, nj = i + di, j + dj
+            if 0 <= ni < H and 0 <= nj < W and idx[ni, nj] >= 0 and abs(top[i, j] - top[ni, nj]) < dh:
+                ra, rb = find(k), find(idx[ni, nj])
+                if ra != rb:
+                    parent[rb] = ra
+    roots = np.array([find(k) for k in range(len(cells))])
+    comp = np.zeros((H, W), int)
+    comp[cells[:, 0], cells[:, 1]] = roots + 1
     return comp[g[:, 0], g[:, 1]]

@@ -335,7 +335,10 @@ class Scenario(threading.Thread):
             cyc = (t - self.start_s) % 40.0 if t >= self.start_s else -1
             cup = self.arm.object_xy("cup")
             ee = self.arm.snapshot().ee
-            between = ((cup[0] + ee[0]) / 2, (cup[1] + ee[1]) / 2 - 0.02)
+            # between the gripper and the cup, but a hand's width clear of both (11 cm from the cup)
+            dx, dy = ee[0] - cup[0], ee[1] - cup[1]
+            L = math.hypot(dx, dy) or 1.0
+            between = (cup[0] + dx / L * 0.11, cup[1] + dy / L * 0.11)
             if 0 <= cyc < 2:          # slide in
                 k = 0.5 - 0.5 * math.cos(math.pi * cyc / 2)
                 self.arm.set_object("hand", park[0] + (between[0] - park[0]) * k, park[1] + (between[1] - park[1]) * k)
