@@ -45,7 +45,7 @@ class Entity:
         """A shape-based guess; a depth camera cannot know what a thing is, only its silhouette."""
         h, w = self.height, self.width
         if w < 0.035 and h >= 0.05:
-            return "thin post-like object (an edge, cable or rod, not something to pick up)"
+            return "thin post-like object"
         if h >= 0.06 and w <= 0.13 and h > 0.8 * w:
             return "cup-like object"
         if h < 0.04 and w >= 0.08:
@@ -59,6 +59,7 @@ class Entity:
 
     def describe(self) -> str:  # noqa: F811  (kept below; overridden to mention the vision model's kind)
         shape = {"cup-like object": "upright, taller than wide, like a cup, can or bottle",
+                 "thin post-like object": "a thin vertical sliver, like a table edge, cable or rod; not something to pick up",
                  "flat object": "flat and wide, like a phone, book or pad",
                  "small object": "small, like a block or ball"}.get(self.kind(), "box-shaped")
         seen = f"; identified by the vision model as a {self.vlm_kind}" if self.vlm_kind else ""
