@@ -188,7 +188,7 @@ class Loop:
 
     # -- one tick ----------------------------------------------------------------------------------
     async def run(self, duration_s: float | None = None):
-        self.log.write_json("config.json", {"config": self.cfg.as_dict(), "question_set": self.qmod.VERSION,
+        self.log.write_json("config.json", {"config": self.cfg.as_dict(), "question_set": self.qmod.VERSION_ID,
                                             "state_version": STATE_VERSION, "model": self.cfg.loop.model})
         if self.jev:
             await self.jev.warm()
@@ -284,6 +284,6 @@ class Loop:
             "perception": self.per.info | {"fps": round(self.per.fps, 1), "table_z": self.per.table_z},
             "stats": self.stats.view(), "in_flight": len(self.in_flight),
             "orders": self.orders, "task": self.task, "events": self.events[-15:],
-            "question_set": self.qmod.VERSION, "model": self.cfg.loop.model, "paused": self.paused,
+            "question_set": self.qmod.VERSION_ID, "model": self.cfg.loop.model, "paused": self.paused,
             "state": self.last_state,
         }

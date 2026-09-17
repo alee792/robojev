@@ -60,7 +60,7 @@ def build(cfg: Config, w: World) -> dict:
         "instructions": "How fast should the arm move right now, given the standing orders, how close it is to objects, and what the user asked?",
         "criteria": ["very slow, creeping", "slow", "normal", "fast"],
     }
-    others = [l for l in labels if l != tgt]
+    # the target is included on purpose: an operator order about the target beats the user's task
     q["avoid"] = {
         "type": "choice",
         "instructions": {
@@ -68,7 +68,7 @@ def build(cfg: Config, w: World) -> dict:
             "rules": "Choose an object only when a standing order requires distance from it and the gripper is too close, or is about to be. Otherwise choose no_avoidance_needed.",
         },
         "criteria": {"no_avoidance_needed": "nothing needs avoiding right now",
-                     **{f"move_away_from:{l}": f"the gripper should back away from {l}" for l in others}},
+                     **{f"move_away_from:{l}": f"the gripper should back away from {l}" for l in labels}},
     }
     q["orders_violated"] = {
         "type": "noul",
