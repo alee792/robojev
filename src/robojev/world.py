@@ -65,6 +65,7 @@ class World:
     ladder: str                           # "fresh" | "hold" | "rise"
     recent: list[str] = field(default_factory=list)
     avoiding: str | None = None
+    uptime_s: float = 999.0              # seconds since the loop started (so "just appeared" means after the first scan)
     gripper_state: str = "open"          # open | closed | closed on something | moving
     holding_label: str | None = None
     above_label: str | None = None
@@ -92,13 +93,16 @@ class World:
                 continue
             p = np.array(e.xyz[:2]) - ee
             s = float(p @ seg / L)
-            if 0.02 < s < L - 0.02 and abs(float(np.cross(seg / L, p))) < corridor + e.xyz[2] * 0:
+            u = seg / L
+            perp = abs(float(u[0] * p[1] - u[1] * p[0]))   # 2-D cross product (numpy 2 dropped 2-vector cross)
+            if 0.02 < s < L - 0.02 and perp < corridor:
                 out.append(e.label)
         return out
 
 
 def build_world(cfg: Config, arm: ArmSnapshot, entities: list[Entity], in_view_fn, table_z: float,
-                user_task: str, orders: list[str], brain_state: dict, now: float | None = None) -> World:
+                user_task: str, orders: list[str], brain_state: dict, now: float | None = None,
+                loop_start: float | None = None) -> World:
     now = now or time.time()
     ee = np.asarray(arm.ee)
     views = []
@@ -130,7 +134,7 @@ def build_world(cfg: Config, arm: ArmSnapshot, entities: list[Entity], in_view_f
     return World(now, arm, views, table_z, user_task, orders, brain_state.get("target"), brain_state.get("motion", "hold"),
                  brain_state.get("hover_position", "directly_above"), brain_state.get("hover_height", "high"),
                  brain_state.get("speed_name", "slow"), brain_state.get("ladder", "fresh"), brain_state.get("recent", []),
-                 brain_state.get("avoid"), gripper_state, holding_label, above,
+                 brain_state.get("avoid"), (now - loop_start) if loop_start else 999.0, gripper_state, holding_label, above,
                  {"name": brain_state.get("prim"), "subject": brain_state.get("prim_subject"), "status": brain_state.get("prim_status"),
                   "age_s": brain_state.get("prim_age"), "last_result": brain_state.get("last_result")},
                  brain_state.get("place"))

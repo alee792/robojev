@@ -42,8 +42,8 @@ def render(cfg: Config, w: World) -> dict:
         }
         if e.speed_mps > 0.02:
             item["motion"] = f"moving, about {e.speed_mps*100:.0f} cm/s"
-        if e.known_s < 5:
-            item["status"] += f"; appeared {e.known_s:.0f} s ago"
+        if e.known_s < 5 and w.uptime_s > 8:
+            item["status"] += f"; appeared {e.known_s:.0f} s ago (was not there before)"
         objects.append(item)
     tgt = w.entity(w.committed_target) if w.committed_target else None
     relations = {

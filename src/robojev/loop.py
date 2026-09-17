@@ -180,6 +180,7 @@ class Loop:
         self.last_reason = ""
         self.events: list[dict] = []
         self.stop_requested = False
+        self.started_t = time.time()
         self.paused = False
         self._world = None
 
@@ -231,7 +232,8 @@ class Loop:
         now = time.time()
         snap = self.arm.snapshot()
         entities, in_view = self.per.entities()
-        world = build_world(self.cfg, snap, entities, in_view, self.per.table_z, self.task, self.orders, self.brain.state(), now)
+        world = build_world(self.cfg, snap, entities, in_view, self.per.table_z, self.task, self.orders, self.brain.state(), now,
+                            loop_start=self.started_t)
         self._world = world
         state = render(self.cfg, world)
         questions = (self.qmod.build(self.cfg, world, self.brain) if self.qmod.VERSION != "v0" else self.qmod.build(self.cfg, world))
