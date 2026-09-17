@@ -13,8 +13,8 @@ class Workspace:
     """Axis-aligned box in the arm base frame (+x forward, +y left, +z up) the EE may occupy."""
     # From the MuJoCo reachability map (2026-09-17, gripper pitched 75 deg): x 0.18-0.42 is solid
     # up to base z 0.20; straight-down (90 deg) only reaches z 0.15. Table is at base z ~ -0.02.
-    x: tuple[float, float] = (0.18, 0.44)
-    y: tuple[float, float] = (-0.18, 0.18)
+    x: tuple[float, float] = (0.18, 0.62)   # sim IK map 2026-09-17: at wrist pitch 0.35-0.5 the arm reaches 0.64+ out to |y| 0.2; the 75-deg down pitch only reaches 0.44 (see down_reach_x)
+    y: tuple[float, float] = (-0.26, 0.26)
     z: tuple[float, float] = (0.0, 0.19)   # floor: fingertips 4.5 cm above the table (side grasps run low)
 
     def clamp(self, p):
@@ -55,12 +55,15 @@ class Motion:
     gripper_opening: float = 0.08         # m between the pads fully open (two 4 cm carriages)
     side_grasp_min_width: float = 0.045   # objects at least this wide are grasped from the side, not from above
     hover_pitch: float = 0.5              # staging/hover wrist pitch: the camera surveys the table instead of the patch under the fingers
+    down_reach_x: float = 0.44            # top-down (75 deg) goals are clamped to this x: further out that pitch is unreachable
     side_pitch: float = 0.5               # rad below level for a side grasp: fully level is unreachable low over the table (sim IK map), 0.5 is solid everywhere
     side_standoff: float = 0.06           # approach point: this far behind the object's near edge, wrist level
     side_grasp_height: float = 0.02       # tips 2 cm up: the pads (1.4-6.9 cm behind the tips, tilted) then meet a tapered cup where it is narrowest
     advance_push_n: float = 6.0           # F_x rise above the pre-advance baseline that means the fingers are shoving the object      # fingertips this far above the table for a side grasp (a tapered cup is narrowest low down)
-    side_grasp_depth: float = -0.03       # tips this far short of the object's centre when closing: negative = past it, so the pads (1.4-6.9 cm behind the tips) straddle the centre
+    side_grasp_depth: float = -0.02       # tips 2 cm past the centre: pads (1.4-6.9 cm behind the tips) straddle it, and the palm (6.9 cm back) stays 1.4 cm clear of a 7 cm cup's near wall (-0.03 put the palm on the wall: real run 9)
     side_pitch_advance: float = 0.35      # flatter wrist while sliding around the object: the pads span less height, so they meet the cup where it is narrower
+    side_pitch_far: float = 0.25          # flatter still beyond side_far_x: keeps the arm extended instead of bunching the elbow, and is reachable there (sim map)
+    side_far_x: float = 0.36
     real_tick_hz: float = 20.0            # arm I/O thread rate (real)
     real_goal_time: float = 0.1           # per-command interpolation horizon (0.001..0.2 = linear)
     sim_physics_dt: float = 0.002

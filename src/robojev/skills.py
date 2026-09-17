@@ -60,7 +60,7 @@ def side_z(cfg: Config, w: World) -> float:
 def _level(w: World, tol: float = 0.12, cfg: Config | None = None) -> bool:
     """Wrist at the side-grasp pitch (the setpoint has arrived there)."""
     hi = cfg.motion.side_pitch if cfg else 0.5
-    lo = cfg.motion.side_pitch_advance if cfg else 0.35
+    lo = min(cfg.motion.side_pitch_advance, cfg.motion.side_pitch_far) if cfg else 0.25
     return w.arm.pitch is not None and (lo - tol) < w.arm.pitch < (hi + tol)
 
 
@@ -185,14 +185,14 @@ def goal_for(cfg: Config, w: World, brain, now: float):
         if e is None:
             return sp, None, False, f"{subj} is no longer known", "move_above: lost subject"
         brain.pitch = cfg.motion.down_orientation[1]
-        goal = cfg.workspace.clamp((e.xyz[0], e.xyz[1], hover_z(cfg, w)))
+        goal = cfg.workspace.clamp((min(e.xyz[0], cfg.motion.down_reach_x), e.xyz[1], hover_z(cfg, w)))
         return goal, None, near(goal), None, f"move_above {subj}"
     if name == "descend_to_grasp":
         e = w.entity(subj)
         if e is None:
             return sp, None, False, f"{subj} is no longer known", "descend: lost subject"
         brain.pitch = cfg.motion.down_orientation[1]
-        goal = cfg.workspace.clamp((e.xyz[0], e.xyz[1], grasp_z(cfg, w, subj)))
+        goal = cfg.workspace.clamp((min(e.xyz[0], cfg.motion.down_reach_x), e.xyz[1], grasp_z(cfg, w, subj)))
         return goal, 0.04, near(goal, 0.02, 0.01), None, f"descend_to_grasp {subj}"
     if name == "approach_side":
         e = w.entity(subj)
@@ -205,7 +205,7 @@ def goal_for(cfg: Config, w: World, brain, now: float):
         e = w.entity(subj)
         if e is None:
             return sp, None, False, f"{subj} is no longer known", "advance: lost subject"
-        brain.pitch = cfg.motion.side_pitch_advance
+        brain.pitch = cfg.motion.side_pitch_far if e.xyz[0] > cfg.motion.side_far_x else cfg.motion.side_pitch_advance
         goal = cfg.workspace.clamp((e.xyz[0] - cfg.motion.side_grasp_depth, e.xyz[1], side_z(cfg, w)))
         if brain.advance_f0 is None and age > 1.0:
             brain.advance_f0 = float(w.arm.ext_force[0])
