@@ -109,7 +109,8 @@ class Tracker:
                 unmatched.remove(d)
                 a = self.ema
                 if (e.frozen and d.width > 1.6 * e.width) or d.partial:
-                    a = 0.1   # a merged blob, or one cut by the image border, has a biased centre: barely trust it
+                    a = 0.0   # a merged or partial blob confirms the object is there but says nothing about where
+                              # (0.1 per frame at 10 Hz converged on the biased centre in ~2 s)
                 e.xyz = a * np.asarray(d.base_xyz) + (1 - a) * e.xyz
                 if not e.frozen:
                     e.dims.append((d.height, d.width, d.color_name))
