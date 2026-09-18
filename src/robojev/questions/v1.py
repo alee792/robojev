@@ -46,7 +46,7 @@ def build(cfg: Config, w: World, brain=None) -> dict:
         "type": "choice",
         "instructions": {
             "question": f"If the user wants {tgt_text} moved somewhere, where should it be put down?",
-            "rules": "Left and right are the robot's left and right as it faces the table. 'In front of' means closer to the robot than the reference object. If the request only asks to pick up or hover, choose unspecified.",
+            "rules": "Left and right are the robot's left and right as it faces the table. 'In front of' means closer to the robot than the reference object. If the request only asks to pick up or hover, choose unspecified. If the request is a standing rule about where things belong (e.g. keep X on the mat and Y off it), choose the place that rule gives for THIS object, not where it is now: the whole point of moving it is that it is in the wrong place. Objects are described only by colour, size and shape, so use colour to tell similar shapes apart: a paper cup is white or light coloured; a cardboard box is brown, orange or tan.",
         },
         "criteria": place_opts,
     }
