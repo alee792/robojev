@@ -18,6 +18,7 @@ CONSERVATIVE_MOTION = {"hold", "back_off", "rise_away"}
 # the `next` guard is asked three ways (same options, differently worded); a pick counts only
 # with a majority. Fan-out costs no latency (01-jev-facts, patterns/fan-out).
 NEXT_VARIANTS = ("next", "next_b", "next_c")
+FINE_PRIMS = ("advance_to_grasp", "descend_to_grasp", "lower_to_place", "set_down_here")
 SAFETY_PRIMS = set(skills.SAFETY)
 
 
@@ -419,6 +420,10 @@ class Brain:
         if self.prim is None:
             return (sp[0], sp[1], max(sp[2], skills.hover_z(self.cfg, world))), cap, None, "no primitive yet: holding at hover height"
         goal, gripper, done, fail, reason = skills.goal_for(self.cfg, world, self, now)
+        if self.prim in FINE_PRIMS:
+            # the real arm overshoots a fast vertical setpoint by 2-3 cm: it dove past a place 4 cm
+            # above the table and hit it at 93 N (main run 1). Fine moves near the table go slowly.
+            cap = min(cap, m.speed_levels[0])
         if self.prim_status == "running" and self.prim_budget_s == 0.0 and goal is not None:
             self.prim_budget_s = 2.0 * math.dist(sp, goal) / max(cap, 1e-3) + 2.0
         if self.prim_status == "running":

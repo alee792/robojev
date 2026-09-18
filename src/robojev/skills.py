@@ -272,13 +272,13 @@ def goal_for(cfg: Config, w: World, brain, now: float):
         held = w.entity(w.holding_label) if w.holding_label else None
         h = held.height_m if held else 0.08
         dz = brain.grasp_dz if brain.grasp_dz is not None else h * cfg.motion.grasp_fraction
-        goal = (sp[0], sp[1], max(cfg.workspace.z[0], tz + dz + 0.005))
+        goal = (sp[0], sp[1], max(cfg.workspace.z[0], tz + dz + 0.015))
         return goal, None, near(goal, 0.02, 0.01), None, "set_down_here"
     if name == "lower_to_place":
         held = w.entity(w.holding_label) if w.holding_label else None
         h = held.height_m if held else 0.08
         dz = brain.grasp_dz if brain.grasp_dz is not None else h * cfg.motion.grasp_fraction
-        goal = (sp[0], sp[1], max(cfg.workspace.z[0], tz + dz + 0.005))
+        goal = (sp[0], sp[1], max(cfg.workspace.z[0], tz + dz + 0.015))
         return goal, None, near(goal, 0.02, 0.01), None, "lower_to_place"
     if name == "open_gripper":
         done = age > cfg.motion.gripper_settle_s
