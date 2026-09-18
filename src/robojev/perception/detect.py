@@ -165,7 +165,11 @@ class Detector:
                 u = seg / L
                 along = P[:, :2] @ u
                 perp = np.abs(P[:, 0] * u[1] - P[:, 1] * u[0])
-                corridor = (along > -0.05) & (along < L + 0.08) & (perp < 0.09) & (P[:, 2] > ee[2] - 0.03)
+                # the open carriages stick out ~9 cm sideways and hang below the EE: widen and deepen,
+                # but never below table + 13 cm, where objects live (sim mat run: three 'black upright
+                # objects' beside the gripper were the carriages seen from above)
+                tz = self.table_z if self.table_z is not None else float(-self.last_plane[1] / self.last_plane[0][2]) if self.last_plane else -0.02
+                corridor = (along > -0.05) & (along < L + 0.08) & (perp < 0.12) & (P[:, 2] > max(ee[2] - 0.08, tz + 0.13))
             else:
                 corridor = np.zeros(len(P), bool)
             keep = ~(base | corridor)
