@@ -85,7 +85,7 @@ def build(args, cfg: Config):
         from robojev.arm.sim import SimCamera
         wrist = SimCamera(arm, "cam", third=True)
         over = SimCamera(arm, "overhead", width=640, height=480)
-        per = Perception(cfg, arm, cameras=[("wrist", wrist, None, True), ("overhead", over, over.extrinsic_fixed(), False)], log=log, namer=namer, display=disp)
+        per = Perception(cfg, arm, cameras=[("wrist", wrist, None, True), ("overhead", over, over.extrinsic_fixed(), False)], log=log, namer=namer, display=disp, segment=args.segment)
     else:
         from robojev.perception.camclient import CamClient
         cams = [("wrist", CamClient(args.camserver), None, True)]
@@ -94,7 +94,7 @@ def build(args, cfg: Config):
             if not args.overhead_calib:
                 sys.exit("--overhead needs --overhead-calib <json> (run `robojev calibrate` first)")
             cams.append(("overhead", CamClient(args.overhead), load_calib(args.overhead_calib), False))
-        per = Perception(cfg, arm, cameras=cams, log=log, namer=namer, display=disp)
+        per = Perception(cfg, arm, cameras=cams, log=log, namer=namer, display=disp, segment=args.segment)
     loop = Loop(cfg, arm, per, log, use_jev=not args.no_jev, task=args.task, orders=args.orders or [])
     if args.arm == "sim" and args.scenario != "static":
         from robojev.arm.sim import Scenario
@@ -225,6 +225,7 @@ def main(argv=None):
     r.add_argument("--duration", type=float, default=None)
     r.add_argument("--no-jev", action="store_true")
     r.add_argument("--no-evade", action="store_true", help="pickup only: no default standing orders, evade/orders_violated never act")
+    r.add_argument("--segment", action="store_true", help="FastSAM instance masks on the wrist camera (splits touching objects; needs the seg extra)")
     r.add_argument("--clocked", action="store_true",
                    help="one request per tick (pre-event-driven behaviour) instead of asking only on change")
     r.add_argument("--run-name", default=None)

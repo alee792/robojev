@@ -36,7 +36,7 @@ class Perception(threading.Thread):
     """Runs the detector + tracker at perception_hz. `camera=None` means the virtual scene."""
 
     def __init__(self, cfg: Config, arm, camera=None, virtual=None, table_z: float | None = None, log=None,
-                 cameras: list | None = None, namer=None, display: list | None = None):
+                 cameras: list | None = None, namer=None, display: list | None = None, segment: bool = False):
         """`cameras`: list of (name, cam, extrinsic_fn or None, finger_mask). None extrinsic = wrist chain.
         `camera=` is shorthand for a single wrist camera.
         `display`: list of (name, cam) shown on the dashboard only -- polled slowly in their own
@@ -70,7 +70,12 @@ class Perception(threading.Thread):
             from robojev.perception.detect import Detector
             from robojev.perception.geometry import Intrinsics
             for name, cam, ext, fmask in self.cameras:
-                self.detectors[name] = Detector(Intrinsics(cam.info), extrinsic=ext, finger_mask=fmask)
+                segmenter = None
+                if segment and fmask:
+                    # colour instance masks for the wrist camera (FastSAM-s, ~50 ms on MPS): splits touching objects
+                    from robojev.perception.segment import Segmenter
+                    segmenter = Segmenter()
+                self.detectors[name] = Detector(Intrinsics(cam.info), extrinsic=ext, finger_mask=fmask, segmenter=segmenter)
 
     def camera_names(self) -> list[str]:
         """Every camera this run can show, wrist first: the detection cameras in order, the sim
