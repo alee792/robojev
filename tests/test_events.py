@@ -7,8 +7,8 @@ from robojev.events import ChangeDetector
 from robojev.world import EntityView, World
 
 
-def ent(eid="e1", label="white cup-like object A", xyz=(0.30, 0.0, 0.05)):
-    return EntityView(eid, label, "a white cup-like object", xyz, 0.05, 0.0, 0.08, True, 0.0, 0.0, True, 0.08)
+def ent(eid="e1", label="white upright object A", xyz=(0.30, 0.0, 0.05)):
+    return EntityView(eid, label, "a white upright object", xyz, 0.05, 0.0, 0.08, True, 0.0, 0.0, True, 0.08)
 
 
 def world(entities=None, task="pick up the cup", orders=(), gripper_state="open",
@@ -17,7 +17,7 @@ def world(entities=None, task="pick up the cup", orders=(), gripper_state="open"
     return World(0.0, snap, list(entities if entities is not None else [ent()]), 0.0, task, list(orders),
                  None, "hold", "directly_above", "high", "slow", "fresh",
                  gripper_state=gripper_state, holding_label=holding, above_label=above,
-                 prim=prim or {"name": "move_above", "subject": "white cup-like object A",
+                 prim=prim or {"name": "move_above", "subject": "white upright object A",
                                "status": "running", "age_s": 0.4, "last_result": None})
 
 
@@ -50,12 +50,12 @@ def test_material_changes_fire_and_a_small_wobble_does_not():
         (world([ent(xyz=(0.34, 0.0, 0.05))]), "moved"),
         (world([]), "disappeared"),
         (world([ent(), ent("e2", "black flat object B", (0.2, 0.1, 0.01))]), "appeared"),
-        (world([ent(label="tan cup-like object A")]), "relabelled"),
+        (world([ent(label="tan upright object A")]), "relabelled"),
         (world(task="put it down"), "task"),
         (world(orders=("stay 15 cm away from the laptop",)), "orders"),
         (world(gripper_state="closed on something"), "phase"),
-        (world(holding="white cup-like object A"), "phase"),
-        (world(above="white cup-like object A"), "phase"),
+        (world(holding="white upright object A"), "phase"),
+        (world(above="white upright object A"), "phase"),
         (world(prim={"name": "lift", "subject": None, "status": "running", "age_s": 0.1, "last_result": None}), "phase"),
     ]:
         ask, why = d.should_ask(w, ["hold"], 0.1)
@@ -68,7 +68,7 @@ def test_primitive_age_alone_is_not_material():
     """prim.age_s ticks every tick; if it counted, nothing would ever be skipped."""
     d = ChangeDetector(move_m=0.02, max_silence_s=100.0)
     d.should_ask(world(), ["hold"], 0.0); d.mark_sent(0.0)
-    aged = world(prim={"name": "move_above", "subject": "white cup-like object A",
+    aged = world(prim={"name": "move_above", "subject": "white upright object A",
                        "status": "running", "age_s": 3.7, "last_result": None})
     assert d.should_ask(aged, ["hold"], 0.5)[0] is False
 

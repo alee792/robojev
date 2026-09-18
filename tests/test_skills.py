@@ -33,16 +33,16 @@ def keys(w, b):
 def test_offer_progression():
     w, b = world((0.28, 0.0, 0.16))
     k = keys(w, b)
-    assert "move_above:white cup-like object C" in k and "close_gripper" not in k and "lift" not in k
+    assert "move_above:white upright object C" in k and "close_gripper" not in k and "lift" not in k
     # above the cup at hover height: descend offered, close not yet (too high)
     w, b = world((0.37, -0.07, 0.16))
     k = keys(w, b)
-    assert "descend_to_grasp:white cup-like object C" in k and "close_gripper" not in k
+    assert "descend_to_grasp:white upright object C" in k and "close_gripper" not in k
     # at grasp height: close offered
     w, b = world((0.37, -0.07, 0.05))
     assert "close_gripper" in keys(w, b)
     # holding, low: lift offered, no move_above, open only near the table
-    b = Brain(cfg); b.held = "white cup-like object C"; b.place = "left_of:black flat object E"
+    b = Brain(cfg); b.held = "white upright object C"; b.place = "left_of:black flat object E"
     w, b = world((0.37, -0.07, 0.05), gripper=0.02, holding=True, brain=b, gripper_goal=0.0)
     k = keys(w, b)
     assert "lift" in k and not any(x.startswith("move_above") for x in k) and "open_gripper" in k
@@ -63,7 +63,7 @@ def test_place_resolves_inside_box():
 def test_goal_done_conditions():
     b = Brain(cfg)
     w, _ = world((0.28, 0.0, 0.16), brain=b)
-    b._start("move_above:white cup-like object C", w)
+    b._start("move_above:white upright object C", w)
     goal, grip, done, fail, _ = goal_for(cfg, w, b, time.time())
     assert not done and abs(goal[0] - 0.37) < 1e-6 and abs(goal[1] + 0.07) < 1e-6
     w, _ = world(goal, brain=b)
@@ -88,15 +88,15 @@ def test_side_grasp_progression():
     down = cfg.motion.down_orientation[1]
     w, b = w_at((0.28, 0.0, 0.16), down)
     k = keys(w, b)
-    assert "approach_side:white cup-like object C" in k and not any(x.startswith("move_above") for x in k)
-    assert "advance_to_grasp:white cup-like object C" not in k
-    b.prim, b.prim_subject, b.prim_status, b.prim_started_t = "approach_side", "white cup-like object C", "running", time.time()
+    assert "approach_side:white upright object C" in k and not any(x.startswith("move_above") for x in k)
+    assert "advance_to_grasp:white upright object C" not in k
+    b.prim, b.prim_subject, b.prim_status, b.prim_started_t = "approach_side", "white upright object C", "running", time.time()
     goal, grip, done, fail, _ = goal_for(cfg, w, b, time.time())
     assert b.pitch == cfg.motion.side_pitch and abs(goal[0] - (0.37 - 0.04 - cfg.motion.side_standoff)) < 1e-6 and abs(goal[2] - (TABLE + cfg.motion.side_grasp_height)) < 1e-6
     # at the approach point, level: advance is offered, close is not
     w, b = w_at(goal, cfg.motion.side_pitch, b=b)
     k = keys(w, b)
-    assert "advance_to_grasp:white cup-like object C" in k and "close_gripper" not in k
+    assert "advance_to_grasp:white upright object C" in k and "close_gripper" not in k
     b.prim, b.prim_status = "advance_to_grasp", "running"
     goal, grip, done, fail, _ = goal_for(cfg, w, b, time.time())
     assert abs(goal[0] - (0.37 - cfg.motion.side_grasp_depth)) < 1e-6

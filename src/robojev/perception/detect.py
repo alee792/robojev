@@ -255,7 +255,7 @@ class Detector:
                 seg = ee[:2]; L = float(np.hypot(*seg))
                 if L > 1e-6:
                     u = seg / L; along = float(np.array([cx, cy]) @ u); perp = abs(float(cx * u[1] - cy * u[0]))
-                    if -0.02 < along < L + 0.10 and perp < 0.11:
+                    if -0.02 < along < L + 0.10 and perp < 0.05:   # 11 cm hid a hand beside the carried cup (sim reg4)
                         partial = True
             patch = color[max(0, v0 - 6):v0 + 6, max(0, u0 - 6):u0 + 6].reshape(-1, 3)
             bgr = tuple(int(x) for x in np.median(patch, 0)) if len(patch) else (128, 128, 128)

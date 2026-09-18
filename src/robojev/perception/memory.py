@@ -51,7 +51,7 @@ class Entity:
         if w < 0.035 and h >= 0.05:
             return "thin post-like object"
         if h >= 0.06 and w <= 0.13 and h > 0.8 * w:
-            return "cup-like object"
+            return "upright object"
         if h < 0.04 and w >= 0.08:
             return "flat object"
         if h < 0.06 and w < 0.08:
@@ -62,7 +62,7 @@ class Entity:
         return f"{self.name} {self.id}" if self.name else f"{self.color} {self.kind()} {self.id}"
 
     def describe(self) -> str:  # noqa: F811  (kept below; overridden to mention the vision model's kind)
-        shape = {"cup-like object": "upright, taller than wide: could be a cup, can, bottle or a small box standing on end",
+        shape = {"upright object": "upright, taller than wide: a cup, can, bottle or small box (depth cannot tell which; colour and size are the clues)",
                  "thin post-like object": "a thin vertical sliver, like a table edge, cable or rod; not something to pick up",
                  "flat object": "flat and wide, like a phone, book or pad",
                  "small object": "small, like a block or ball"}.get(self.kind(), "box-shaped")
