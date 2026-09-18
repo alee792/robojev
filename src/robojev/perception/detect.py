@@ -137,7 +137,9 @@ class Detector:
             # not pollute other tracks (it dragged the phone's track 4 cm in pick-and-place run 2)
             # a cylinder around the gripper, but only down to ~10 cm below the EE point: flat objects
             # the arm flies over must keep their points (the 8 cm disc ate half the phone in run 3)
-            carried = (np.hypot(P[:, 0] - ee[0], P[:, 1] - ee[1]) < 0.07) & (P[:, 2] > ee[2] - 0.12)
+            # r 5.5 cm and down to 5 cm below the tips: a side-grasped cup hangs ~2 cm below them; a hand
+            # 7 cm from the cup at table height must NOT be inside this (it was invisible: sim reg2/reg3)
+            carried = (np.hypot(P[:, 0] - ee[0], P[:, 1] - ee[1]) < 0.055) & (P[:, 2] > ee[2] - 0.05)
             P, uv = P[~carried], uv[~carried]
         if self.finger_mask:
             # the fingers, gripper body and wrist lie along the tool axis behind the fingertips
