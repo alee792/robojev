@@ -194,6 +194,8 @@ class SimArm:
                     # opening releases it onto the table where it is
                     if self.attached is None and self.gripper_cmd < 0.036 and width < self.gripper_cmd + 0.006:
                         for name, bid in self.mocap.items():
+                            if self.half_h[name] < 0.01:
+                                continue   # the mat is a place, not a thing the fingers can close on
                             mid = self.model.body_mocapid[bid]; op = self.data.mocap_pos[mid]
                             if math.hypot(op[0] - p[0], op[1] - p[1]) < 0.035 and abs(op[2] - p[2]) < 0.06:
                                 self.attached = name; self._event(f"grasped {name}"); break

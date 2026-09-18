@@ -213,8 +213,8 @@ class Perception(threading.Thread):
             if not (0.15 < c[2] < 0.75):
                 continue
             u, v = intr.fx * c[0] / c[2] + intr.ppx, intr.fy * c[1] / c[2] + intr.ppy
-            if not (60 < u < intr.w - 60 and 60 < v < intr.h - 100):
-                continue   # near the border or the fingers: no verdict
+            if not (60 < u < intr.w - 60 and 60 < v < 0.6 * intr.h - 3 * det.stride):
+                continue   # near the border, or in the masked lower band: no verdict there
             e.absent = getattr(e, "absent", 0) + 1
             if e.absent >= 8:
                 self.tracker.forget(e.id)
