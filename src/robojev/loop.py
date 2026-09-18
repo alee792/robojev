@@ -53,6 +53,7 @@ class Perception(threading.Thread):
         self.table_z = table_z if table_z is not None else cfg.table_z
         self._table_samples = []
         self._table_locked = False
+        self.stale_since = None
         self.lock = threading.Lock()
         self.frame_jpeg: bytes | None = None
         self.info: dict = {}
@@ -122,6 +123,22 @@ class Perception(threading.Thread):
                         except Exception as e:      # one camera's hiccup must not blind the other
                             info[name] = {"error": repr(e)[:120]}
                             continue
+                        # A camera server whose capture thread has died keeps answering with its last
+                        # frame. Twice today the arm drove for minutes off an 18-hour-old image, so a
+                        # stale feed must stop the arm, not steer it.
+                        age = time.time() - f.t if f is not None else 999.0
+                        if f is None or age > 1.0:
+                            info[name] = {"stale_s": round(age, 1)}
+                            if name == self.cameras[0][0]:
+                                self.stale_since = self.stale_since or time.time()
+                                if time.time() - self.stale_since > 1.0 and not getattr(self.arm, "frozen_for_camera", False):
+                                    self.arm.freeze(f"{name} camera feed is {age:.0f} s old")
+                                    self.arm.frozen_for_camera = True
+                                    if self.log:
+                                        self.log.write("events", kind="perception", text=f"FROZEN: {name} camera feed is stale by {age:.0f} s")
+                            continue
+                        if name == self.cameras[0][0]:
+                            self.stale_since = None
                         if ext is None and not have_pose:
                             info[name] = {"waiting": f"arm {snap.status}; no pose yet"}
                             d = []
