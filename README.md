@@ -1,31 +1,82 @@
 # robojev
 
-Drive a Trossen WidowX AI arm from natural language with TypeSafe's Jev model, Doom-style: code
-renders a text situation report, asks a battery of small typed judgments ~10 times a second, and
-composes the answers into persistent arm commands. Live standing orders change behaviour with no
-code change. Research bundle: `context/`. API probes: `experiments/`.
+**An experiment: can a small, fast, text-only model act as the policy in a robot control loop?**
 
-**Read [docs/assessment.md](docs/assessment.md) first.** This was a one-day experiment. It works on
-real hardware and it is also heavily fitted to one paper cup on one table; that file says which is
-which, and what was never tested.
+robojev drives a Trossen WidowX AI arm from natural language using TypeSafe's Jev model, built the
+way a Doom monster thinks rather than the way a planner does. Ten times a second, code renders the
+scene as a short text situation report, asks Jev a battery of small typed multiple-choice questions,
+and composes the answers into arm commands. Jev never emits a coordinate. Code owns all the
+geometry: inverse kinematics, setpoints, velocity caps, the workspace box, the grasp poses. Jev
+decides *what to do*; code decides *how to move*.
 
-## What works (2026-09-17)
-- **Real arm, Jev in the loop**: Jev sequences a full pick-move-set-down of a paper cup, repeatedly,
-  from "keep moving the paper cup to a different spot". Run real13 did four grasp-to-release cycles
-  in 234 s unattended; demo2 did one with the force-controlled grip (fingers stopping at 30 mm per
-  side instead of crushing the cup). Earlier: scripted first contact passed (6 cm square at 3 cm/s,
-  0.2 mm corner error, 3 mm lag). Safety layer: `docs/safety.md`.
-- **Not tested on the real arm**: evade against an actual hand, the scene camera in the loop (never
-  calibrated), the mat routine, the VLM naming tier, the segmenter. See `docs/assessment.md`.
-- **Sim** (MuJoCo, same code, rendered wrist + overhead cameras): task "hover over the paper cup";
-  a standing order "keep the gripper at least 15 cm away from the black flat object" makes the arm
-  back away from a drifting object (first avoid command 0.2 s after injection; min distance 5 cm
-  without the order vs 13 cm with it); "move very slowly" drops the speed cap; task text switches
-  the target; a 6 s Jev outage walks the hold -> rise ladder and recovers.
-- **Rates**: 10 Hz tick. Requests are event-driven: one is sent only when an entity moved > 2 cm,
-  an entity appeared/disappeared, the arm's phase facts, orders, task or offered primitives changed,
-  or 1 s of silence elapsed (`--clocked` restores one request per tick). A 30 s sim run sent 48
-  requests in 300 ticks. ~2.8k tokens/call, p50 ~145 ms, p95 ~256 ms.
+The whole thing was built in two days against a real arm, and this repository is the record of that
+exploration rather than a product. Research bundle: `context/`. API probes: `experiments/`.
+
+## The demo
+
+The arm picks up a paper cup and moves it somewhere else, over and over, for as long as you let it.
+That is the whole trick, and it is deliberately modest: the interesting part is not the motion, it
+is that a language model chose the target, the destination and every step of the sequence, several
+times a second, from options code had already validated.
+
+The best run (`main3`, 2026-09-18) did **nine complete pick-move-place cycles in 495 seconds**,
+unattended, at roughly 28 seconds a cycle. It also recovered from every failure it hit without help:
+
+- Twice the fingers began pushing the cup instead of closing around it. A contact check caught the
+  rising force, failed the primitive, and Jev re-approached and grasped successfully.
+- Once the cup was moved by hand while the arm was looking elsewhere. The arm reached the remembered
+  spot, found nothing there, dropped the stale track, chose the `survey` pose to look around,
+  re-acquired the cup as a new object, and carried on.
+
+Over that run Jev answered 783 requests, 765 of which were applied, with a median latency of 138 ms
+and no errors. Perception is the wrist-mounted depth camera only.
+
+Type a different instruction into the dashboard and the behaviour changes with no code edit. That is
+the lever the whole design exists to expose.
+
+## What Jev is actually asked
+
+Nine questions go out in a single request each tick. The option lists are regenerated every tick
+from the objects actually on the table and the primitives whose preconditions currently hold, so
+Jev can only ever choose something code has already checked is possible.
+
+| Question | Type | What it decides |
+|---|---|---|
+| `target` | choice | Which object the request means |
+| `place` | choice | Where it should be put down (generic spots, or relative to another object) |
+| `next` / `next_b` / `next_c` | choice | Which primitive runs next, asked three ways, 2-of-3 majority |
+| `speed` | score | How fast to move right now |
+| `evade` | choice | Whether to make an evasive move, overriding everything else |
+| `orders_violated` | noul | Whether it is breaking a standing order |
+| `task_done` | noul | Whether the request is finished |
+
+The channels that earn their place are the grounding ones: deciding that "the paper cup" means this
+particular track, that "on the mat" resolves to a region, and that a moving hand 7 cm away is to be
+avoided while the cup 7 cm the other way is to be approached. Those are judgments code cannot make.
+
+**Read [docs/assessment.md](docs/assessment.md) for the honest version.** It separates what is
+genuinely demonstrated from what is fitted to one paper cup on one table, and lists what was never
+tested at all.
+
+## Also working
+
+- **Sim** (MuJoCo, same code, rendered wrist and overhead cameras). A standing order "keep the
+  gripper at least 15 cm away from the black flat object" makes the arm back off from a drifting
+  object: first avoid command 0.2 s after the order is injected, minimum distance 5 cm without it
+  against 13 cm with it. "Move very slowly" drops the speed cap. Changing the task text switches the
+  target. A 6 s Jev outage walks the hold-then-rise ladder and recovers.
+- **A hand intrusion, in sim.** A hand slides between the gripper and the cup mid-carry: the first
+  evasive command comes 1.7 s later and the task resumes 9.8 s after the intrusion, completing
+  normally.
+- **Event-driven requests.** A request goes out only when something changed (an object moved more
+  than 2 cm, appeared or vanished, the arm's phase changed, the orders or task changed, the offered
+  primitives changed) or after 1 s of silence. That suppresses 81 to 87% of calls. `--clocked`
+  restores one request per tick.
+- **Safety, independent of Jev.** Workspace box, velocity cap, a tracking-lag trip, an effort
+  backstop, a thermal governor, and park-on-exit. Details in `docs/safety.md`.
+
+**Not tested on the real arm**: evade against an actual human hand, the scene camera in the loop
+(never calibrated), the mat routine, the vision-language naming tier, and the segmenter.
 
 ## Jev as the policy (v1, evening of 2026-09-17)
 Direction: Jev picks every channel every tick in a scene that changes at the decision rate; code
