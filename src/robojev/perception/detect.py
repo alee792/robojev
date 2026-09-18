@@ -96,6 +96,9 @@ def fit_plane(points: np.ndarray, iters: int = 60, thresh: float = 0.008, rng=np
     return nv, d, inl
 
 
+SHOULDER_Z = 0.20   # m: roughly where the arm's shoulder sits above the base plate
+
+
 class Detector:
     def __init__(self, intr: Intrinsics, workspace_xy=((0.10, 0.80), (-0.40, 0.40)),
                  min_height=0.02, max_height=0.30, stride=4, table_z: float | None = None,
@@ -165,11 +168,13 @@ class Detector:
                 u = seg / L
                 along = P[:, :2] @ u
                 perp = np.abs(P[:, 0] * u[1] - P[:, 1] * u[0])
-                # the open carriages stick out ~9 cm sideways and hang below the EE: widen and deepen,
-                # but never below table + 13 cm, where objects live (sim mat run: three 'black upright
-                # objects' beside the gripper were the carriages seen from above)
-                tz = self.table_z if self.table_z is not None else float(-self.last_plane[1] / self.last_plane[0][2]) if self.last_plane else -0.02
-                corridor = (along > -0.05) & (along < L + 0.08) & (perp < 0.12) & (P[:, 2] > max(ee[2] - 0.08, tz + 0.13))
+                # The links run along a line from the shoulder (about 20 cm up) down to the EE, so the
+                # mask's height floor follows that line instead of being flat: near the base only
+                # things above ~17 cm are the arm, near the gripper anything above the EE is.
+                # (A flat floor left the forearm on the table as a 'black upright object': sim mat run 4.)
+                f = np.clip(along / max(L, 1e-6), 0.0, 1.0)
+                link_z = SHOULDER_Z * (1.0 - f) + ee[2] * f
+                corridor = (along > -0.05) & (along < L + 0.08) & (perp < 0.12) & (P[:, 2] > link_z - 0.03)
             else:
                 corridor = np.zeros(len(P), bool)
             keep = ~(base | corridor)
