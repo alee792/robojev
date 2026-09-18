@@ -64,16 +64,50 @@ from the shape-only labeller (the VLM tier is the fix) and override/timeout inte
 | `scripts/first_contact.py` | the scripted real-arm test |
 | `runs/<name>/` | ticks / answers / commands / events JSONL + config.json per run |
 
+## Real arm (night of 2026-09-17)
+Jev-sequenced pick-move-set-down works on the real WidowX, repeatedly, 21-30 s per cycle
+("keep moving the paper cup to a different spot", runs real8..demo2). What it took:
+- **Side grasp** (`approach_side` / `advance_to_grasp`): the pads open 8.0 cm and a paper cup is
+  7-9 cm, so the fingers come in level-ish (wrist pitch 0.5 rad on the approach, 0.35 / 0.25 on the
+  advance) with the tips 2 cm above the table and 2.5 cm past the cup's centre. Geometry from the
+  URDF: tool point = fingertips, pad faces 1.4-6.9 cm behind them, palm 6.9 cm back.
+- **Wrist pitch channel** through the mover, sim IK and the real stream; a survey pose (pitch 0.5)
+  at staging so the camera sees the table before the first pick; a `survey` primitive Jev can pick.
+- **Force grip**: external-effort mode (6 N) with the Cartesian stream paused 1.1 s (streaming
+  re-sends the stored gripper position and overrides the force), then the stop width is held in
+  position mode. Position-mode closing crushed the cup to 2 cm; force stops at ~3 cm per side.
+- **Perception fixes from real frames**: the pads sit inside the D405's minimum range and return
+  garbage depth (lower 40% of the wrist image dropped, points under 11 cm dropped); a tool-axis
+  cylinder masks fingers, carriages and wrist at any pitch; oblique views place objects by their
+  near edge + across width; tracks are never moved by views taken within 15 cm of the gripper;
+  a track squarely in view with nothing there is dropped (negative evidence); slivers < 2 cm and
+  thin posts (table rail) are not targets; the "just appeared" grace counts from the arm going live.
+- **Safety additions**: on a trip the arm is commanded to its actual pose (stop fighting); thermal
+  governor (slow above 78 C, rest above 86 C: the shoulder rotor hit 96 C and the controller idled);
+  `--no-evade` for pickup-only runs; safety picks need a streak to interrupt; gripper actions are
+  never interrupted.
+- **Places**: shift_left/right/away/closer from the pickup, somewhere_else (code picks a free spot
+  in the survey view), where_it_was_set_down (memory only, within a run), and for a flat mat
+  on:<mat> / off:<mat>. The mat is found by colour on the table plane (depth cannot see 3 mm),
+  every object carries a `resting_on` fact, and the target rule says: pick the object that breaks
+  the standing rule. `--scenario mat` exercises this in sim.
+- **Cameras**: `scripts/camserver.sh <port>` (dyld shim so librealsense 2.56 does not segfault on the
+  D455's IMU on macOS 26), `--camera name=url` for any number of display-only cameras,
+  `scripts/webcam_server.py` for a USB webcam, `--segment` for FastSAM instance masks on the wrist
+  camera (~50 ms on MPS; splits touching objects). Scene-camera calibration: `robojev calibrate
+  --survey` (the read-only arm reports a stale pose, so calibrate from the survey pose); it refuses
+  one-object or high-residual fits.
+
 ## Run
 ```bash
 uv sync --extra sim --extra real --extra cameras
 # sim, with the drifting-object scenario and the dashboard on :8080
 .venv/bin/robojev run --arm sim --perception simcam --scenario drift --task "hover over the paper cup"
 # bay: camera server needs root on macOS (librealsense cannot claim the UVC interface otherwise)
-scripts/camserver.sh 8765            # wrist D405; boom D455: scripts/camserver.sh 8766 408222301818
-# (wraps: sudo env DYLD_INSERT_LIBRARIES=scripts/nohid/nohid.dylib .venv/bin/python -m robojev.perception.camserver ...)                      # wrist D405, :8765
-sudo .venv/bin/python -m robojev.perception.camserver --serial 408222301818 --port 8766   # boom D455
-.venv/bin/robojev calibrate --out overhead_calib.json                      # arm read-only, 2 objects in both views
+sudo tmux new -d -s cams "scripts/camserver.sh 8765" \; new-window "scripts/camserver.sh 8766"   # wrist D405 :8765, boom D455 :8766
+.venv/bin/robojev calibrate --survey --out overhead_calib.json           # arm moves to the survey pose; 2 objects 8 cm+ tall, 10 cm apart, seen by both cameras
+.venv/bin/robojev run --arm real --perception camera --i-am-at-the-estop --task "keep moving the paper cup to a different spot"   # the demo that works
+.venv/bin/robojev run --arm sim --perception simcam --scenario mat --task "keep the cup on the mat and the box off the mat"
 .venv/bin/robojev run --arm real-ro --perception camera --task "hover over the paper cup"   # no motion
 .venv/bin/robojev run --arm real --perception camera --overhead http://127.0.0.1:8766 --overhead-calib overhead_calib.json --i-am-at-the-estop --task "hover over the paper cup"
 .venv/bin/robojev replay runs/<name> --questions v0
