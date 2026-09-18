@@ -45,7 +45,8 @@ class Motion:
     evade_min_s: float = 0.6              # an evade holds at least this long before it can clear
     carry_height: float = 0.12            # above the table while carrying (base z 0.10: well inside the reachable envelope)
     grasp_fraction: float = 0.5           # grasp at this fraction of the object's height
-    place_region: tuple[tuple[float, float], tuple[float, float]] = ((0.30, 0.55), (-0.16, 0.16))   # 'somewhere else' stays where the survey pose can see it
+    place_region: tuple[tuple[float, float], tuple[float, float]] = ((0.38, 0.55), (-0.16, 0.16))   # x starts at 0.38: closer than that sits inside the wrist camera's 11 cm minimum range at the
+    # survey pose, so the arm would place the cup where it can never see it again (main run 2)   # 'somewhere else' stays where the survey pose can see it
     shift_distance: float = 0.15          # how far a 'move it to the left/right/away/closer' place is from the pickup spot
     grip_force_n: float = 6.0             # closing force (external-effort mode): -3 N barely moves the fingers, -6 N closes them; a paper cup is held, not crushed
     grip_squeeze: float = 0.035           # close to (object width - this) so a paper cup is held firmly, not crushed (it closed to 2.6 cm on a 7 cm cup: real run 11)
