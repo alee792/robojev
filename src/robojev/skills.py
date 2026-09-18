@@ -292,6 +292,9 @@ def goal_for(cfg: Config, w: World, brain, now: float):
                     continue
                 if e.label != w.holding_label and abs(e.xyz[1] - ee[1]) < e.width_m / 2 + 0.02 and -(e.width_m / 2 + 0.02) < e.xyz[0] - ee[0] < e.width_m / 2 + 0.05:
                     goal = cfg.workspace.clamp((e.xyz[0] - (e.width_m / 2 + cfg.motion.side_standoff), sp[1], sp[2]))
+                    if near(goal, 0.02, 0.05):
+                        break   # backed out as far as the box allows: rise rather than chase the next
+                        # object into the workspace edge (it stalled there: sim mat run 4)
                     return goal, None, False, None, f"retreat: backing out from {e.label}"
         goal = (sp[0], sp[1], min(cfg.workspace.z[1], tz + cfg.motion.safe_height))
         return goal, None, near(goal), None, "retreat"
