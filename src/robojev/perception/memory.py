@@ -62,7 +62,7 @@ class Entity:
         return f"{self.name} {self.id}" if self.name else f"{self.color} {self.kind()} {self.id}"
 
     def describe(self) -> str:  # noqa: F811  (kept below; overridden to mention the vision model's kind)
-        shape = {"cup-like object": "upright, taller than wide, like a cup, can or bottle",
+        shape = {"cup-like object": "upright, taller than wide: could be a cup, can, bottle or a small box standing on end",
                  "thin post-like object": "a thin vertical sliver, like a table edge, cable or rod; not something to pick up",
                  "flat object": "flat and wide, like a phone, book or pad",
                  "small object": "small, like a block or ball"}.get(self.kind(), "box-shaped")
@@ -99,7 +99,7 @@ class Tracker:
         self._n = 0
         self.names: dict[str, str] = {}
 
-    def update(self, dets: list[Detection], now: float | None = None, carried_xy=None, ee_xy=None) -> None:
+    def update(self, dets: list[Detection], now: float | None = None, carried_xy=None, ee_xy=None, carried_height=None) -> None:
         """`carried_xy`: the gripper position while it holds something; detections there are the
         carried object leaking past the mask and must not become new tracks (run 6: a phantom 2 cm
         from the gripper made the policy flee into a corner)."""
@@ -158,8 +158,9 @@ class Tracker:
                 continue
             if d.width > MAX_NEW_WIDTH or d.width < 0.02 or d.partial:   # slivers (cables, frame edges) are not objects
                 continue   # merged blobs and border-cut blobs must not become objects
-            if carried_xy is not None and np.hypot(d.base_xyz[0] - carried_xy[0], d.base_xyz[1] - carried_xy[1]) < 0.15:
-                continue
+            if carried_xy is not None and np.hypot(d.base_xyz[0] - carried_xy[0], d.base_xyz[1] - carried_xy[1]) < 0.15 \
+                    and (carried_height is None or abs(d.height - carried_height) < 0.04):
+                continue   # a leak of the carried object's own points; something of a different height (a hand next to the carried cup) is real
             eid = letter(self._n); self._n += 1
             self.entities[eid] = Entity(eid, np.asarray(d.base_xyz, float), d.height, d.width, d.color_name, now, now,
                                         history=[(now, d.base_xyz[0], d.base_xyz[1])], name=self.names.get(eid),

@@ -156,7 +156,8 @@ class Perception(threading.Thread):
                 with self.lock:
                     closing = snap.gripper_goal is not None and snap.gripper_goal < 0.02
                     self.tracker.update(dets, t, carried_xy=(snap.ee[:2] if (self.cameras and (snap.holding or closing)) else None),
-                                        ee_xy=(snap.ee[:2] if self.cameras else None))
+                                        ee_xy=(snap.ee[:2] if self.cameras else None),
+                                        carried_height=next((e.height for e in self.tracker.entities.values() if self.held_label and e.label() == self.held_label), None))
                     if self.cameras and self.held_label and snap.holding:
                         self.tracker.pin(self.held_label, snap.ee[:2], t)
                     if self.cameras and have_pose and not snap.holding:
