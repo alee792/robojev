@@ -156,7 +156,7 @@ class Tracker:
                 self.entities[eid] = Entity(eid, np.asarray(d.base_xyz, float), 0.0, d.width, d.color_name, now, now, history=[(now, d.base_xyz[0], d.base_xyz[1])],
                                             flat=True, footprint=list(d.footprint) if d.footprint else None)
                 continue
-            if d.width > MAX_NEW_WIDTH or d.width < 0.02 or d.partial:   # slivers (cables, frame edges) are not objects
+            if d.width > MAX_NEW_WIDTH or d.width < 0.02 or (d.partial and not getattr(d, 'top_cut', False)):   # slivers (cables, frame edges) are not objects
                 continue   # merged blobs and border-cut blobs must not become objects
             if carried_xy is not None and np.hypot(d.base_xyz[0] - carried_xy[0], d.base_xyz[1] - carried_xy[1]) < 0.15 \
                     and (carried_height is None or abs(d.height - carried_height) < 0.04):

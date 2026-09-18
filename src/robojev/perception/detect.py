@@ -25,6 +25,7 @@ class Detection:
     n_points: int
     pixel: tuple[int, int]                # image centre of the blob
     partial: bool = False                 # blob touches the image border: its centroid is biased
+    top_cut: bool = False                 # ...but only at the TOP edge: the footprint is sound, the height is a lower bound
     camera: str | None = None             # which camera produced it
     flat: bool = False                    # a flat area on the table (a mat), found by colour, not height
     footprint: tuple | None = None        # (xmin, xmax, ymin, ymax) in base frame for flat areas
@@ -256,8 +257,15 @@ class Detector:
                 spread = width_across
             u0, v0 = int(px[:, 0].mean()), int(px[:, 1].mean())
             margin = 3 * self.stride
-            partial = bool(px[:, 0].min() < margin or px[:, 1].min() < margin
-                           or px[:, 0].max() > self.intr.w - margin or px[:, 1].max() > self.intr.h - margin)
+            sides = bool(px[:, 0].min() < margin or px[:, 0].max() > self.intr.w - margin
+                         or px[:, 1].max() > self.intr.h - margin)
+            top = bool(px[:, 1].min() < margin)
+            partial = bool(sides or top)
+            # An object standing beyond the gripper runs off the top of an oblique wrist view. Its
+            # height is then a lower bound, but the near edge (what the oblique centring uses) is
+            # fully visible, so the footprint is sound: a cup 43 cm out never became a track at all
+            # because of this (demo3). Such a blob may start a track; it still must not drag one.
+            top_cut = bool(top and not sides)
             if not self.finger_mask:
                 # from a fixed camera the arm hides part of anything under it: a blob whose centre
                 # sits within the arm's corridor is a partial view (its centroid drifts away from the arm)
@@ -270,7 +278,7 @@ class Detector:
             bgr = tuple(int(x) for x in np.median(patch, 0)) if len(patch) else (128, 128, 128)
             dets.append(Detection(xyz=(float(cx), float(cy), base_z + top / 2), base_xyz=(float(cx), float(cy), base_z),
                                   height=top, width=float(spread), color_bgr=bgr, color_name=color_name(bgr),
-                                  n_points=int(k.sum()), pixel=(u0, v0), partial=partial,
+                                  n_points=int(k.sum()), pixel=(u0, v0), partial=partial, top_cut=top_cut,
                                   seg_label=seg_names.get(int(lab))))
         dets.sort(key=lambda d: -d.n_points)
         return dets + flat_dets, info
