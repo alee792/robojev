@@ -5,10 +5,18 @@ renders a text situation report, asks a battery of small typed judgments ~10 tim
 composes the answers into persistent arm commands. Live standing orders change behaviour with no
 code change. Research bundle: `context/`. API probes: `experiments/`.
 
+**Read [docs/assessment.md](docs/assessment.md) first.** This was a one-day experiment. It works on
+real hardware and it is also heavily fitted to one paper cup on one table; that file says which is
+which, and what was never tested.
+
 ## What works (2026-09-17)
-- **Real arm**: scripted first contact passed (stage, hover, 6 cm square at 3 cm/s, park; 0.2 mm
-  corner error, 3 mm lag). Wrist D405 perception finds a paper cup on the bench; Jev picks it from
-  "hover over the paper cup" with p = 1.0. Safety layer: `docs/safety.md`.
+- **Real arm, Jev in the loop**: Jev sequences a full pick-move-set-down of a paper cup, repeatedly,
+  from "keep moving the paper cup to a different spot". Run real13 did four grasp-to-release cycles
+  in 234 s unattended; demo2 did one with the force-controlled grip (fingers stopping at 30 mm per
+  side instead of crushing the cup). Earlier: scripted first contact passed (6 cm square at 3 cm/s,
+  0.2 mm corner error, 3 mm lag). Safety layer: `docs/safety.md`.
+- **Not tested on the real arm**: evade against an actual hand, the scene camera in the loop (never
+  calibrated), the mat routine, the VLM naming tier, the segmenter. See `docs/assessment.md`.
 - **Sim** (MuJoCo, same code, rendered wrist + overhead cameras): task "hover over the paper cup";
   a standing order "keep the gripper at least 15 cm away from the black flat object" makes the arm
   back away from a drifting object (first avoid command 0.2 s after injection; min distance 5 cm
