@@ -61,7 +61,7 @@ class Motion:
     down_reach_x: float = 0.44            # top-down (75 deg) goals are clamped to this x: further out that pitch is unreachable
     side_pitch: float = 0.5               # rad below level for a side grasp: fully level is unreachable low over the table (sim IK map), 0.5 is solid everywhere
     side_standoff: float = 0.06           # approach point: this far behind the object's near edge, wrist level
-    side_grasp_height: float = 0.02       # tips 2 cm up: the pads (1.4-6.9 cm behind the tips, tilted) then meet a tapered cup where it is narrowest
+    side_grasp_height: float = 0.035      # tips this far above the table for a side grasp; 2 cm left no margin for the ~3 cm dip the wrist makes as it rotates (demo8/demo9)
     advance_push_n: float = 6.0           # F_x rise above the pre-advance baseline that means the fingers are shoving the object      # fingertips this far above the table for a side grasp (a tapered cup is narrowest low down)
     side_grasp_depth: float = -0.025      # tips 2.5 cm past the centre: pads (1.4-6.9 cm behind the tips) straddle it, and the palm (6.9 cm back) stays 1.4 cm clear of a 7 cm cup's near wall (-0.03 put the palm on the wall: real run 9)
     side_pitch_advance: float = 0.35      # flatter wrist while sliding around the object: the pads span less height, so they meet the cup where it is narrower
