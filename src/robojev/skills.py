@@ -48,6 +48,13 @@ def hover_z(cfg: Config, w: World) -> float:
     return min(cfg.workspace.z[1] - 0.02, w.table_z + max(cfg.motion.hover_heights["high"], tallest + cfg.motion.object_clearance))
 
 
+def grasp_pitch(cfg: Config, e) -> float:
+    """The wrist angle used for a side grasp of `e`. The approach reaches it while the gripper is
+    still clear of the table, and the advance holds it: changing pitch with the fingertips 2 cm up
+    dips the tool ~3 cm and drives it into the table (demo8)."""
+    return cfg.motion.side_pitch_far if e.xyz[0] > cfg.motion.side_far_x else cfg.motion.side_pitch_advance
+
+
 def side_grasp(cfg: Config, e) -> bool:
     """Objects too wide to drop the fingers around from above are grasped from the side, wrist level."""
     return e is not None and e.width_m >= cfg.motion.side_grasp_min_width and e.height_m >= 0.05
@@ -60,7 +67,7 @@ def side_z(cfg: Config, w: World) -> float:
 def _level(w: World, tol: float = 0.12, cfg: Config | None = None) -> bool:
     """Wrist at the side-grasp pitch (the setpoint has arrived there)."""
     hi = cfg.motion.side_pitch if cfg else 0.5
-    lo = min(cfg.motion.side_pitch_advance, cfg.motion.side_pitch_far) if cfg else 0.25
+    lo = (min(cfg.motion.side_pitch_advance, cfg.motion.side_pitch_far) if cfg else 0.25) - 0.05
     return w.arm.pitch is not None and (lo - tol) < w.arm.pitch < (hi + tol)
 
 
@@ -235,14 +242,14 @@ def goal_for(cfg: Config, w: World, brain, now: float):
         e = w.entity(subj)
         if e is None:
             return sp, None, False, f"{subj} is no longer known", "approach_side: lost subject"
-        brain.pitch = cfg.motion.side_pitch
+        brain.pitch = grasp_pitch(cfg, e)
         goal = cfg.workspace.clamp((e.xyz[0] - (e.width_m / 2 + cfg.motion.side_standoff), e.xyz[1], side_z(cfg, w)))
         return goal, 0.04, near(goal) and _level(w, 0.05, cfg), None, f"approach_side {subj}"
     if name == "advance_to_grasp":
         e = w.entity(subj)
         if e is None:
             return sp, None, False, f"{subj} is no longer known", "advance: lost subject"
-        brain.pitch = cfg.motion.side_pitch_far if e.xyz[0] > cfg.motion.side_far_x else cfg.motion.side_pitch_advance
+        brain.pitch = grasp_pitch(cfg, e)
         goal = cfg.workspace.clamp((e.xyz[0] - cfg.motion.side_grasp_depth, e.xyz[1], side_z(cfg, w)))
         if brain.advance_f0 is None and age > 1.0:
             brain.advance_f0 = float(w.arm.ext_force[0])

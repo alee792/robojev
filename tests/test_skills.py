@@ -92,7 +92,7 @@ def test_side_grasp_progression():
     assert "advance_to_grasp:white cup-like object C" not in k
     b.prim, b.prim_subject, b.prim_status, b.prim_started_t = "approach_side", "white cup-like object C", "running", time.time()
     goal, grip, done, fail, _ = goal_for(cfg, w, b, time.time())
-    assert b.pitch == cfg.motion.side_pitch and abs(goal[0] - (0.37 - 0.04 - cfg.motion.side_standoff)) < 1e-6 and abs(goal[2] - (TABLE + cfg.motion.side_grasp_height)) < 1e-6
+    assert b.pitch == sk.grasp_pitch(cfg, wide) and abs(goal[0] - (0.37 - 0.04 - cfg.motion.side_standoff)) < 1e-6 and abs(goal[2] - (TABLE + cfg.motion.side_grasp_height)) < 1e-6
     # at the approach point, level: advance is offered, close is not
     w, b = w_at(goal, cfg.motion.side_pitch, b=b)
     k = keys(w, b)
