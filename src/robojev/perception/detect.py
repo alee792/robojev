@@ -257,15 +257,16 @@ class Detector:
                 spread = width_across
             u0, v0 = int(px[:, 0].mean()), int(px[:, 1].mean())
             margin = 3 * self.stride
-            sides = bool(px[:, 0].min() < margin or px[:, 0].max() > self.intr.w - margin
-                         or px[:, 1].max() > self.intr.h - margin)
-            top = bool(px[:, 1].min() < margin)
-            partial = bool(sides or top)
+            # NB: `top` above is this blob's height; do not shadow it.
+            cut_sides = bool(px[:, 0].min() < margin or px[:, 0].max() > self.intr.w - margin
+                             or px[:, 1].max() > self.intr.h - margin)
+            cut_top = bool(px[:, 1].min() < margin)
+            partial = bool(cut_sides or cut_top)
             # An object standing beyond the gripper runs off the top of an oblique wrist view. Its
             # height is then a lower bound, but the near edge (what the oblique centring uses) is
             # fully visible, so the footprint is sound: a cup 43 cm out never became a track at all
             # because of this (demo3). Such a blob may start a track; it still must not drag one.
-            top_cut = bool(top and not sides)
+            top_cut = bool(cut_top and not cut_sides)
             if not self.finger_mask:
                 # from a fixed camera the arm hides part of anything under it: a blob whose centre
                 # sits within the arm's corridor is a partial view (its centroid drifts away from the arm)
