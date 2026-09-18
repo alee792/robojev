@@ -105,7 +105,7 @@ def build(cfg: Config, w: World, brain=None) -> dict:
     }
     q["task_done"] = {
         "type": "noul",
-        "instructions": "Has the user's request (`user_request.text`) been completed? Judge from `arm.completed_so_far`, `arm.holding` and `objects`. If the request asked to move or place an object and `arm.completed_so_far` says it was put down at the requested place, the request is complete.",
+        "instructions": "Has the user's request (`user_request.text`) been completed? Judge from `arm.completed_so_far`, `arm.holding` and `objects`. If the request asked to move or place an object and `arm.completed_so_far` says it was put down at the requested place, the request is complete. But a standing instruction to keep doing something, or to keep things a certain way (it says 'keep', 'always', 'whenever', 'every time', or otherwise describes an ongoing duty rather than one action), is never complete: answer false even when the last move finished, because the duty continues.",
         "criteria": {"true": "everything the request asked for has happened (e.g. the object has been placed and released where asked)",
                      "false": "something the request asked for has not happened yet, or there is no request"},
     }
