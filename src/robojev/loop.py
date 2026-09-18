@@ -52,6 +52,7 @@ class Perception(threading.Thread):
         self.tracker = Tracker(ttl_s=cfg.loop.remembered_ttl_s, out_of_view_s=cfg.loop.out_of_view_s)
         self.table_z = table_z if table_z is not None else cfg.table_z
         self._table_samples = []
+        self._table_locked = False
         self.lock = threading.Lock()
         self.frame_jpeg: bytes | None = None
         self.info: dict = {}
@@ -144,10 +145,22 @@ class Perception(threading.Thread):
                         if ok:
                             self.frames[name] = jpg.tobytes()
                         dets.extend(d)
-                if info.get("plane_z_at_origin") is not None and info.get("plane_tilt_deg", 0) < 6:
-                    self._table_samples.append(info["plane_z_at_origin"])
-                    self._table_samples = self._table_samples[-15:]
-                    self.table_z = float(np.median(self._table_samples))
+                # The table does not move, so its height is measured once from a good vantage point
+                # and then locked. Left free-running it sank 2 cm while the arm was low and carrying
+                # (the camera then sees only close, steeply angled table), which drove the cup into
+                # the table and tripped the lag guard mid-place (demo7).
+                z = info.get("plane_z_at_origin")
+                if z is not None and info.get("plane_tilt_deg", 99) < 6 and not self._table_locked:
+                    if snap is None or snap.ee[2] > 0.12:      # only from up high, where the view is wide
+                        self._table_samples.append(z)
+                        self._table_samples = self._table_samples[-20:]
+                        self.table_z = float(np.median(self._table_samples))
+                        spread = (max(self._table_samples) - min(self._table_samples)) if self._table_samples else 1.0
+                        if len(self._table_samples) >= 20 and spread < 0.01:
+                            self._table_locked = True
+                            if self.log:
+                                self.log.write("events", kind="perception",
+                                               text=f"table height locked at {self.table_z:+.3f} m (spread {spread*1000:.0f} mm)")
                 with self.lock:
                     closing = snap.gripper_goal is not None and snap.gripper_goal < 0.02
                     self.tracker.update(dets, t, carried_xy=(snap.ee[:2] if (self.cameras and (snap.holding or closing)) else None),
