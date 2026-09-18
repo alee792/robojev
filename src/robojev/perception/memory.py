@@ -132,7 +132,8 @@ class Tracker:
                         e.frozen = True
                     continue
                 near_gripper = ee_xy is not None and np.hypot(d.base_xyz[0] - ee_xy[0], d.base_xyz[1] - ee_xy[1]) < 0.15
-                if (e.frozen and d.width > 1.6 * e.width) or d.partial or (e.frozen and near_gripper):
+                if (e.frozen and d.width > 1.6 * e.width) or (d.partial and not getattr(d, 'top_cut', False)) \
+                        or (e.frozen and near_gripper):
                     # ... and a view from right next to the gripper is too close and too oblique to
                     # trust (it put a just-released cup 3 cm short and the pads closed on air: real run 11)
                     a = 0.0   # a merged or partial blob confirms the object is there but says nothing about where
