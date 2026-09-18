@@ -51,7 +51,7 @@ class StubNamer:
     """Deterministic rules for tests/offline: cup-like -> 'cup', flat -> 'phone', hand-sized low box -> 'hand'."""
 
     def name(self, crop_bgr: np.ndarray, h: float, w: float, kind_guess: str, color: str) -> Naming:
-        if kind_guess == "cup-like object":
+        if kind_guess in ("cup-like object", "upright object"):
             return Naming(True, f"{color} paper cup", "cup", 0.8, "stub", time.time())
         if kind_guess == "flat object":
             return Naming(True, f"{color} phone", "phone", 0.7, "stub", time.time())
