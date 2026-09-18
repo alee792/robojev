@@ -211,7 +211,7 @@ def main(argv=None):
     r = sub.add_parser("run")
     r.add_argument("--arm", choices=["fake", "sim", "real-ro", "real"], default="fake")
     r.add_argument("--perception", choices=["virtual", "simcam", "camera"], default="virtual")
-    r.add_argument("--scenario", choices=["static", "drift", "intruder"], default="static")
+    r.add_argument("--scenario", choices=["static", "drift", "intruder", "mat"], default="static")
     r.add_argument("--vlm", choices=["off", "stub", "claude"], default="off", help="slow-tier track naming (claude needs ANTHROPIC_API_KEY)")
     r.add_argument("--scenario-start", type=float, default=10.0)
     r.add_argument("--camserver", default="http://127.0.0.1:8765")

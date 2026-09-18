@@ -27,6 +27,8 @@ OBJECTS = [  # name, kind, xy, size, rgba
     ("cup", "cylinder", (0.37, -0.07), (0.033, 0.055), (0.93, 0.90, 0.85, 1)),     # radius, half-height -> 6.6 x 11 cm (a paper cup low down)
     ("phone", "box", (0.30, 0.10), (0.035, 0.07, 0.012), (0.05, 0.05, 0.05, 1)),   # 7x14x2.4 cm (a thick phone / small book)
     ("hand", "box", (0.30, -0.60), (0.045, 0.06, 0.02), (0.85, 0.65, 0.55, 1)),     # 9x12x4 cm hand-sized intruder, parked out of view
+    ("mat", "box", (0.40, 0.60), (0.125, 0.10, 0.0015), (0.03, 0.03, 0.03, 1)),      # 25x20 cm black mouse mat, 3 mm thick, parked out of view
+    ("carton", "box", (0.40, 0.65), (0.035, 0.035, 0.05), (0.60, 0.45, 0.30, 1)),    # 7x7x10 cm cardboard box, parked out of view
 ]
 
 
@@ -310,6 +312,13 @@ class Scenario(threading.Thread):
             return
         if self.kind == "intruder":
             return self._intruder()
+        if self.kind == "mat":
+            # the mat routine: cup off the mat, carton on it, phone out of the way; nothing moves
+            self.arm.set_object("phone", 0.30, -0.60)
+            self.arm.set_object("mat", 0.42, 0.06)
+            self.arm.set_object("cup", 0.34, -0.13)
+            self.arm.set_object("carton", 0.44, 0.08)
+            return
         t0 = time.time()
         cup = self.arm.object_xy("cup")
         a = (0.30, 0.10)                       # beside

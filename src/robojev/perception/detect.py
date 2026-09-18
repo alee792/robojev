@@ -274,8 +274,9 @@ class Detector:
             return self._seg_cache[1], self._seg_cache[2]
         masks = self.segmenter.run(color)
         lbl = np.zeros(color.shape[:2], np.int32)
-        # ascending score, so where masks overlap the more confident one wins the pixel
-        for i in sorted(range(len(masks)), key=lambda j: masks[j].score):
+        # largest first, so the smallest mask covering a pixel wins it: FastSAM emits a parent
+        # region around nested children, and letting the parent win re-merges what it split
+        for i in sorted(range(len(masks)), key=lambda j: -int(masks[j].mask.sum())):
             if masks[i].mask.shape != lbl.shape:
                 self._seg_cache = (color, None, [])
                 return None, []
