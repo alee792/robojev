@@ -226,7 +226,7 @@ scenario runs, 19,526 requests, 19 errors (0.10%)**: 12 read timeouts (10 in one
 all ran to the 300 s cap). The handoff estimated about $0.33. Printed tables: `e12_run.txt`; the tick
 log is `e12_blocksworld.jsonl.gz` (133 MB uncompressed).
 
-**Harness bug found and fixed (commit `99f8b63`).** `plan.above()` tested a 2 cm box per axis, while
+**Harness bug found and fixed (commit `a06a48c`).** `plan.above()` tested a 2 cm box per axis, while
 `pick`'s grasp check tests a 2 cm radius. When a Planner answer interrupts `move_above`, the gripper can
 stop in a corner of the box (seed 2 `ambiguous`, `--no-listener`: dx 2.0, dy 1.3). `pick` was then
 offered, and the oracle's own `next_step` named it, but it failed "nothing at the grasp spot" 208

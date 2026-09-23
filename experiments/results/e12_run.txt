@@ -253,7 +253,7 @@ input tokens 594797 ≈ $0.0250 at Jev's price
 wall time 980.4 s
 
 
-# --- after harness fix 99f8b63 ('above' uses pick's radius): rerun of the affected variant, --no-listener, all three seeds ---
+# --- after harness fix a06a48c ('above' uses pick's radius): rerun of the affected variant, --no-listener, all three seeds ---
 
 $ uv run --frozen python experiments/e12_blocksworld.py --backend jev --no-listener --latency-ticks auto 
 logging every tick to /Users/anthonylee/code/robojev/.claude/worktrees/widowx-doom-loop-fc1569/experiments/results/e12_blocksworld.jsonl
