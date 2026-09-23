@@ -59,19 +59,32 @@ flowchart TB
     run --> seq[Sequencer checks progress<br/>against the task]
     seq -- "next step, or retry" --> run
     seq -- "task done" --> done([Wait for the next task])
-    seq -- "not on track" --> router{Router}
-    router -- "adjust a parameter" --> run
-    router -- "fast or capable LLM" --> patch[LLM patches the plan<br/>arm holds at a safe point]
+    seq -- "not on track" --> r_in
+
+    subgraph router [" "]
+        r_in{{Router: pick one route}}
+        r_in --> r_go[Continue]
+        r_in --> r_adj[Adjust a<br/>parameter]
+        r_in --> r_llm[Fast or<br/>capable LLM]
+        r_in --> r_stop[Stop, or<br/>ask the user]
+    end
+    r_go --> run
+    r_adj --> run
+    r_llm --> patch[LLM patches the plan<br/>arm holds at a safe point]
     patch --> run
-    router -- "stop, or ask the user" --> paused([Paused until the user answers])
+    r_stop --> paused([Paused until the user answers])
 
     subgraph anytime [At any moment, in parallel]
         change[/Perception: a change<br/>the robot didn't cause/] --> spotter[Spotter picks<br/>an intervention]
         corr[/User types a correction/]
     end
     spotter -- "re-target, pause,<br/>resume, ignore" --> run
-    spotter -- "can't place it" --> router
-    corr --> router
+    spotter -- "can't place it" --> r_in
+    corr --> r_in
+
+    classDef route fill:#fff4d6,stroke:#b8860b
+    class r_go,r_adj,r_llm,r_stop route
+    style router fill:#fffaf0,stroke:#b8860b
 ```
 
 ## 3. Start-up and the normal cycle, in time
