@@ -35,3 +35,51 @@ Cheap (fractions of a cent each). Run before committing to an architecture. Need
 12. **Jev vs LLM baseline.** Run the same batteries through `system-one-adapter-python` with a Claude or
     GPT model to get reference answers for a few hundred recorded states. This is how TypeSafe's own
     workflow evals were built.
+
+## E11 — reorder after a mid-task intent change (not yet run)
+
+(Code-named E11 after its file, `experiments/e11_reorder.py`; not the same as item 11 above.)
+
+**Question:** after a user changes their instruction mid-task, can Jev pick the robot's next action
+with no LLM planner, and how much does code have to precompute for that to work?
+
+**Scenario.** A row of N ∈ {3, 5, 7, 9} numbered blocks; slot 1 is the robot's left end. The robot is
+partway through sorting in one order (the first few slots already right), and the arm may be holding
+a block it lifted from some slot (leaving a gap). The user then says one of 12 phrases: order changes
+("actually, reverse it", "biggest first", "sort them low to high"...), "keep going the same way",
+"go a bit slower", and non-order messages ("stop!", "hold on a sec", a new task, a remark to a
+coworker). Half the scenes use numbers 1..N, half sparse numbers (so slot = rank, not value).
+Canonical case: row [3,1,2,_,4] sorting ascending, holding 5 from slot 4, "actually, reverse it" → carry
+5 **left**, into slot 1.
+
+**Questions** (all Choice, one request, independent): `intent` (stop / pause / adjust_order /
+continue / adjust_pace / new_task / not_for_me; `continue` was added because "keep going the same way"
+fits no other label), `new_order` (ascending / descending / unchanged), `direction` when holding
+(carry left / carry right / put back), `target_slot` when holding (slot 1..N), `next_pick` when the
+hand is empty (the block that belongs in the leftmost wrong slot under the wanted order, or "nothing"),
+and `escalate` (decide_now / ask_a_smarter_model). Action questions are skipped after stop / pause /
+new_task. Ground-truth rules are in the file's docstring and tested in `tests/test_e11_reorder.py`.
+
+**State variants (the axis):** `raw` (row, held block, old order, user text); `facts` (+ per-slot
+correctness, the held block's home and the next pick for the OLD order); `solved` (+ the same facts
+for BOTH orders, so Jev only has to map the text to a branch).
+
+**Hypothesis.** `intent` and `new_order` are near-perfect in every variant (E6's "which object did they
+mean" was). `direction`/`target_slot`/`next_pick` in `raw` degrade with N and with sparse numbers
+(ranking + a flip is multi-hop arithmetic); `facts` helps only when the order is unchanged; `solved`
+brings the action questions up to the level of `new_order`. If so, the design is "code solves every
+branch, Jev picks the branch". Also measured: a confidence gate (accuracy and coverage at 0.3/0.5/0.7/0.9)
+and whether `escalate` asks for a smarter model more often on requests Jev got wrong, i.e. whether
+Jev can be its own router.
+
+**Run** (from `experiments/`, needs `TYPESAFE_API_KEY`):
+```
+uv run python e11_reorder.py --dry-run          # no network: builds all 240 requests, writes samples to results/e11_samples/
+uv run python e11_reorder.py                    # 4 sizes x 20 scenes x 3 variants = 240 calls, ~0.33M tok ≈ $0.015
+uv run python e11_reorder.py --sizes 5,9 --variants raw,solved --n-scenes 40
+ANTHROPIC_API_KEY=... uv run --extra baseline python e11_reorder.py --baseline claude   # + claude-haiku-4-5, ~$0.4
+uv run python e11_reorder.py --mock             # noisy fake answers, no network: checks the tables only
+```
+Every request and response is logged to `results/e11_reorder.jsonl` (with the truth per question).
+The baseline answers all questions in one forced tool call (an LLM planner sees them jointly),
+so its answers are not independent like Jev's, and it has no confidence.
