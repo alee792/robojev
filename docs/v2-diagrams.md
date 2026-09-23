@@ -22,7 +22,7 @@ flowchart TB
     end
     subgraph jev [Jev, ~150 ms, async]
         spotter[Spotter<br/>changes from outside]
-        seq[Sequencer<br/>progress vs the task]
+        seq[Sequencer<br/>checks the plan,<br/>then progress]
         router[Router<br/>who handles it]
     end
     subgraph llm [LLM, 1 s or more, async]
@@ -34,11 +34,11 @@ flowchart TB
     skill -- "done, failed" --> bus
     bus --> disp
     disp -. "change" .-> spotter
-    disp -. "skill done or failed" .-> seq
+    disp -. "new plan, skill<br/>done or failed" .-> seq
     disp -. "correction, skill failed, not on track,<br/>can't place, low confidence" .-> router
     disp -. "no plan yet, hand off" .-> planner
     spotter -- "intervention" --> bus
-    seq -- "next step, or not on track" --> bus
+    seq -- "plan ok, next step,<br/>or not on track" --> bus
     router -- "route" --> bus
     planner -- "plan or patch" --> bus
     disp --> state --> skill --> filter --> arm([Arm])
@@ -55,8 +55,11 @@ flowchart TB
     start([Start]) --> boot[Start perception and the harness]
     boot --> task[/User gives a task/]
     task --> plan[Fast LLM writes a plan]
-    plan --> run[Run the next skill]
-    run --> seq[Sequencer checks progress<br/>against the task]
+    plan --> check[Sequencer checks the plan<br/>against the task]
+    check -- "ok" --> run[Run the next skill]
+    check -- "something's wrong" --> replan[Capable LLM replans]
+    replan --> check
+    run --> seq[Sequencer checks progress,<br/>one question per object]
     seq -- "next step, or retry" --> run
     seq -- "task done" --> done([Wait for the next task])
     seq -- "not on track, or unsure" --> r_in
@@ -71,7 +74,7 @@ flowchart TB
     r_go --> run
     r_adj --> run
     r_llm --> patch[LLM patches the plan<br/>arm carries on or holds<br/>at a safe point]
-    patch --> run
+    patch --> check
     r_stop --> paused([Paused until the user answers])
 
     subgraph anytime [At any moment, in parallel]
@@ -108,11 +111,13 @@ sequenceDiagram
         H->>P: task + world state
         P-->>H: plan: red_1, red_2, red_3 → left bin (~1 s)
     end
+    H->>S: plan + task + world state: anything wrong?
+    S-->>H: plan ok (~150 ms)
     loop each step
         H->>K: start(pick red_1 → left bin)
         K-->>H: done (event)
-        H->>S: task + world state + plan so far
-        S-->>H: on track, next step (event)
+        H->>S: per object: does the task want it in the left bin?
+        S-->>H: answers (event), code compares with the world state
     end
 ```
 
@@ -133,7 +138,7 @@ sequenceDiagram
     Note over H,K: Blocks 1, 2 in the tray, carrying 3
     U->>H: "actually, reverse it"
     H->>Ro: correction + task + parameters
-    Ro-->>H: adjust: sort order = highest on the left, after this block (~150 ms)
+    Ro-->>H: adjust: sort order = highest on the left (stated: yes), after this block (~150 ms)
     H-)P: blocks 1 and 2 sit in the slots 6 and 5 need: plan a fix
     H->>K: finish placing 3 (in its new slot, 4)
     H->>K: next: block 4 to slot 3 (code: the next block whose slot is free)
@@ -173,26 +178,28 @@ sequenceDiagram
 ## 6. A plan that misses something
 
 Nothing outside changed: the fast LLM's plan left out a block that was half hidden behind the bin.
-The plan finishes, but checking against the task (not the plan) shows the task isn't done.
+The Sequencer's check catches it before anything moves; the per-object check after each skill is
+the backstop if it slips through.
 
 ```mermaid
 sequenceDiagram
     actor U as User
     participant H as Harness
-    participant P as Fast LLM
+    participant P1 as Fast LLM
     participant S as Sequencer (Jev)
-    participant Ro as Router (Jev)
+    participant P2 as Capable LLM
 
     U->>H: "Put all the red blocks in the left bin"
-    H->>P: task + world state
-    P-->>H: plan: red_1, red_2 → left bin (missed red_3)
-    Note over H: Both steps run and succeed
-    H->>S: task + world state: red_3 still on the table
-    S-->>H: plan finished, task not done (0.86)
-    H->>Ro: plan finished, task not done
-    Ro-->>H: route: fast LLM
-    H->>P: task + world state + plan so far
-    P-->>H: patch: add red_3 → left bin
+    H->>P1: task + world state
+    P1-->>H: plan: red_1, red_2 → left bin (missed red_3)
+    H->>S: per object: does the task ask about it but the plan leave it out?
+    S-->>H: red_3: yes (0.91), others: no
+    H->>P2: task + world state + plan + "red_3 missing"
+    Note over H: Arm still waiting for its first plan
+    P2-->>H: plan: red_1, red_2, red_3 → left bin
+    H->>S: check again
+    S-->>H: plan ok
+    Note over H: First skill runs
 ```
 
 ## 7. What the arm is doing
