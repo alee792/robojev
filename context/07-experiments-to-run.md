@@ -209,3 +209,103 @@ scenarios, so start with a subset.
 restate the oracle's thresholds in words, which makes it close to a lookup; a harder variant would
 drop the rules and keep only the Facts. Skill outcomes are deterministic, except in the scripted
 disturbances. Only one seed per scenario is run (`--seed`).
+
+## E13 — LLM-prepared branches (not yet run)
+
+Code: `experiments/e13_branches/` (entry `experiments/e13_branches.py`), tests `tests/test_e13_branches.py`.
+
+**Question.** v2 now rests on this: a fast LLM, not hand-written task code, prepares the plan's
+branches when it plans; Jev picks among them when the user corrects the task mid-run; low Jev
+confidence escalates back to the LLM. E11 `solved` and E12 showed Jev picks well among branches that
+*code* wrote (301/303). E13 tests whether an LLM writes those branches, over tasks that are not
+number sorting, and what the whole loop costs in accuracy and latency against "always ask the LLM".
+
+**Setup (open loop, like E11).** Seeded scenes of 4-8 blocks (number, colour, size in cm), a tray
+with one slot per block (`tray_slot_1` = robot's far left), a left and a right bin, and the table.
+Seven task families, 4 tasks each by default: sort by number into the tray; biggest (or smallest)
+first; each colour into the bin with the matching sticker; all the red blocks into the left bin;
+everything except the green one into the tray; alternate two colours; even numbers in one bin and
+odd in the other. Each task gets 5 corrections: ~2 a natural parameter covers ("actually, reverse
+it", "swap the bins", "start with blue instead"), ~2 none does ("leave the blue ones out", "put the
+red ones in the left bin instead", "just line them up by number"), and 1 of chatter / "hold on a
+sec" / a restatement of what the robot is already doing. A hand-written **evaluation oracle**
+(`oracle.py`, used only for scoring and the mocks) gives the correct final arrangement(s) for each.
+
+**System under test** (`plan.py`, `planner.py`, `router.py`; a test checks they don't import the
+oracle and contain no task-specific words):
+1. *Planner.* Task + scene go to an OpenAI model with a strict JSON-schema structured output
+   (Responses API). The plan has `parameters` (name, what it controls, values named by meaning with
+   a one-line meaning each, default) and up to 4 `branches`, each a parameter combination with a
+   goal for every block (tray slot, bin or `stays_on_table`; block ids and destinations are schema
+   enums). Generic code validates it (each block exactly once, one block per slot, known
+   destinations, each branch sets every parameter to an allowed value, the default combination
+   exists, no duplicate combinations). An invalid plan gets one retry with the errors, counted
+   separately.
+2. *Router (Jev).* State = task, the correction, and the plan's parameters with their values'
+   meanings and current values (no goal maps). Questions: `route` Choice (continue / adjust /
+   new_plan_needed / pause, each with `not_for`), and per parameter one Choice over its values plus
+   one "stated" Noul, as in the function-calling cookbook (no `unchanged` option). Code sets the
+   stated parameters, looks the combination up among the prepared branches, and gates on the
+   weakest confidence among the route, every stated Noul (|2p-1|) and the stated values' Choices.
+   Pause has its own gate (min(gate, 0.3)); new_plan_needed, a combination not prepared, "adjust"
+   with nothing stated, "continue" with a changed value, or a Jev error all escalate.
+3. *Escalation.* Task + scene + current plan (with its current goal) + correction go back to the
+   LLM for a new plan; its default branch is the answer. Validated and scored the same way.
+
+The "always escalate" baseline sends every correction through step 3. By default it runs for
+every correction (`--no-baseline` turns it off), and the system's own escalations reuse that
+same call, so the offline gate sweep knows the escalation outcome at every gate.
+
+**Hypothesis.**
+1. The fast LLM's default branch is right on at least 90% of tasks, its plans are valid first
+   time on at least 90%, and for at least 80% of the coverable corrections it prepared a branch
+   that matches.
+2. Jev's route is right on at least 95% (E11 `intent` was 719/720), and where a prepared branch is
+   the answer it picks it on at least 95% (E11 `solved` 301/303).
+3. At a 0.7 gate, end-to-end accuracy is at least that of always escalating, with most coverable
+   corrections and chatter answered at Jev latency (~150-200 ms) instead of the LLM's (seconds).
+
+**What each metric decides for the design.**
+- *Default correct, validity:* if the fast model often gets the default goal wrong, the Sequencer's
+  pre-run plan check (v2 "Keeping the plan on track") is essential, not optional; if validity is
+  low, the retry and the validator stay in the loop and the schema needs tightening.
+- *Coverable corrections with a matching branch:* this is the core assumption. High: "Jev picks
+  a prepared branch" is the fast path. Low: the LLM doesn't anticipate corrections, and every
+  correction costs an LLM call, so the Router's value is only in routing (chatter vs change).
+  Which families miss says what to put in the planner prompt (e.g. which kinds of parameters).
+- *Route accuracy on uncoverable corrections:* a confident wrong "adjust"/"continue" is the costly
+  error (a wrong arrangement at Jev speed). If it happens, the `new_plan_needed` boundary needs
+  work before the Router is trusted.
+- *Gate sweep (keeps / escalates / mistakes caught / end-to-end):* picks the Router's threshold,
+  as the E11 replay did. If no gate beats always-LLM on accuracy at a useful escalation rate, the
+  fast path should only handle chatter and pause.
+- *Latency and tokens:* end-to-end p50/p95 per path, and LLM calls saved per correction, which is
+  what the fast path buys.
+
+**Run** (from `experiments/`; the OpenAI SDK is the optional extra `llm` in
+`experiments/pyproject.toml`). There is **no default OpenAI model**: set `--llm-model` or
+`OPENAI_MODEL`; without it the harness lists the account's models whose id contains "terra" and exits.
+```
+uv run python e13_branches.py --dry-run                              # no network: samples -> results/e13_samples/, call counts, cost
+uv run python e13_branches.py                                        # offline: mock LLM + mock Jev (noisy oracle)
+uv run python e13_branches.py --llm mock --jev jev                   # Jev only, on oracle-made plans: 140 Jev calls, ~$0.005
+OPENAI_MODEL=<id> uv run --extra llm python e13_branches.py --llm openai --jev jev   # the real run: 28 tasks x 5 corrections
+uv run --extra llm python e13_branches.py --llm openai --jev jev --llm-model <id> --tasks 7 --max-llm-calls 50   # a small first run
+uv run python e13_branches.py --replay results/e13_branches.jsonl --gate 0.5                          # re-score at another gate, no calls
+```
+Needs `OPENAI_API_KEY` and `TYPESAFE_API_KEY` (env or `.env`). Every plan, Jev request and answer,
+escalation and truth is logged to `results/e13_branches.jsonl` (run records first, then one per
+plan and per correction). LLM calls use `max_retries=0` and a 30 s timeout (`--llm-timeout`); a
+failed call is recorded, not retried. `--max-llm-calls` stops the run cleanly.
+
+**Cost.** Default run: LLM 28 plans + 140 escalations (≈190 calls with retries), ~230k input tokens
+and ~30k visible output tokens (reasoning models add hidden output, budget 2-5x); pass
+`--llm-price-in/--llm-price-out` to the dry run for a dollar figure (no model price is assumed).
+With `--no-baseline` the LLM only sees Jev's escalations (roughly half as many calls). Jev: 140
+requests, ~115k input tokens ≈ **$0.005**.
+
+**Caveats.** The oracle is one reading of each sentence; where a task is ambiguous ("in any
+order", "alternating") it accepts every arrangement that fits. Route truth is relative to the
+plan: if the LLM prepared a branch for "leave the blue ones out", then `adjust` is right for it.
+Corrections are independent and each starts from the default branch (open loop: no arm, nothing is
+half-placed). The mocks read the oracle, so mock numbers only check the pipeline and tables.

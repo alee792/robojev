@@ -138,3 +138,80 @@ Done: all deliverables are on this branch and PR #1 has the answers comment. Res
   $0.10–0.30.
 - (c) An E11 variant whose options carry their meaning ("to the smallest-number end") instead of slot
   numbers.
+
+---
+
+# Handoff 2: run E13 (LLM-prepared branches)
+
+Paste the block below into a Claude Code session on the bay Mac. It needs `TYPESAFE_API_KEY` and
+`OPENAI_API_KEY`.
+
+---
+
+You are running experiment E13 for robojev. It tests the assumption the v2 design now rests on: a
+fast LLM, not hand-written task code, prepares the plan's branches (the final position of every
+block for each variant of the task a user might ask for); when the user corrects the task mid-run,
+Jev picks which prepared branch they mean; and when Jev's confidence is low, or no branch fits, the
+correction goes back to the LLM. The harness is built and tested offline; nothing has been run
+against the real models.
+
+**Setup**
+1. `git fetch origin claude/first-principles-approach-ow3jo2 && git checkout claude/first-principles-approach-ow3jo2`
+2. Read `docs/v2.md` (especially "Example: a mid-task correction" and "Routing"), the E11 replay and
+   "Getting more out of Jev" sections of `context/08-experiment-results.md`, and the E13 section of
+   `context/07-experiments-to-run.md`.
+3. Confirm `TYPESAFE_API_KEY` and `OPENAI_API_KEY` are set (environment or `.env`). Never print them.
+4. The LLM is "ChatGPT Terra". Its exact model id is not known to the harness and must not be
+   guessed: run `cd experiments && uv run --extra llm python e13_branches.py --llm openai --jev mock --tasks 1`
+   with no model set, which lists the account's models whose id contains "terra" and exits. If there
+   is exactly one, use it; if several or none, stop and ask the user. Set it as `OPENAI_MODEL`.
+5. `uv run --frozen pytest -q` at the repo root (expect 137 passed, 3 skipped).
+
+**Run, in this order, from `experiments/`. Stop and report if more than 5% of LLM calls or 2% of Jev
+calls fail.**
+```
+uv run python e13_branches.py --dry-run
+# small first: 7 tasks, capped LLM calls
+uv run --extra llm python e13_branches.py --llm openai --jev jev --tasks 7 --max-llm-calls 50
+# full default run (28 tasks x 5 corrections; ~190 LLM calls, ~$0.005 of Jev)
+uv run --extra llm python e13_branches.py --llm openai --jev jev
+# offline gate sweep from the log (free)
+uv run python e13_branches.py --replay results/e13_branches.jsonl --gate 0.5
+uv run python e13_branches.py --replay results/e13_branches.jsonl --gate 0.7
+```
+Before the full run, look up the model's price and run the dry run with `--llm-price-in` /
+`--llm-price-out` to estimate the LLM cost; if it is over $5, ask the user first. Save every printed
+table, with its command line, to `experiments/results/e13_run.txt`.
+
+**Questions to answer, with numbers**
+1. Can the fast LLM prepare branches? Valid plans first time and after one retry; default branch
+   correct; share of coverable corrections for which it prepared the right branch. Which task
+   kinds does it get wrong, and how (read the log)?
+2. Can Jev pick the right branch from a spoken correction? Route accuracy by correction kind
+   (coverable, not coverable, chatter, pause); branch-pick accuracy.
+3. Does low confidence catch Jev's mistakes? Accuracy, escalation rate and mistakes caught at each
+   gate from the replay sweep. Which gate would you set, and why?
+4. End to end against "always ask the LLM": accuracy and latency (p50/p95), overall and by
+   correction kind. Where does the Jev path win, and where does it lose?
+5. LLM latency and token use per plan and per escalation; the real LLM cost of the run.
+
+**Known limits, to keep in mind when interpreting**
+- Open loop: each correction is judged on its own, from the default branch; no arm or simulation.
+- The evaluation oracle is lenient in places (gaps in tray lines; "any order" tasks accept any
+  valid arrangement). An uncoverable correction can occasionally match the current goal by chance.
+- Block ids and destinations are fixed lists in the output schema, so the LLM cannot name a
+  destination that doesn't exist; validity failures are only missing, duplicate or clashing blocks.
+- The always-LLM baseline and the system's escalation share one LLM call per correction.
+
+**Rules**
+- Do not change the harness or its prompts to improve the numbers. If you find a harness bug, fix it
+  in its own commit, say what it changed, and rerun what it affected.
+- Keep the limits above in the write-up.
+
+**Deliverables**, pushed to `claude/first-principles-approach-ow3jo2` (PR #1):
+1. `experiments/results/e13_branches.jsonl` (gzip it if it is over 50 MB) and `e13_run.txt`.
+2. An "E13" section in `context/08-experiment-results.md` in that file's style: tables, then
+   takeaways with numbers, each marked measured or inferred.
+3. Add E13 to "What the spikes say" at the end of `docs/v2.md`: does the LLM-prepares-branches,
+   Jev-picks design hold, what gate to use, and what to change.
+4. A comment on PR #1 answering questions 1-5 in a few lines each, in plain language.

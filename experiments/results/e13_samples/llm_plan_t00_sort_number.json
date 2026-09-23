@@ -1,0 +1,161 @@
+{
+ "openai_kwargs": {
+  "model": "<OPENAI_MODEL>",
+  "instructions": "You plan for a robot arm that moves blocks. The scene lists the blocks, a tray whose slots each hold one block, two bins that hold any number, and the table. Given the user's task, say where every block must end up.\n\nReturn:\n- task_reading: one sentence, the final arrangement the task asks for.\n- parameters: 0 to 3 settings of this task that the user might plausibly change while the robot is working. Name each value by what it means (e.g. \"left_bin\", not \"option_2\") and give it a one-line meaning that a user's spoken correction can be matched against. The default is the value the task as given asks for. Only expose a setting if every value gives a complete arrangement.\n- branches: 1 to 4. Each branch sets every parameter to one value and gives the full goal for that combination. Include the default combination (every parameter at its default), then the combinations the user is most likely to ask for.\n- goal: one entry per block, every block exactly once. The destination is a tray slot, a bin, or stays_on_table. At most one block per tray slot.\n\nWork the goals out carefully; the robot follows them exactly and nothing checks them against the task.",
+  "input": "{\"task\": \"Line the blocks up in the tray by number, lowest number on the left.\", \"scene\": {\"blocks\": [{\"id\": \"red_5\", \"number\": 5, \"colour\": \"red\", \"size_cm\": 3.0}, {\"id\": \"red_12\", \"number\": 12, \"colour\": \"red\", \"size_cm\": 4.0}, {\"id\": \"blue_11\", \"number\": 11, \"colour\": \"blue\", \"size_cm\": 6.0}, {\"id\": \"blue_3\", \"number\": 3, \"colour\": \"blue\", \"size_cm\": 2.5}, {\"id\": \"green_1\", \"number\": 1, \"colour\": \"green\", \"size_cm\": 3.5}, {\"id\": \"blue_7\", \"number\": 7, \"colour\": \"blue\", \"size_cm\": 5.5}], \"tray\": {\"slots\": [\"tray_slot_1\", \"tray_slot_2\", \"tray_slot_3\", \"tray_slot_4\", \"tray_slot_5\", \"tray_slot_6\"], \"layout\": \"tray_slot_1 is the robot's far left; slots run left to right up to tray_slot_6\"}, \"bins\": [{\"id\": \"left_bin\", \"position\": \"left of the tray\"}, {\"id\": \"right_bin\", \"position\": \"right of the tray\"}], \"table\": \"stays_on_table means the block is left where it is on the table\", \"destinations\": {\"one_block_each\": [\"tray_slot_1\", \"tray_slot_2\", \"tray_slot_3\", \"tray_slot_4\", \"tray_slot_5\", \"tray_slot_6\"], \"any_number_of_blocks\": [\"left_bin\", \"right_bin\", \"stays_on_table\"]}}}",
+  "text": {
+   "format": {
+    "type": "json_schema",
+    "name": "plan",
+    "schema": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "task_reading",
+      "parameters",
+      "branches"
+     ],
+     "properties": {
+      "task_reading": {
+       "type": "string",
+       "description": "One sentence: the final arrangement the task asks for."
+      },
+      "parameters": {
+       "type": "array",
+       "description": "0-3 settings of this task the user might change while the robot works.",
+       "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+         "name",
+         "about",
+         "values",
+         "default"
+        ],
+        "properties": {
+         "name": {
+          "type": "string",
+          "description": "short snake_case name"
+         },
+         "about": {
+          "type": "string",
+          "description": "what this setting controls, in plain words"
+         },
+         "values": {
+          "type": "array",
+          "description": "2-4 values, each named by its meaning",
+          "items": {
+           "type": "object",
+           "additionalProperties": false,
+           "required": [
+            "value",
+            "meaning"
+           ],
+           "properties": {
+            "value": {
+             "type": "string",
+             "description": "snake_case, named by meaning"
+            },
+            "meaning": {
+             "type": "string",
+             "description": "one line a user's words can be matched against"
+            }
+           }
+          }
+         },
+         "default": {
+          "type": "string",
+          "description": "the value the task as given asks for"
+         }
+        }
+       }
+      },
+      "branches": {
+       "type": "array",
+       "description": "1-4 branches: the default combination first, then the likeliest alternatives.",
+       "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+         "settings",
+         "goal"
+        ],
+        "properties": {
+         "settings": {
+          "type": "array",
+          "description": "one entry per parameter",
+          "items": {
+           "type": "object",
+           "additionalProperties": false,
+           "required": [
+            "parameter",
+            "value"
+           ],
+           "properties": {
+            "parameter": {
+             "type": "string"
+            },
+            "value": {
+             "type": "string"
+            }
+           }
+          }
+         },
+         "goal": {
+          "type": "array",
+          "description": "one entry per block: where it must end up",
+          "items": {
+           "type": "object",
+           "additionalProperties": false,
+           "required": [
+            "block",
+            "destination"
+           ],
+           "properties": {
+            "block": {
+             "type": "string",
+             "enum": [
+              "red_5",
+              "red_12",
+              "blue_11",
+              "blue_3",
+              "green_1",
+              "blue_7"
+             ]
+            },
+            "destination": {
+             "type": "string",
+             "enum": [
+              "tray_slot_1",
+              "tray_slot_2",
+              "tray_slot_3",
+              "tray_slot_4",
+              "tray_slot_5",
+              "tray_slot_6",
+              "left_bin",
+              "right_bin",
+              "stays_on_table"
+             ]
+            }
+           }
+          }
+         }
+        }
+       }
+      }
+     }
+    },
+    "strict": true
+   }
+  },
+  "store": false
+ },
+ "oracle_canonical_default": {
+  "red_5": "tray_slot_3",
+  "red_12": "tray_slot_6",
+  "blue_11": "tray_slot_5",
+  "blue_3": "tray_slot_2",
+  "green_1": "tray_slot_1",
+  "blue_7": "tray_slot_4"
+ }
+}
