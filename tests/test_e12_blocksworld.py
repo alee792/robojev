@@ -121,3 +121,10 @@ def test_dry_run_writes_one_sample_per_layer_per_scenario(tmp_path, monkeypatch,
     assert got == ["crawl_sort_sequencer.json", "hand_in_path_sequencer.json", "hand_in_path_spotter.json",
                    "reverse_midway_listener.json", "reverse_midway_sequencer.json"]
     assert "$" in capsys.readouterr().out
+
+
+def test_ambiguous_without_listener_completes_when_a_replan_leaves_the_gripper_off_centre():
+    # seed 2: the Planner's skip interrupts move_above 2.4 cm from the next block (dx 2.0, dy 1.3). The
+    # precondition used a per-axis box and offered pick, whose grasp check is a radius, so pick failed forever.
+    m = run_one(make("ambiguous", 2), B.Oracle(), Variant("solved", listener=False))
+    assert m.completed and m.failed <= 1

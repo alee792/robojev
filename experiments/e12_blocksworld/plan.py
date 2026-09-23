@@ -9,7 +9,7 @@ Scene: the oracle on the true one, Facts on the perceived one).
 
 from __future__ import annotations
 
-from .world import ABOVE_CM, FINGER_CM
+from .world import ABOVE_CM, FINGER_CM, dxy
 
 ASC, DESC = "ascending", "descending"
 UNCHANGED = "unchanged"
@@ -194,7 +194,8 @@ def dest_xy(scene: dict, key: str, arm=None) -> tuple | None:
 
 
 def above(arm, xy) -> bool:
-    return xy is not None and arm.high and abs(arm.x - xy[0]) <= ABOVE_CM and abs(arm.y - xy[1]) <= ABOVE_CM
+    # Same distance test as pick's grasp check (skills.py): a per-axis box let the corners pass here and fail there.
+    return xy is not None and arm.high and dxy((arm.x, arm.y), xy) <= ABOVE_CM
 
 
 def crowded(scene: dict, bid: str, forb) -> str | None:
@@ -222,7 +223,7 @@ def next_skill(plan: dict, knobs: dict, scene: dict, arm, deferred=()) -> str:
     g = goals(plan, knobs, scene)
     if arm.holding:
         if not arm.high:
-            at_dest = arm.dest is not None and abs(arm.x - arm.dest[1]) <= ABOVE_CM and abs(arm.y - arm.dest[2]) <= ABOVE_CM
+            at_dest = arm.dest is not None and dxy((arm.x, arm.y), arm.dest[1:]) <= ABOVE_CM
             return "release" if at_dest else "retreat"
         goal = g.get(arm.holding)
         target = goal if goal and goal_free(scene, goal, arm.holding) else "park"
