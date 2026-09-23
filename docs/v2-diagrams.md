@@ -2,7 +2,7 @@
 
 Companion to `docs/v2.md`. GitHub renders these.
 
-## 1. The loop
+## 1. Architecture: the event bus
 
 Perception, the user and skills put events on a bus. The harness takes each event, asks the right
 layer (async), and applies the answer. Only the harness moves the arm, and perception sees the result.
@@ -45,7 +45,36 @@ flowchart TB
     stop([STOP button]) -. "always wins" .-> filter
 ```
 
-## 2. Start-up and the normal cycle
+## 2. Workflow: start-up and execution
+
+The same loop with the bus left out, read top to bottom. The main path runs one skill at a time; the
+box on the side can fire at any moment, in parallel with it.
+
+```mermaid
+flowchart TB
+    start([Start]) --> boot[Start perception and the harness]
+    boot --> task[/User gives a task/]
+    task --> plan[Fast LLM writes a plan]
+    plan --> run[Run the next skill]
+    run --> seq[Sequencer checks progress<br/>against the task]
+    seq -- "next step, or retry" --> run
+    seq -- "task done" --> done([Wait for the next task])
+    seq -- "not on track" --> router{Router}
+    router -- "adjust a parameter" --> run
+    router -- "fast or capable LLM" --> patch[LLM patches the plan<br/>arm holds at a safe point]
+    patch --> run
+    router -- "stop, or ask the user" --> paused([Paused until the user answers])
+
+    subgraph anytime [At any moment, in parallel]
+        change[/Perception: a change<br/>the robot didn't cause/] --> spotter[Spotter picks<br/>an intervention]
+        corr[/User types a correction/]
+    end
+    spotter -- "re-target, pause,<br/>resume, ignore" --> run
+    spotter -- "can't place it" --> router
+    corr --> router
+```
+
+## 3. Start-up and the normal cycle, in time
 
 Perception and the harness start first. With no plan, the harness asks the fast LLM for one; the
 first skill runs as soon as it arrives, and everything after that is event-driven.
@@ -74,7 +103,7 @@ sequenceDiagram
     end
 ```
 
-## 3. Headline demo: "actually, reverse it"
+## 4. Headline demo: "actually, reverse it"
 
 The task is "line the numbered blocks up in the tray, lowest on the left". The correction changes the
 final arrangement, so the sort order parameter flips. The fast path acts within ~150 ms; only the
@@ -99,7 +128,7 @@ sequenceDiagram
     Note over H: The arm never waited for the LLM
 ```
 
-## 4. Walk: someone moves the target, then reaches in
+## 5. Walk: someone moves the target, then reaches in
 
 Perception flags changes the robot didn't cause; the Spotter decides what each one means.
 
@@ -128,7 +157,7 @@ sequenceDiagram
     Sp-->>H: intervention: resume
 ```
 
-## 5. A plan that misses something
+## 6. A plan that misses something
 
 Nothing outside changed: the fast LLM's plan left out a block that was half hidden behind the bin.
 The plan finishes, but checking against the task (not the plan) shows the task isn't done.
@@ -153,7 +182,7 @@ sequenceDiagram
     P-->>H: patch: add red_3 → left bin
 ```
 
-## 6. What the arm is doing
+## 7. What the arm is doing
 
 Only the harness moves the arm between these states. A model can pause it; only the STOP button or
 the safety filter stops it.
