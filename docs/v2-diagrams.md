@@ -124,8 +124,8 @@ sequenceDiagram
 ## 4. Headline demo: "actually, reverse it"
 
 The task is "line the numbered blocks up in the tray, lowest on the left". The correction changes the
-final arrangement, so the sort order parameter flips. The fast path acts within ~150 ms; only the
-ambiguous part goes to the LLM, in parallel.
+final arrangement, so the sort order parameter flips. Jev maps the words onto the parameter within
+~150 ms; code works out every move from there, including the blocks already placed. No LLM.
 
 ```mermaid
 sequenceDiagram
@@ -133,17 +133,17 @@ sequenceDiagram
     participant H as Harness
     participant Ro as Router (Jev)
     participant K as Skill
-    participant P as Fast LLM
 
     Note over H,K: Blocks 1, 2 in the tray, carrying 3
     U->>H: "actually, reverse it"
     H->>Ro: correction + task + parameters
     Ro-->>H: adjust: sort order = highest on the left (stated: yes), after this block (~150 ms)
-    H-)P: blocks 1 and 2 sit in the slots 6 and 5 need: plan a fix
+    Note over H: Code recomputes every goal slot. 1 and 2 are now "not at goal"
     H->>K: finish placing 3 (in its new slot, 4)
-    H->>K: next: block 4 to slot 3 (code: the next block whose slot is free)
-    P-->>H: patch: move 1 and 2 out, then place 6 and 5 (~1-3 s)
-    Note over H: The arm never waited for the LLM
+    H->>K: 4 to slot 3 (next block whose slot is free)
+    H->>K: move 1 and 2 out of the slots 6 and 5 need
+    H->>K: 6, 5, 2, 1 into their slots
+    Note over H: The arm never waited, and no LLM was called
 ```
 
 ## 5. Walk: someone moves the target, then reaches in
