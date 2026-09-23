@@ -83,3 +83,129 @@ uv run python e11_reorder.py --mock             # noisy fake answers, no network
 Every request and response is logged to `results/e11_reorder.jsonl` (with the truth per question).
 The baseline answers all questions in one forced tool call (an LLM planner sees them jointly),
 so its answers are not independent like Jev's, and it has no confidence.
+
+## E12 — text-only blocks world, closed loop (not yet run)
+
+(Code-named E12 after its file, `experiments/e12_blocksworld.py` plus the `experiments/e12_blocksworld/`
+package; not the same as item 12 above. Architecture and vocabulary: `docs/v2.md`.)
+
+**Question:** do v2's fast layers (the **Sequencer**, **Spotter** and **Listener**) hold up
+*closed-loop*, with Picks arriving late, answers compounding over many decisions, a person
+interfering, and code (**Skills**, **Limiter**, **Arbiter**) around them? E11 tested one decision.
+E12 tests a whole task, without an arm, MuJoCo or a camera.
+
+**World.** A 2-D table in cm at 10 ticks/s of sim time. It has numbered or coloured blocks, a 5-slot
+tray (slot 1 at the robot's left) or bins, an arm (gripper position, holding, current skill) and a
+scripted human. The human acts on triggers (e.g. "while the arm approaches its 2nd block"), not at
+fixed times, so every backend meets the disturbance at the same point in the task. Perception renders
+the **Scene** from the true world; `--noise` adds number misreads (3%), one-tick dropouts (2%) and
+0.5 cm jitter. Skills (survey, move_above, pick, carry_to, place, release, retreat, hold, back_off,
+evade_up, nudge_clear) take several ticks each and fail for real reasons, e.g. `pick` → "nothing at
+the grasp spot" when the block was moved. Code filters which skills are offered. The **Planner** is a
+stub: hand-written JSON **Plans** (bindings, **knobs**, skill graph, goal rule, **Orders**, question
+templates) for sort-by-number, sort-by-colour and move-all-except-X. Escalations go to an oracle
+Planner that resolves them from ground truth after 2 s of sim time (`--planner-delay`), or to
+claude-haiku-4-5 (`--escalation claude`).
+
+**Layers** (all questions are Choice, so every Pick has a confidence; the code gates on it):
+- **Sequencer**, asked whenever the arm is idle. Questions: `next_skill` (over the code-offered skills),
+  `task_status` (complete / not), `escalate`. "Complete" also needs code's own goal check to agree.
+  After 3 disagreements, or 3 low-confidence picks, it escalates.
+- **Spotter**, asked when something changes near the arm: a hand appears, moves more than 2 cm or
+  vanishes; a block within 30 cm of the gripper or its heading moves; the gripper comes within 20 cm
+  of a block an Order is bound to. It also re-asks after 1 s of silence while watching. Questions:
+  `action` (continue / slow / hold / back_off / evade_up), then on/off for each conditional Order.
+  Picks that make the arm more cautious apply at once; picks that relax it need two in a row.
+- **Listener**, asked only on an **Utterance**. Questions: `intent` (adjust / stop / pause / resume /
+  new_task / continue / not_for_me), one choice per knob (its values + `unchanged`), `when` (now /
+  at next safe point), and `escalate`. `adjust` with no knob change, or `new_task`, goes to the Planner.
+- Answers apply 2 ticks after the request (`--latency-ticks`, or `auto` = the measured latency).
+- Code rules no layer can relax: always-on Orders ("don't touch the green block": never offered,
+  refused by the Limiter at dispatch and on every motion step); a hand within 20 cm caps the pace at
+  slow; the arm never steps toward a hand closer than 3 cm (this prevents a collision, not an
+  intrusion); the word "stop" stops the arm in code.
+
+**Scenarios** (`--scenario all` runs the ten): `crawl_sort` (static, 5 numbered blocks into the tray,
+ascending), `sort_colours` (6 blocks into red/blue/green bins), `reverse_midway` ("actually, reverse
+it" while carrying the 3rd block), `moved_target` (the human moves the target during the approach,
+and later during a grasp), `undo` (the human takes a sorted block out of the tray and drops it on
+the table), `hand_in_path` (a hand reaches into the carry path, stays 3 s, leaves), `forbidden_moves`
+(order "don't touch the green block"; the human slides it 3 cm from the next target, so the arm must
+`nudge_clear` before it can grasp), `chatter` ("nice, looking good" must change nothing),
+`ambiguous` ("not that one" while approaching a block: set it aside via the `skip` knob, or
+escalate), `move_except` ("use the right bin instead" midway).
+
+**Backends:** `oracle` answers every question from ground truth. It is the upper bound and the
+scripted baseline; the same policy function generates the `solved` Facts from the perceived Scene.
+`mock` is the oracle with an error rate and confidence noise, for testing gating and recovery offline.
+`jev` is the real API: raw httpx over HTTP/2 via `common.py`, no retries; a failed call is logged and
+the layer re-asks. `claude` is claude-haiku-4-5 answering the same questions as one forced tool call,
+reusing e11's baseline code; it has no confidence, so its picks are never gated.
+
+**Metrics** per scenario × backend × variant: completed (final arrangement correct under the knob
+values the user ended up asking for), sim time, skills run, disturbances → recovered (every block a
+disturbance moved ended at its goal), failed skills, requests per layer and share of ticks with a
+request, escalations, gated picks, ticks from utterance to changed behaviour (plus missed and
+spurious changes), violations (forbidden-block touches, hand contacts within 5 cm, code-floor stops),
+and per-question agreement with the oracle. Every tick is logged to JSONL with the arm, the
+Spotter's action, the active Orders and the knobs. Every request is logged with its State,
+Questions, ground truth and Picks, along with each applied effect, so a run can be replayed and
+scored again.
+
+**Hypothesis.**
+1. With `solved` Facts, Jev's Sequencer agrees with the oracle on at least 95% of `next_skill` picks
+   and completes every scenario, at roughly the oracle's sim time plus about 2 ticks per decision.
+   Every Pick lands after the skill boundary, so latency is paid at every step.
+2. The Listener maps "actually, reverse it", "use the right bin instead" and "not that one" onto
+   knob values (E6 and E11 suggest this is the easy part) and changes behaviour within about 2-3
+   ticks. The Planner path takes about 20 ticks. "nice, looking good" changes nothing.
+3. The Spotter keeps hand contacts at zero where no Spotter gets at least one, and switches "slow near
+   the green block" on and off at the right times.
+4. The confidence gate turns some wrong picks into re-asks or escalations rather than wrong actions.
+   If escalations cluster on Jev's errors, Jev can route its own mistakes.
+
+**What each ablation tells us** (`--sweep` runs all four):
+- `raw` vs `solved` (`--facts`): whether the Sequencer can derive goals and the next block itself
+  (ranking, the reversed order, taken slots) or needs code's answer under each knob value. This is
+  E11's question asked closed-loop, where one wrong pick costs a detour rather than a failed
+  scenario. If `raw` is only slightly worse, the Facts can shrink. If it falls apart, "code solves
+  every branch, Jev picks the branch" is the design.
+- `--no-spotter`: what the Spotter buys on top of the code rules. The expected result is hand
+  contacts in `hand_in_path` (the arm is slowed and finally stopped by code, but the hand arrives
+  where the arm is going) and no slow-down near the green block. If no-Spotter shows no contacts
+  either, code rules alone are enough and the Spotter should only switch Orders on.
+- `--no-listener`: every utterance goes to the Planner. This gives the latency cost of not having a
+  Listener: utterance→change becomes the Planner delay (20 ticks by default, versus about 2 with the
+  Listener). It also shows how often the Listener itself escalated. `chatter` becomes a pointless
+  escalation.
+- `--noise`: how much a noisy Scene inflates Spotter requests and disturbs the Facts. There is no
+  tracker, so this is a worst case.
+
+**Run** (from the repo root; plain `uv run` also works from `experiments/`):
+```
+uv run --frozen python experiments/e12_blocksworld.py --dry-run           # no network: samples -> results/e12_samples/, request + cost estimate
+uv run --frozen python experiments/e12_blocksworld.py --backend oracle    # upper bound, all 10 scenarios (offline)
+uv run --frozen python experiments/e12_blocksworld.py --backend mock --mock-error 0.1 --sweep   # offline
+uv run --frozen python experiments/e12_blocksworld.py --backend jev                  # needs TYPESAFE_API_KEY; ~400 calls
+uv run --frozen python experiments/e12_blocksworld.py --backend jev --sweep          # + raw / no-spotter / no-listener; ~1,550 calls
+uv run --frozen python experiments/e12_blocksworld.py --backend jev --latency-ticks auto --noise
+ANTHROPIC_API_KEY=... uv run --frozen --extra vlm python experiments/e12_blocksworld.py --backend claude --scenario reverse_midway,hand_in_path,ambiguous
+```
+Live runs append every tick to `results/e12_blocksworld.jsonl`. Offline runs log only with `--log`,
+to `results/e12_blocksworld_<backend>.jsonl`. `--max-requests` (default 600 per scenario) stops a
+runaway live run and marks the scenario `CAP`.
+
+**Cost.** The dry run counts the oracle's requests: 401 for the default run (348 Sequencer, 49
+Spotter, 4 Listener), at about 1.1k input tokens each, which is ~0.43M tokens ≈ **$0.02**. The
+`--sweep` is 1,553 requests, ~1.6M tokens ≈ **$0.07**. A live run makes more requests than the
+oracle (wrong picks cause detours, gated picks cause re-asks), so budget ×1.5: **$0.03 / $0.10**.
+The worst case, every scenario hitting the cap (600 × 10 × ~1.1k tokens), is ≈ $0.28 per variant.
+The Claude baseline is ~1.5k tokens per request at Haiku prices, about $0.5–1 for all ten
+scenarios, so start with a subset.
+
+**Caveats.** The oracle is also the scripted policy that generates the `solved` Facts, so under
+`solved` the Sequencer's `next_skill` is in the state as `next_step`. That is deliberate: it is the
+"Jev picks the branch" design, and `raw` is the test of anything more. The Spotter's `action` rules
+restate the oracle's thresholds in words, which makes it close to a lookup; a harder variant would
+drop the rules and keep only the Facts. Skill outcomes are deterministic, except in the scripted
+disturbances. Only one seed per scenario is run (`--seed`).
