@@ -90,3 +90,51 @@ the command line above each). Logs land in `experiments/results/e11_reorder.json
    corrections without an LLM, which facts code must precompute, whether confidence can drive the
    Router, and what E12 must change before it tests the current design.
 4. A comment on PR #1 answering questions 1-6 in a few lines each.
+
+---
+
+## Handback (2026-09-23, bay Mac session)
+
+Done: all deliverables are on this branch and PR #1 has the answers comment. Results:
+`context/08-experiment-results.md` (E11, E12, and "Getting more out of Jev"). The E12 tick log is
+`e12_blocksworld.jsonl.gz` (133 MB uncompressed, over GitHub's limit). No Claude baseline was run (no
+`ANTHROPIC_API_KEY`).
+
+**Where things went wrong, for reformulating the approach**
+
+1. **E12 `raw` never tested what it was meant to.** All 30 runs stuck at the first `release` on
+   block 1: Jev picked `retreat` 7,162 of 7,168 times, which lifts the lowered block, and then `place`
+   again, until the cap. Sorting, reversal and sparse numbers were never reached, so E12 says nothing
+   closed-loop about E11's question. The likely cause is a missing fact: the state says
+   `gripper_is_above: "nothing: the gripper is low"`, `"down low, among the blocks"`, and the target
+   slot shows empty (the block is still in the gripper). Nothing says "lowered at the destination, not
+   yet released", and after `retreat` the history is gone. Test it before concluding that Jev can't
+   sequence skills.
+2. **The confidence gates were too loose, and one question had none.** A flat 0.3 let 99% of the
+   wrong `retreat` picks through (their confidence averaged 0.48 vs 0.82 for right picks; AUROC 0.96).
+   `when` had no gate and applied a 0.06-confidence answer, which probably cost 7.5 s. Nothing
+   detected the place/retreat loop.
+3. **The `escalate` question doesn't work as a router.** AUROC 0.43 / 0.75 / 0.36 across E11's
+   variants; the weakest confidence in the request did better (0.71 / 0.70 / 0.93).
+4. **`solved` is close to a lookup, and so is the Spotter.** E12 `solved` (40/40) hands the Sequencer
+   the oracle's `next_step`, and the Spotter's instructions restate the oracle's thresholds (96%). Both
+   show that the harness and the gates work, not that Jev can plan or perceive.
+5. **A harness bug (fixed in `a06a48c`).** `plan.above()` used a per-axis box and `pick` a radius, so
+   a replan that stopped a move short could offer a `pick` that never succeeds (the oracle loops too).
+   Only `--no-listener` was affected; it was rerun live for all three seeds.
+6. **The seeds are near-replicates.** Without `--noise` the scenes barely change between seeds, so the
+   three sweeps measure Jev's nondeterminism and latency, not scene variety.
+7. **Cost ran over the estimate:** about $1.22 in total, against about $0.35. `raw` accounted for
+   $0.83 because every run hit the cap. Any rerun of `raw` needs a loop detector or a lower
+   `--max-requests`.
+8. **Minor issues.** The E11 answer-log file includes the progress lines. A stale `.venv` from another
+   branch broke `cv2` until `opencv-contrib-python-headless` was reinstalled (an environment problem,
+   not the repo's). One E11 `intent` miss: a coworker request was read as `new_task`.
+
+**Cheapest next steps** (suggested in the results doc):
+- (a) Replay both logs offline with per-question thresholds on the weakest confidence. This costs
+  nothing.
+- (b) Rerun E12 `raw` with one "step in the per-block sequence" fact plus a loop detector, about
+  $0.10–0.30.
+- (c) An E11 variant whose options carry their meaning ("to the smallest-number end") instead of slot
+  numbers.
