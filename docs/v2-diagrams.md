@@ -35,7 +35,7 @@ flowchart TB
     bus --> disp
     disp -. "change" .-> spotter
     disp -. "skill done or failed" .-> seq
-    disp -. "correction, failure,<br/>low confidence" .-> router
+    disp -. "correction, skill failed, not on track,<br/>can't place, low confidence" .-> router
     disp -. "no plan yet, hand off" .-> planner
     spotter -- "intervention" --> bus
     seq -- "next step, or not on track" --> bus
@@ -59,18 +59,18 @@ flowchart TB
     run --> seq[Sequencer checks progress<br/>against the task]
     seq -- "next step, or retry" --> run
     seq -- "task done" --> done([Wait for the next task])
-    seq -- "not on track" --> r_in
+    seq -- "not on track, or unsure" --> r_in
 
     subgraph router [" "]
         r_in{{Router: pick one route}}
         r_in --> r_go[Continue]
         r_in --> r_adj[Adjust a<br/>parameter]
         r_in --> r_llm[Fast or<br/>capable LLM]
-        r_in --> r_stop[Stop, or<br/>ask the user]
+        r_in --> r_stop[Pause, or<br/>ask the user]
     end
     r_go --> run
     r_adj --> run
-    r_llm --> patch[LLM patches the plan<br/>arm holds at a safe point]
+    r_llm --> patch[LLM patches the plan<br/>arm carries on or holds<br/>at a safe point]
     patch --> run
     r_stop --> paused([Paused until the user answers])
 
@@ -78,7 +78,7 @@ flowchart TB
         change[/Perception: a change<br/>the robot didn't cause/] --> spotter[Spotter picks<br/>an intervention]
         corr[/User types a correction/]
     end
-    spotter -- "re-target, pause,<br/>resume, ignore" --> run
+    spotter -- "re-target, re-queue, pause,<br/>back off, resume, ignore" --> run
     spotter -- "can't place it" --> r_in
     corr --> r_in
 
@@ -134,10 +134,10 @@ sequenceDiagram
     U->>H: "actually, reverse it"
     H->>Ro: correction + task + parameters
     Ro-->>H: adjust: sort order = highest on the left, after this block (~150 ms)
-    H-)P: blocks 1 and 2 are now in the wrong slots: plan a fix
-    H->>K: finish placing 3 (in its new slot)
-    H->>K: next: block 6 (code recomputed the goal slots)
-    P-->>H: patch: move 1 and 2 to their new slots (~1-3 s)
+    H-)P: blocks 1 and 2 sit in the slots 6 and 5 need: plan a fix
+    H->>K: finish placing 3 (in its new slot, 4)
+    H->>K: next: block 4 to slot 3 (code: the next block whose slot is free)
+    P-->>H: patch: move 1 and 2 out, then place 6 and 5 (~1-3 s)
     Note over H: The arm never waited for the LLM
 ```
 
@@ -197,20 +197,20 @@ sequenceDiagram
 
 ## 7. What the arm is doing
 
-Only the harness moves the arm between these states. A model can pause it; only the STOP button or
-the safety filter stops it.
+Only the harness moves the arm between these states. A model can pause it; only the STOP button,
+"stop" typed by the user, or the safety filter stops it.
 
 ```mermaid
 stateDiagram-v2
     [*] --> Waiting: harness starts, no plan
     Waiting --> Running: first plan arrives
     Running --> Paused: Spotter or Router pause
-    Paused --> Running: Router or user resumes
+    Paused --> Running: Spotter, Router or user resumes
     Running --> Holding: waiting on an LLM
     Holding --> Running: new plan or patch
-    Running --> Stopped: STOP button or safety filter
-    Paused --> Stopped: STOP button
-    Holding --> Stopped: STOP button
+    Running --> Stopped: STOP button, typed stop, or safety filter
+    Paused --> Stopped: STOP button or typed stop
+    Holding --> Stopped: STOP button or typed stop
     Stopped --> Waiting: user restarts
     Running --> Waiting: task done
 ```
