@@ -204,8 +204,9 @@ Latency (ms): raw p50 172 / p95 588; facts 166 / 706; solved 180 / 884 (p99 1.8 
 - **[measured] Confidence gates well, especially with `solved`**: at ≥0.5, `solved` keeps 100% accuracy
   with 97–100% coverage; its only two wrong answers had confidence 0.22 and 0.44. In `raw`, a 0.7 gate
   reaches 96–100% accuracy but lets through only 30–54% of answers.
-- **[measured] The `escalate` question cannot route.** In `raw` it asks for a smarter model *less*
-  often on requests that went wrong (49% vs 52%; AUROC 0.43). The weakest confidence in the request
+- **[measured] The `escalate` question cannot route reliably.** Its AUROC is 0.43 / 0.75 / 0.36 for
+  raw / facts / solved; in `raw` it asks for a smarter model *less* often on requests that went wrong
+  (49% vs 52%). The weakest confidence in the request
   separates them (0.71 raw, 0.93 solved). The Router should gate on confidence, not on a self-assessment
   question.
 - **[measured]** The one `intent` miss: "Sam, can you grab me a coffee?" → `new_task` instead of
@@ -293,15 +294,19 @@ Answers applied after 1 tick: 6%; 2 ticks: 77%; 3: 14%; 4 or more: 3.3% (the lon
   `forbidden_moves`). A cautious pick applies at once, so the arm slowed when it didn't need to.
 - **Listener `when` is a coin flip, and it has no gate.** For "not that one", `when` came back
   `at_next_safe_point` at confidence 0.06 (seed 12) and `now` at 0.01–0.07 (seeds 2, 3). Both are
-  accepted as correct, so agreement reads 100%, but the choice mattered: `at_next_safe_point` finished
-  the approach to the rejected block first, and seed 12 `ambiguous` took **7.5 s longer** than the oracle.
+  accepted as correct, so agreement reads 100%. **[inferred from 4 runs]** The choice cost time:
+  the two `at_next_safe_point` runs took 437 and 450 ticks, the two `now` runs 386 and 397, and
+  seed 12 `ambiguous` took 7.5 s longer than the oracle (which picks `now`). Both values are legitimate
+  for "not that one", so this is a cost, not a mistake.
 - **A confident wrong `stop` never happened** (the Listener's `intent` was 100%), so the
   stop-stalls-a-run weakness was not triggered.
 
 **Takeaways**
 - **[measured] With `solved` facts, the old design works closed-loop:** 40/40 runs, 0 violations,
   every disturbance recovered, and the Sequencer agreed with the oracle on every one of about 1,390
-  picks. This is weaker than it sounds: under `solved`, the Sequencer's answer is in its state as
+  picks. In `reverse_midway`, "reverse it" arrives with blocks 1–2 already placed; all 4 runs
+  completed with 0 escalations (42 skills vs 30), so code's policy re-arranged the placed blocks and no
+  LLM was needed. This is weaker than it sounds: under `solved`, the Sequencer's answer is in its state as
   `next_step`, so it is choosing a branch, not planning. See the caveat below.
 - **[measured] `raw` is 0/30.** Jev cannot run the per-block skill sequence from rules and a scene
   description: it fails the first `release`. **[inferred]** One missing fact ("the gripper is lowered at
