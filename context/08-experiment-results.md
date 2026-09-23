@@ -333,6 +333,23 @@ restate the oracle's thresholds, which is why it scores near 100%. The code stop
 change little in a noise-free run (the three no-Spotter sweeps sent almost identical requests), so
 the spread across seeds mostly reflects Jev's nondeterminism and latency, not different scenes.
 
+## E11 replay: does low confidence flag Jev's mistakes? (offline, 2026-09-23)
+
+Replayed `results/e11_reorder.jsonl` with no new calls. Per request, the action questions asked
+(`direction`, `target_slot`, `next_pick`) count as right only if all are right; the gate is the
+lowest confidence among them. 200 requests per variant.
+
+| variant | all right | gate 0.5: Jev keeps (right) / escalates / mistakes caught | gate 0.7: keeps (right) / escalates / caught |
+|---|---|---|---|
+| raw | 64% | 50% (86%) / 50% / 58 of 72 | 34% (99%) / 66% / 71 of 72 |
+| facts | 70% | 70% (80%) / 30% / 32 of 60 | 54% (95%) / 46% / 55 of 60 |
+| solved | 99% | 98% (100%) / 2% / 2 of 2 | 92% (100%) / 8% / 2 of 2 |
+
+**Takeaways** (measured): confidence flags almost every mistake at 0.7, so escalating low-confidence
+cases to an LLM is a sound fallback. Without prepared branches it fires on two thirds of requests, so
+it is not a substitute for preparing them. The `solved` branches were hand-written in E11; whether a
+fast LLM can prepare them at planning time is untested.
+
 ## Getting more out of Jev: recommendations from the TypeSafe docs (inferred, none applied)
 
 Read after E11/E12: the [Jev 1.13 jaggedness page](https://docs.typesafe.ai/model-jaggedness/jev-1.13)
