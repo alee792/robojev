@@ -36,7 +36,7 @@ Cheap (fractions of a cent each). Run before committing to an architecture. Need
     GPT model to get reference answers for a few hundred recorded states. This is how TypeSafe's own
     workflow evals were built.
 
-## E11 — reorder after a mid-task intent change (not yet run)
+## E11 — reorder after a mid-task intent change (run 2026-09-23; results in 08)
 
 (Code-named E11 after its file, `experiments/e11_reorder.py`; not the same as item 11 above.)
 
@@ -84,7 +84,7 @@ Every request and response is logged to `results/e11_reorder.jsonl` (with the tr
 The baseline answers all questions in one forced tool call (an LLM planner sees them jointly),
 so its answers are not independent like Jev's, and it has no confidence.
 
-## E12 — text-only blocks world, closed loop (not yet run)
+## E12 — text-only blocks world, closed loop (run 2026-09-23; results in 08)
 
 (Code-named E12 after its file, `experiments/e12_blocksworld.py` plus the `experiments/e12_blocksworld/`
 package; not the same as item 12 above. Architecture and vocabulary: `docs/v2.md`.)

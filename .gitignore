@@ -5,3 +5,4 @@ __pycache__/
 runs/
 MUJOCO_LOG.TXT
 scripts/nohid/nohid.dylib
+experiments/results/e12_blocksworld.jsonl

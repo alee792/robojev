@@ -1,0 +1,533 @@
+$ uv run --frozen python experiments/e12_blocksworld.py --backend jev --latency-ticks auto
+logging every tick to /Users/anthonylee/code/robojev/.claude/worktrees/widowx-doom-loop-fc1569/experiments/results/e12_blocksworld.jsonl
+
+==================== jev | solved | latency auto ticks | planner delay 2.0 s ====================
+scenario         done time s skills dist→rec fails req seq/spot/lis req/tick esc gated  utt→chg ticks touch hand floor
+----------------------------------------------------------------------------------------------------------------------
+crawl_sort       yes    40.2     30      0→0     0           32/0/0     7.9%   0     0              -     0    0     0
+sort_colours     yes    47.8     36      0→0     0           37/0/0     7.7%   0     0              -     0    0     0
+reverse_midway   yes    51.1     42      0→0     0           43/0/1     8.6%   0     0              2     0    0     0
+moved_target     yes    42.9     33      2→2     2           34/2/0     8.4%   0     0              -     0    0     0
+undo             yes    47.3     36      1→1     0           37/1/0     8.0%   0     0              -     0    0     0
+hand_in_path     yes    45.2     32      1→1     1          32/17/0    10.8%   0     0              -     0    0     0
+forbidden_moves  yes    43.7     31      1→1     0          32/29/0    13.2%   0     0              -     0    0     0
+chatter          yes    40.1     30      0→0     0           31/0/1     8.0%   0     0              -     0    0     0
+ambiguous        yes    43.7     31      0→0     0           32/0/1     7.5%   0     0              2     0    0     0
+move_except      yes    50.2     37      0→0     0           39/0/1     8.0%   0     0              2     0    0     0
+completed 10/10; requests 402; violations: forbidden touches 0, hand contacts 0
+agreement with the oracle, per question: next_skill=100% (n=347), task_status=100% (n=347), escalate=100% (n=347), action=96% (n=49), order=100% (n=78), intent=100% (n=4), knob:order=100% (n=3), knob:skip=100% (n=4), knob:destination=100% (n=1), when=100% (n=4), escalate=100% (n=4)
+latency ms: p50=151 p95=406 max=930
+input tokens 620549 ≈ $0.0261 at Jev's price
+
+wall time 80.9 s
+
+$ uv run --frozen python experiments/e12_blocksworld.py --backend jev --sweep --latency-ticks auto
+logging every tick to /Users/anthonylee/code/robojev/.claude/worktrees/widowx-doom-loop-fc1569/experiments/results/e12_blocksworld.jsonl
+
+==================== jev | solved | latency auto ticks | planner delay 2.0 s ====================
+scenario         done time s skills dist→rec fails req seq/spot/lis req/tick esc gated  utt→chg ticks touch hand floor
+----------------------------------------------------------------------------------------------------------------------
+crawl_sort       yes    52.1     30      0→0     0           41/0/0     7.9%   0     0              -     0    0     0
+sort_colours     yes    48.7     36      0→0     0           37/0/0     7.6%   0     0              -     0    0     0
+reverse_midway   yes    51.6     42      0→0     0           43/0/1     8.5%   0     0              3     0    0     0
+moved_target     yes    43.5     33      2→2     2           34/2/0     8.3%   0     0              -     0    0     0
+undo             yes    46.7     36      1→1     0           37/1/0     8.1%   0     0              -     0    0     0
+hand_in_path     yes    44.9     32      1→1     1          32/17/0    10.9%   0     0              -     0    0     0
+forbidden_moves  yes    44.4     31      1→1     0          32/31/0    13.7%   0     0              -     0    0     0
+chatter          yes    40.3     30      0→0     0           31/0/1     7.9%   0     0              -     0    0     0
+ambiguous        yes    45.0     31      0→0     0           32/0/1     7.3%   0     0              2     0    0     0
+move_except      yes    49.9     37      0→0     0           38/0/1     7.8%   0     0              2     0    0     0
+completed 10/10; requests 412; violations: forbidden touches 0, hand contacts 0
+agreement with the oracle, per question: next_skill=100% (n=347), task_status=100% (n=347), escalate=100% (n=347), action=96% (n=51), order=100% (n=82), intent=100% (n=4), knob:order=100% (n=3), knob:skip=100% (n=4), knob:destination=100% (n=1), when=100% (n=4), escalate=100% (n=4)
+latency ms: p50=155 p95=448 max=4285
+input tokens 622763 ≈ $0.0262 at Jev's price
+
+==================== jev | raw | latency auto ticks | planner delay 2.0 s ====================
+scenario         done time s skills dist→rec fails req seq/spot/lis req/tick esc gated  utt→chg ticks touch hand floor
+----------------------------------------------------------------------------------------------------------------------
+crawl_sort       NO        -    466      0→0     0          469/0/0    15.6%   0     3              -     0    0     0
+sort_colours     NO        -    445      0→0     0          450/0/0    15.0%   3     4              -     0    0     0
+reverse_midway   NO        -    440      0→0     0          444/0/0    14.8%   0     4              -     0    0     0
+moved_target     NO        -    443      0→0     0          450/0/0    15.0%   0     6              -     0    0     0
+undo             NO        -    455      0→0     0          457/0/0    15.2%   0     2              -     0    0     0
+hand_in_path     NO        -    436      0→0     0          439/0/0    14.6%   0     2              -     0    0     0
+forbidden_moves  NO        -    436      0→0     0          440/5/0    14.8%   0     3              -     0    0     0
+chatter          NO        -    449      0→0     0          453/0/0    15.1%   0     4              -     0    0     0
+ambiguous        NO        -    451      0→0     0          454/0/0    15.1%   0     3              -     0    0     0
+move_except      NO        -    444      0→0     0          445/0/0    14.8%   0     0              -     0    0     0
+completed 0/10; requests 4506; violations: forbidden touches 0, hand contacts 0
+agreement with the oracle, per question: next_skill=50% (n=4500), task_status=100% (n=4500), escalate=85% (n=4500), action=80% (n=5), order=100% (n=10)
+latency ms: p50=170 p95=431 max=2294
+input tokens 6166227 ≈ $0.2590 at Jev's price
+
+==================== jev | solved-nospotter | latency auto ticks | planner delay 2.0 s ====================
+scenario         done time s skills dist→rec fails req seq/spot/lis req/tick esc gated  utt→chg ticks touch hand floor
+----------------------------------------------------------------------------------------------------------------------
+crawl_sort       yes    40.8     30      0→0     0           31/0/0     7.6%   0     0              -     0    0     0
+sort_colours     yes    49.8     36      0→0     0           37/0/0     7.4%   0     0              -     0    0     0
+reverse_midway   yes    52.8     42      0→0     0           43/0/1     8.3%   0     0              2     0    0     0
+moved_target     yes    43.6     33      2→2     2           34/0/0     7.8%   0     0              -     0    0     0
+undo             yes    47.8     36      1→1     0           37/0/0     7.7%   0     0              -     0    0     0
+hand_in_path     yes    43.9     30      1→1     0           31/0/0     7.0%   0     0              -     0    1    30
+forbidden_moves  yes    41.6     31      1→1     0           32/0/0     7.7%   0     0              -     0    0     0
+chatter          yes    39.7     30      0→0     0           31/0/1     8.0%   0     0              -     0    0     0
+ambiguous        yes    42.8     31      0→0     0           32/0/1     7.7%   0     0              2     0    0     0
+move_except      yes    49.2     37      0→0     0           38/0/1     7.9%   0     0              3     0    0     0
+completed 10/10; requests 350; violations: forbidden touches 0, hand contacts 1
+agreement with the oracle, per question: next_skill=100% (n=346), task_status=100% (n=346), escalate=100% (n=346), intent=100% (n=4), knob:order=100% (n=3), knob:skip=100% (n=4), knob:destination=100% (n=1), when=100% (n=4), escalate=100% (n=4)
+latency ms: p50=194 p95=342 max=889
+input tokens 568480 ≈ $0.0239 at Jev's price
+
+==================== jev | solved-nolistener | latency auto ticks | planner delay 2.0 s ====================
+scenario         done time s skills dist→rec fails req seq/spot/lis req/tick esc gated  utt→chg ticks touch hand floor
+----------------------------------------------------------------------------------------------------------------------
+crawl_sort       yes    39.3     30      0→0     0           31/0/0     7.9%   0     0              -     0    0     0
+sort_colours     yes    48.5     36      0→0     0           37/0/0     7.6%   0     0              -     0    0     0
+reverse_midway   yes    50.3     42      0→0     1           43/0/0     8.5%   1     0             20     0    0     0
+moved_target     yes    43.4     33      2→2     2           34/2/0     8.3%   0     0              -     0    0     0
+undo             yes    46.3     36      1→1     0           37/1/0     8.2%   0     0              -     0    0     0
+hand_in_path     yes    44.0     32      1→1     1          32/17/0    11.1%   0     0              -     0    0     0
+forbidden_moves  yes    44.0     31      1→1     0          32/30/0    13.6%   0     0              -     0    0     0
+chatter          yes    38.9     30      0→0     0           31/0/0     7.9%   1     0              -     0    0     0
+ambiguous        yes    40.3     31      0→0     1           32/0/0     7.9%   1     0             20     0    0     0
+move_except      yes    51.3     41      0→0     0           42/0/0     8.2%   1     0             20     0    0     0
+completed 10/10; requests 401; violations: forbidden touches 0, hand contacts 0
+agreement with the oracle, per question: next_skill=100% (n=351), task_status=100% (n=351), escalate=100% (n=351), action=96% (n=50), order=100% (n=80)
+latency ms: p50=165 p95=268 max=477
+input tokens 620641 ≈ $0.0261 at Jev's price
+
+wall time 1230.1 s
+
+$ uv run --frozen python experiments/e12_blocksworld.py --backend jev --sweep --latency-ticks auto --seed 2
+logging every tick to /Users/anthonylee/code/robojev/.claude/worktrees/widowx-doom-loop-fc1569/experiments/results/e12_blocksworld.jsonl
+
+==================== jev | solved | latency auto ticks | planner delay 2.0 s ====================
+scenario         done time s skills dist→rec fails req seq/spot/lis req/tick esc gated  utt→chg ticks touch hand floor
+----------------------------------------------------------------------------------------------------------------------
+crawl_sort       yes    41.2     30      0→0     0           31/0/0     7.5%   0     0              -     0    0     0
+sort_colours     yes    48.5     36      0→0     0           37/0/0     7.6%   0     0              -     0    0     0
+reverse_midway   yes    50.7     42      0→0     0           43/0/1     8.7%   0     0              2     0    0     0
+moved_target     yes    45.5     33      2→2     2           34/2/0     7.9%   0     0              -     0    0     0
+undo             yes    46.6     36      1→1     0           37/0/0     7.9%   0     0              -     0    0     0
+hand_in_path     yes    45.5     32      1→1     1          32/17/0    10.7%   0     0              -     0    0     0
+forbidden_moves  yes    44.3     31      1→1     0          32/19/0    11.5%   0     0              -     0    0     0
+chatter          yes    40.4     30      0→0     0           31/0/1     7.9%   0     0              -     0    0     0
+ambiguous        yes    39.7     31      0→0     1           32/0/1     8.3%   0     0              2     0    0     0
+move_except      yes    50.3     37      0→0     0           38/0/1     7.7%   0     0              2     0    0     0
+completed 10/10; requests 389; violations: forbidden touches 0, hand contacts 0
+agreement with the oracle, per question: next_skill=100% (n=347), task_status=100% (n=347), escalate=100% (n=347), action=95% (n=38), order=100% (n=57), intent=100% (n=4), knob:order=100% (n=3), knob:skip=100% (n=4), knob:destination=100% (n=1), when=100% (n=4), escalate=100% (n=4)
+latency ms: p50=139 p95=235 max=924
+input tokens 609229 ≈ $0.0256 at Jev's price
+
+==================== jev | raw | latency auto ticks | planner delay 2.0 s ====================
+scenario         done time s skills dist→rec fails req seq/spot/lis req/tick esc gated  utt→chg ticks touch hand floor
+----------------------------------------------------------------------------------------------------------------------
+crawl_sort       NO        -    497      0→0     0          500/0/0    16.7%   0     3              -     0    0     0
+sort_colours     NO        -    465      0→0     0          469/0/0    15.6%   5     2              -     0    0     0
+reverse_midway   NO        -    498      0→0     0          501/0/0    16.7%   0     3              -     0    0     0
+moved_target     NO        -    499      0→0     0          508/0/0    16.9%   0     9              -     0    0     0
+undo             NO        -    506      0→0     0          510/0/0    17.0%   0     4              -     0    0     0
+hand_in_path     NO        -    509      0→0     0          513/0/0    17.1%   0     4              -     0    0     0
+forbidden_moves  NO        -    512      0→0     0          512/4/0    17.2%   0     0              -     0    0     0
+chatter          NO        -    511      0→0     0          515/0/0    17.2%   0     3              -     0    0     0
+ambiguous        NO        -    510      0→0     0          514/0/0    17.1%   0     3              -     0    0     0
+move_except      NO        -    503      0→0     0          503/0/0    16.8%   0     0              -     0    0     0
+completed 0/10; requests 5049; violations: forbidden touches 0, hand contacts 0
+agreement with the oracle, per question: next_skill=50% (n=5043), task_status=100% (n=5043), escalate=90% (n=5043), action=100% (n=4), order=100% (n=8)
+latency ms: p50=120 p95=183 max=1289
+input tokens 6913107 ≈ $0.2904 at Jev's price
+
+==================== jev | solved-nospotter | latency auto ticks | planner delay 2.0 s ====================
+scenario         done time s skills dist→rec fails req seq/spot/lis req/tick esc gated  utt→chg ticks touch hand floor
+----------------------------------------------------------------------------------------------------------------------
+crawl_sort       yes    39.7     30      0→0     0           31/0/0     7.8%   0     0              -     0    0     0
+sort_colours     yes    47.6     36      0→0     0           37/0/0     7.8%   0     0              -     0    0     0
+reverse_midway   yes    51.0     42      0→0     0           43/0/1     8.6%   0     0              2     0    0     0
+moved_target     yes    44.1     33      2→2     2           34/0/0     7.7%   0     0              -     0    0     0
+undo             yes    45.7     36      1→1     0           37/0/0     8.1%   0     0              -     0    0     0
+hand_in_path     yes    43.4     30      1→1     0           31/0/0     7.1%   0     0              -     0    1    30
+forbidden_moves  yes    42.2     31      1→1     0           32/0/0     7.6%   0     0              -     0    0     0
+chatter          yes    40.3     30      0→0     0           31/0/1     7.9%   0     0              -     0    0     0
+ambiguous        yes    41.3     31      0→0     0           32/0/1     8.0%   0     0              2     0    0     0
+move_except      yes    50.7     37      0→0     0           39/0/1     7.9%   0     0              2     0    0     0
+completed 10/10; requests 351; violations: forbidden touches 0, hand contacts 1
+agreement with the oracle, per question: next_skill=100% (n=346), task_status=100% (n=346), escalate=100% (n=346), intent=100% (n=4), knob:order=100% (n=3), knob:skip=100% (n=4), knob:destination=100% (n=1), when=100% (n=4), escalate=100% (n=4)
+latency ms: p50=128 p95=195 max=329
+input tokens 568480 ≈ $0.0239 at Jev's price
+
+==================== jev | solved-nolistener | latency auto ticks | planner delay 2.0 s ====================
+scenario         done time s skills dist→rec fails req seq/spot/lis req/tick esc gated  utt→chg ticks touch hand floor
+----------------------------------------------------------------------------------------------------------------------
+crawl_sort       yes    40.1     30      0→0     0           31/0/0     7.7%   0     0              -     0    0     0
+sort_colours     yes    49.0     36      0→0     0           37/0/0     7.5%   0     0              -     0    0     0
+reverse_midway   yes    51.8     42      0→0     0           43/0/0     8.3%   1     0             20     0    0     0
+moved_target     yes    44.7     33      2→2     2           34/2/0     8.0%   0     0              -     0    0     0
+undo             yes    46.4     36      1→1     0           38/0/0     8.2%   0     0              -     0    0     0
+hand_in_path     yes    45.8     32      1→1     1          32/17/0    10.7%   0     0              -     0    0     0
+forbidden_moves  yes    43.8     31      1→1     0          32/19/0    11.6%   0     0              -     0    0     0
+chatter          yes    39.9     30      0→0     0           31/0/0     7.8%   1     0              -     0    0     0
+ambiguous        NO        -    214      0→0   208          215/0/0     7.2%   1     0             20     0    0     0
+move_except      yes    50.5     37      0→0     1           38/0/0     7.5%   1     0             20     0    0     0
+completed 9/10; requests 569; violations: forbidden touches 0, hand contacts 0
+agreement with the oracle, per question: next_skill=100% (n=530), task_status=100% (n=530), escalate=100% (n=530), action=95% (n=38), order=100% (n=57)
+latency ms: p50=140 p95=222 max=383
+input tokens 930383 ≈ $0.0391 at Jev's price
+
+wall time 844.1 s
+
+$ uv run --frozen python experiments/e12_blocksworld.py --backend jev --sweep --latency-ticks auto --seed 3
+logging every tick to /Users/anthonylee/code/robojev/.claude/worktrees/widowx-doom-loop-fc1569/experiments/results/e12_blocksworld.jsonl
+
+==================== jev | solved | latency auto ticks | planner delay 2.0 s ====================
+scenario         done time s skills dist→rec fails req seq/spot/lis req/tick esc gated  utt→chg ticks touch hand floor
+----------------------------------------------------------------------------------------------------------------------
+crawl_sort       yes    36.9     30      0→0     0           31/0/0     8.4%   0     0              -     0    0     0
+sort_colours     yes    46.2     36      0→0     0           37/0/0     8.0%   0     0              -     0    0     0
+reverse_midway   yes    48.3     42      0→0     0           43/0/1     9.1%   0     0              2     0    0     0
+moved_target     yes    40.6     33      2→2     2           34/2/0     8.8%   0     0              -     0    0     0
+undo             yes    43.8     36      1→1     0           37/1/0     8.7%   0     0              -     0    0     0
+hand_in_path     yes    41.8     32      1→1     1          32/17/0    11.7%   0     0              -     0    0     0
+forbidden_moves  yes    37.9     31      1→1     0          32/10/0    11.1%   0     0              -     0    0     0
+chatter          yes    37.2     30      0→0     0           31/0/1     8.6%   0     0              -     0    0     0
+ambiguous        yes    38.6     31      0→0     1           32/0/1     8.5%   0     0              2     0    0     0
+move_except      yes    47.7     37      0→0     0           38/0/1     8.2%   0     0              2     0    0     0
+completed 10/10; requests 381; violations: forbidden touches 0, hand contacts 0
+agreement with the oracle, per question: next_skill=100% (n=347), task_status=100% (n=347), escalate=100% (n=347), action=93% (n=30), order=100% (n=40), intent=100% (n=4), knob:order=100% (n=3), knob:skip=100% (n=4), knob:destination=100% (n=1), when=100% (n=4), escalate=100% (n=4)
+latency ms: p50=147 p95=223 max=1515
+input tokens 600246 ≈ $0.0252 at Jev's price
+
+==================== jev | raw | latency auto ticks | planner delay 2.0 s ====================
+scenario         done time s skills dist→rec fails req seq/spot/lis req/tick esc gated  utt→chg ticks touch hand floor
+----------------------------------------------------------------------------------------------------------------------
+crawl_sort       NO        -    487      0→0     0          491/0/0    16.4%   0     3              -     0    0     0
+sort_colours     NO        -    460      0→0     0          466/0/0    15.5%   5     5              -     0    0     0
+reverse_midway   NO        -    479      0→0     0          484/0/0    16.1%   0     4              -     0    0     0
+moved_target     NO        -    485      0→0     0          488/0/0    16.3%   0     2              -     0    0     0
+undo             NO        -    473      0→0     0          476/0/0    15.9%   0     3              -     0    0     0
+hand_in_path     NO        -    476      0→0     0          480/0/0    16.0%   0     4              -     0    0     0
+forbidden_moves  NO        -    487      0→0     0          488/0/0    16.3%   0     1              -     0    0     0
+chatter          NO        -    481      0→0     0          489/0/0    16.3%   0     8              -     0    0     0
+ambiguous        NO        -    490      0→0     0          493/0/0    16.4%   0     2              -     0    0     0
+move_except      NO        -    466      0→0     0          466/0/0    15.5%   0     0              -     0    0     0
+completed 0/10; requests 4821; violations: forbidden touches 0, hand contacts 0
+agreement with the oracle, per question: next_skill=50% (n=4821), task_status=100% (n=4821), escalate=87% (n=4821)
+latency ms: p50=155 p95=250 max=1423
+input tokens 6605816 ≈ $0.2774 at Jev's price
+
+==================== jev | solved-nospotter | latency auto ticks | planner delay 2.0 s ====================
+scenario         done time s skills dist→rec fails req seq/spot/lis req/tick esc gated  utt→chg ticks touch hand floor
+----------------------------------------------------------------------------------------------------------------------
+crawl_sort       yes    37.9     30      0→0     0           31/0/0     8.2%   0     0              -     0    0     0
+sort_colours     yes    46.3     36      0→0     0           37/0/0     8.0%   0     0              -     0    0     0
+reverse_midway   yes    49.2     42      0→0     0           43/0/1     8.9%   0     0              2     0    0     0
+moved_target     yes    40.3     33      2→2     2           34/0/0     8.4%   0     0              -     0    0     0
+undo             yes    44.8     36      1→1     0           37/0/0     8.2%   0     0              -     0    0     0
+hand_in_path     yes    40.4     30      1→1     0           31/0/0     7.7%   0     0              -     0    1    29
+forbidden_moves  yes    37.5     31      1→1     0           32/0/0     8.5%   0     0              -     0    0     0
+chatter          yes    37.4     30      0→0     0           31/0/1     8.5%   0     0              -     0    0     0
+ambiguous        yes    39.8     31      0→0     0           32/0/1     8.3%   0     0              3     0    0     0
+move_except      yes    47.8     37      0→0     0           38/0/1     8.1%   0     0              3     0    0     0
+completed 10/10; requests 350; violations: forbidden touches 0, hand contacts 1
+agreement with the oracle, per question: next_skill=100% (n=346), task_status=100% (n=346), escalate=100% (n=346), intent=100% (n=4), knob:order=100% (n=3), knob:skip=100% (n=4), knob:destination=100% (n=1), when=100% (n=4), escalate=100% (n=4)
+latency ms: p50=162 p95=246 max=410
+input tokens 568480 ≈ $0.0239 at Jev's price
+
+==================== jev | solved-nolistener | latency auto ticks | planner delay 2.0 s ====================
+scenario         done time s skills dist→rec fails req seq/spot/lis req/tick esc gated  utt→chg ticks touch hand floor
+----------------------------------------------------------------------------------------------------------------------
+crawl_sort       yes    37.0     30      0→0     0           31/0/0     8.4%   0     0              -     0    0     0
+sort_colours     yes    45.5     36      0→0     0           37/0/0     8.1%   0     0              -     0    0     0
+reverse_midway   yes    48.5     42      0→0     0           43/0/0     8.8%   1     0             20     0    0     0
+moved_target     yes    40.8     33      2→2     2           34/2/0     8.8%   0     0              -     0    0     0
+undo             yes    45.1     36      1→1     0           37/1/0     8.4%   0     0              -     0    0     0
+hand_in_path     yes    43.0     32      1→1     1          32/17/0    11.4%   0     0              -     0    0     0
+forbidden_moves  yes    39.7     31      1→1     0          32/11/0    10.6%   0     0              -     0    0     0
+chatter          yes    38.1     30      0→0     0           31/0/0     8.1%   1     0              -     0    0     0
+ambiguous        yes    39.1     31      0→0     1           32/0/0     8.2%   1     0             20     0    0     0
+move_except      yes    47.7     37      0→0     1           38/0/0     7.9%   1     0             20     0    0     0
+completed 10/10; requests 378; violations: forbidden touches 0, hand contacts 0
+agreement with the oracle, per question: next_skill=100% (n=347), task_status=100% (n=347), escalate=100% (n=347), action=94% (n=31), order=100% (n=42)
+latency ms: p50=159 p95=247 max=394
+input tokens 594797 ≈ $0.0250 at Jev's price
+
+wall time 980.4 s
+
+
+# --- after harness fix 99f8b63 ('above' uses pick's radius): rerun of the affected variant, --no-listener, all three seeds ---
+
+$ uv run --frozen python experiments/e12_blocksworld.py --backend jev --no-listener --latency-ticks auto 
+logging every tick to /Users/anthonylee/code/robojev/.claude/worktrees/widowx-doom-loop-fc1569/experiments/results/e12_blocksworld.jsonl
+
+==================== jev | solved-nolistener | latency auto ticks | planner delay 2.0 s ====================
+scenario         done time s skills dist→rec fails req seq/spot/lis req/tick esc gated  utt→chg ticks touch hand floor
+----------------------------------------------------------------------------------------------------------------------
+crawl_sort       yes    38.9     30      0→0     0           31/0/0     7.9%   0     0              -     0    0     0
+sort_colours     yes    48.0     36      0→0     0           38/0/0     7.9%   0     0              -     0    0     0
+reverse_midway   yes    49.8     43      0→0     1           44/0/0     8.8%   1     0             20     0    0     0
+moved_target     yes    42.7     33      2→2     2           34/2/0     8.4%   0     0              -     0    0     0
+undo             yes    45.2     36      1→1     0           37/1/0     8.4%   0     0              -     0    0     0
+hand_in_path     yes    43.2     32      1→1     1          32/17/0    11.3%   0     0              -     0    0     0
+forbidden_moves  yes    42.7     31      1→1     0          32/29/0    14.0%   0     0              -     0    0     0
+chatter          yes    37.9     30      0→0     0           31/0/0     8.2%   1     0              -     0    0     0
+ambiguous        yes    40.2     31      0→0     1           32/0/0     7.9%   1     0             20     0    0     0
+move_except      yes    50.9     41      0→0     0           42/0/0     8.2%   1     0             20     0    0     0
+completed 10/10; requests 402; violations: forbidden touches 0, hand contacts 0
+agreement with the oracle, per question: next_skill=100% (n=352), task_status=100% (n=352), escalate=100% (n=352), action=96% (n=49), order=100% (n=78)
+latency ms: p50=143 p95=227 max=331
+input tokens 621307 ≈ $0.0261 at Jev's price
+
+wall time 60.7 s
+
+$ uv run --frozen python experiments/e12_blocksworld.py --backend jev --no-listener --latency-ticks auto --seed 2
+logging every tick to /Users/anthonylee/code/robojev/.claude/worktrees/widowx-doom-loop-fc1569/experiments/results/e12_blocksworld.jsonl
+
+==================== jev | solved-nolistener | latency auto ticks | planner delay 2.0 s ====================
+scenario         done time s skills dist→rec fails req seq/spot/lis req/tick esc gated  utt→chg ticks touch hand floor
+----------------------------------------------------------------------------------------------------------------------
+crawl_sort       yes    39.8     30      0→0     0           31/0/0     7.8%   0     0              -     0    0     0
+sort_colours     yes    47.4     36      0→0     0           37/0/0     7.8%   0     0              -     0    0     0
+reverse_midway   yes    50.1     42      0→0     0           43/0/0     8.6%   1     0             20     0    0     0
+moved_target     yes    44.2     33      2→2     2           34/2/0     8.1%   0     0              -     0    0     0
+undo             yes    45.3     36      1→1     0           37/0/0     8.1%   0     0              -     0    0     0
+hand_in_path     yes    45.2     32      1→1     1          32/17/0    10.8%   0     0              -     0    0     0
+forbidden_moves  yes    44.0     31      1→1     0          32/19/0    11.6%   0     0              -     0    0     0
+chatter          yes    39.7     30      0→0     0           31/0/0     7.8%   1     0              -     0    0     0
+ambiguous        yes    40.2     31      0→0     1           32/0/0     7.9%   1     0             20     0    0     0
+move_except      yes    50.2     37      0→0     1           38/0/0     7.6%   1     0             20     0    0     0
+completed 10/10; requests 385; violations: forbidden touches 0, hand contacts 0
+agreement with the oracle, per question: next_skill=100% (n=347), task_status=100% (n=347), escalate=100% (n=347), action=95% (n=38), order=100% (n=57)
+latency ms: p50=125 p95=206 max=297
+input tokens 602649 ≈ $0.0253 at Jev's price
+
+wall time 52.2 s
+
+$ uv run --frozen python experiments/e12_blocksworld.py --backend jev --no-listener --latency-ticks auto --seed 3
+logging every tick to /Users/anthonylee/code/robojev/.claude/worktrees/widowx-doom-loop-fc1569/experiments/results/e12_blocksworld.jsonl
+
+==================== jev | solved-nolistener | latency auto ticks | planner delay 2.0 s ====================
+scenario         done time s skills dist→rec fails req seq/spot/lis req/tick esc gated  utt→chg ticks touch hand floor
+----------------------------------------------------------------------------------------------------------------------
+crawl_sort       yes    37.3     30      0→0     0           31/0/0     8.3%   0     0              -     0    0     0
+sort_colours     yes    46.6     36      0→0     0           37/0/0     7.9%   0     0              -     0    0     0
+reverse_midway   yes    48.7     42      0→0     0           43/0/0     8.8%   1     0             20     0    0     0
+moved_target     yes    40.3     33      2→2     2           34/2/0     8.9%   0     0              -     0    0     0
+undo             yes    45.2     36      1→1     0           37/1/0     8.4%   0     0              -     0    0     0
+hand_in_path     yes    43.5     32      1→1     1          32/17/0    11.2%   0     0              -     0    0     0
+forbidden_moves  yes    38.9     31      1→1     0          32/11/0    11.0%   0     0              -     0    0     0
+chatter          yes    37.0     30      0→0     0           31/0/0     8.4%   1     0              -     0    0     0
+ambiguous        yes    39.1     31      0→0     1           33/0/0     8.4%   1     0             20     0    0     0
+move_except      yes    48.0     37      0→0     1           39/0/0     8.1%   1     1             20     0    0     0
+completed 10/10; requests 380; violations: forbidden touches 0, hand contacts 0
+agreement with the oracle, per question: next_skill=100% (n=348), task_status=100% (n=348), escalate=100% (n=348), action=94% (n=31), order=98% (n=42)
+latency ms: p50=155 p95=250 max=1778
+input tokens 596171 ≈ $0.0250 at Jev's price
+
+wall time 69.5 s
+
+
+# --- offline reference (no network), after the fix: the oracle with a fixed 2-tick latency, for the timing comparison ---
+
+$ uv run --frozen python experiments/e12_blocksworld.py --backend oracle --sweep --seed 12
+
+==================== oracle | solved | latency 2 ticks | planner delay 2.0 s ====================
+scenario         done time s skills dist→rec fails req seq/spot/lis req/tick esc gated  utt→chg ticks touch hand floor
+----------------------------------------------------------------------------------------------------------------------
+crawl_sort       yes    38.3     30      0→0     0           31/0/0     8.1%   0     0              -     0    0     0
+sort_colours     yes    46.9     36      0→0     0           37/0/0     7.9%   0     0              -     0    0     0
+reverse_midway   yes    49.6     43      0→0     1           44/0/1     9.1%   0     0              2     0    0     0
+moved_target     yes    41.9     33      2→2     2           34/2/0     8.6%   0     0              -     0    0     0
+undo             yes    45.3     36      1→1     0           37/1/0     8.4%   0     0              -     0    0     0
+hand_in_path     yes    43.4     32      1→1     1          32/17/0    11.3%   0     0              -     0    0     0
+forbidden_moves  yes    43.1     31      1→1     0          32/29/0    13.7%   0     0              -     0    0     0
+chatter          yes    38.3     30      0→0     0           31/0/1     8.3%   0     0              -     0    0     0
+ambiguous        yes    37.5     31      0→0     1           32/0/1     8.8%   0     0              2     0    0     0
+move_except      yes    46.8     37      0→0     1           38/0/1     8.3%   0     0              2     0    0     0
+completed 10/10; requests 401; violations: forbidden touches 0, hand contacts 0
+agreement with the oracle, per question: next_skill=100% (n=348), task_status=100% (n=348), escalate=100% (n=348), action=100% (n=49), order=100% (n=78), intent=100% (n=4), knob:order=100% (n=3), knob:skip=100% (n=4), knob:destination=100% (n=1), when=100% (n=4), escalate=100% (n=4)
+
+==================== oracle | raw | latency 2 ticks | planner delay 2.0 s ====================
+scenario         done time s skills dist→rec fails req seq/spot/lis req/tick esc gated  utt→chg ticks touch hand floor
+----------------------------------------------------------------------------------------------------------------------
+crawl_sort       yes    38.3     30      0→0     0           31/0/0     8.1%   0     0              -     0    0     0
+sort_colours     yes    46.9     36      0→0     0           37/0/0     7.9%   0     0              -     0    0     0
+reverse_midway   yes    49.6     43      0→0     1           44/0/1     9.1%   0     0              2     0    0     0
+moved_target     yes    41.9     33      2→2     2           34/2/0     8.6%   0     0              -     0    0     0
+undo             yes    45.3     36      1→1     0           37/1/0     8.4%   0     0              -     0    0     0
+hand_in_path     yes    43.4     32      1→1     1          32/17/0    11.3%   0     0              -     0    0     0
+forbidden_moves  yes    43.1     31      1→1     0          32/29/0    13.7%   0     0              -     0    0     0
+chatter          yes    38.3     30      0→0     0           31/0/1     8.3%   0     0              -     0    0     0
+ambiguous        yes    37.5     31      0→0     1           32/0/1     8.8%   0     0              2     0    0     0
+move_except      yes    46.8     37      0→0     1           38/0/1     8.3%   0     0              2     0    0     0
+completed 10/10; requests 401; violations: forbidden touches 0, hand contacts 0
+agreement with the oracle, per question: next_skill=100% (n=348), task_status=100% (n=348), escalate=100% (n=348), action=100% (n=49), order=100% (n=78), intent=100% (n=4), knob:order=100% (n=3), knob:skip=100% (n=4), knob:destination=100% (n=1), when=100% (n=4), escalate=100% (n=4)
+
+==================== oracle | solved-nospotter | latency 2 ticks | planner delay 2.0 s ====================
+scenario         done time s skills dist→rec fails req seq/spot/lis req/tick esc gated  utt→chg ticks touch hand floor
+----------------------------------------------------------------------------------------------------------------------
+crawl_sort       yes    38.3     30      0→0     0           31/0/0     8.1%   0     0              -     0    0     0
+sort_colours     yes    46.9     36      0→0     0           37/0/0     7.9%   0     0              -     0    0     0
+reverse_midway   yes    49.6     43      0→0     1           44/0/1     9.1%   0     0              2     0    0     0
+moved_target     yes    41.9     33      2→2     2           34/0/0     8.1%   0     0              -     0    0     0
+undo             yes    45.3     36      1→1     0           37/0/0     8.1%   0     0              -     0    0     0
+hand_in_path     yes    41.9     30      1→1     0           31/0/0     7.4%   0     0              -     0    1    30
+forbidden_moves  yes    40.2     31      1→1     0           32/0/0     7.9%   0     0              -     0    0     0
+chatter          yes    38.3     30      0→0     0           31/0/1     8.3%   0     0              -     0    0     0
+ambiguous        yes    37.5     31      0→0     1           32/0/1     8.8%   0     0              2     0    0     0
+move_except      yes    46.8     37      0→0     1           38/0/1     8.3%   0     0              2     0    0     0
+completed 10/10; requests 351; violations: forbidden touches 0, hand contacts 1
+agreement with the oracle, per question: next_skill=100% (n=347), task_status=100% (n=347), escalate=100% (n=347), intent=100% (n=4), knob:order=100% (n=3), knob:skip=100% (n=4), knob:destination=100% (n=1), when=100% (n=4), escalate=100% (n=4)
+
+==================== oracle | solved-nolistener | latency 2 ticks | planner delay 2.0 s ====================
+scenario         done time s skills dist→rec fails req seq/spot/lis req/tick esc gated  utt→chg ticks touch hand floor
+----------------------------------------------------------------------------------------------------------------------
+crawl_sort       yes    38.3     30      0→0     0           31/0/0     8.1%   0     0              -     0    0     0
+sort_colours     yes    46.9     36      0→0     0           37/0/0     7.9%   0     0              -     0    0     0
+reverse_midway   yes    49.6     43      0→0     1           44/0/0     8.9%   1     0             20     0    0     0
+moved_target     yes    41.9     33      2→2     2           34/2/0     8.6%   0     0              -     0    0     0
+undo             yes    45.3     36      1→1     0           37/1/0     8.4%   0     0              -     0    0     0
+hand_in_path     yes    43.4     32      1→1     1          32/17/0    11.3%   0     0              -     0    0     0
+forbidden_moves  yes    43.1     31      1→1     0          32/29/0    13.7%   0     0              -     0    0     0
+chatter          yes    38.3     30      0→0     0           31/0/0     8.1%   1     0              -     0    0     0
+ambiguous        yes    40.1     31      0→0     1           32/0/0     8.0%   1     0             20     0    0     0
+move_except      yes    50.7     41      0→0     0           42/0/0     8.3%   1     0             20     0    0     0
+completed 10/10; requests 401; violations: forbidden touches 0, hand contacts 0
+agreement with the oracle, per question: next_skill=100% (n=352), task_status=100% (n=352), escalate=100% (n=352), action=100% (n=49), order=100% (n=78)
+
+wall time 0.4 s
+
+$ uv run --frozen python experiments/e12_blocksworld.py --backend oracle --sweep --seed 2
+
+==================== oracle | solved | latency 2 ticks | planner delay 2.0 s ====================
+scenario         done time s skills dist→rec fails req seq/spot/lis req/tick esc gated  utt→chg ticks touch hand floor
+----------------------------------------------------------------------------------------------------------------------
+crawl_sort       yes    40.3     30      0→0     0           31/0/0     7.7%   0     0              -     0    0     0
+sort_colours     yes    48.3     36      0→0     0           37/0/0     7.6%   0     0              -     0    0     0
+reverse_midway   yes    51.2     43      0→0     1           44/0/1     8.8%   0     0              2     0    0     0
+moved_target     yes    44.5     33      2→2     2           34/2/0     8.1%   0     0              -     0    0     0
+undo             yes    46.1     36      1→1     0           37/0/0     8.0%   0     0              -     0    0     0
+hand_in_path     yes    45.4     32      1→1     1          32/17/0    10.8%   0     0              -     0    0     0
+forbidden_moves  yes    44.3     31      1→1     0          32/19/0    11.5%   0     0              -     0    0     0
+chatter          yes    40.3     30      0→0     0           31/0/1     7.9%   0     0              -     0    0     0
+ambiguous        yes    39.9     31      0→0     1           32/0/1     8.2%   0     0              2     0    0     0
+move_except      yes    47.4     37      0→0     1           38/0/1     8.2%   0     0              2     0    0     0
+completed 10/10; requests 390; violations: forbidden touches 0, hand contacts 0
+agreement with the oracle, per question: next_skill=100% (n=348), task_status=100% (n=348), escalate=100% (n=348), action=100% (n=38), order=100% (n=57), intent=100% (n=4), knob:order=100% (n=3), knob:skip=100% (n=4), knob:destination=100% (n=1), when=100% (n=4), escalate=100% (n=4)
+
+==================== oracle | raw | latency 2 ticks | planner delay 2.0 s ====================
+scenario         done time s skills dist→rec fails req seq/spot/lis req/tick esc gated  utt→chg ticks touch hand floor
+----------------------------------------------------------------------------------------------------------------------
+crawl_sort       yes    40.3     30      0→0     0           31/0/0     7.7%   0     0              -     0    0     0
+sort_colours     yes    48.3     36      0→0     0           37/0/0     7.6%   0     0              -     0    0     0
+reverse_midway   yes    51.2     43      0→0     1           44/0/1     8.8%   0     0              2     0    0     0
+moved_target     yes    44.5     33      2→2     2           34/2/0     8.1%   0     0              -     0    0     0
+undo             yes    46.1     36      1→1     0           37/0/0     8.0%   0     0              -     0    0     0
+hand_in_path     yes    45.4     32      1→1     1          32/17/0    10.8%   0     0              -     0    0     0
+forbidden_moves  yes    44.3     31      1→1     0          32/19/0    11.5%   0     0              -     0    0     0
+chatter          yes    40.3     30      0→0     0           31/0/1     7.9%   0     0              -     0    0     0
+ambiguous        yes    39.9     31      0→0     1           32/0/1     8.2%   0     0              2     0    0     0
+move_except      yes    47.4     37      0→0     1           38/0/1     8.2%   0     0              2     0    0     0
+completed 10/10; requests 390; violations: forbidden touches 0, hand contacts 0
+agreement with the oracle, per question: next_skill=100% (n=348), task_status=100% (n=348), escalate=100% (n=348), action=100% (n=38), order=100% (n=57), intent=100% (n=4), knob:order=100% (n=3), knob:skip=100% (n=4), knob:destination=100% (n=1), when=100% (n=4), escalate=100% (n=4)
+
+==================== oracle | solved-nospotter | latency 2 ticks | planner delay 2.0 s ====================
+scenario         done time s skills dist→rec fails req seq/spot/lis req/tick esc gated  utt→chg ticks touch hand floor
+----------------------------------------------------------------------------------------------------------------------
+crawl_sort       yes    40.3     30      0→0     0           31/0/0     7.7%   0     0              -     0    0     0
+sort_colours     yes    48.3     36      0→0     0           37/0/0     7.6%   0     0              -     0    0     0
+reverse_midway   yes    51.2     43      0→0     1           44/0/1     8.8%   0     0              2     0    0     0
+moved_target     yes    44.5     33      2→2     2           34/0/0     7.6%   0     0              -     0    0     0
+undo             yes    46.1     36      1→1     0           37/0/0     8.0%   0     0              -     0    0     0
+hand_in_path     yes    43.9     30      1→1     0           31/0/0     7.0%   0     0              -     0    1    30
+forbidden_moves  yes    42.2     31      1→1     0           32/0/0     7.6%   0     0              -     0    0     0
+chatter          yes    40.3     30      0→0     0           31/0/1     7.9%   0     0              -     0    0     0
+ambiguous        yes    39.9     31      0→0     1           32/0/1     8.2%   0     0              2     0    0     0
+move_except      yes    47.4     37      0→0     1           38/0/1     8.2%   0     0              2     0    0     0
+completed 10/10; requests 351; violations: forbidden touches 0, hand contacts 1
+agreement with the oracle, per question: next_skill=100% (n=347), task_status=100% (n=347), escalate=100% (n=347), intent=100% (n=4), knob:order=100% (n=3), knob:skip=100% (n=4), knob:destination=100% (n=1), when=100% (n=4), escalate=100% (n=4)
+
+==================== oracle | solved-nolistener | latency 2 ticks | planner delay 2.0 s ====================
+scenario         done time s skills dist→rec fails req seq/spot/lis req/tick esc gated  utt→chg ticks touch hand floor
+----------------------------------------------------------------------------------------------------------------------
+crawl_sort       yes    40.3     30      0→0     0           31/0/0     7.7%   0     0              -     0    0     0
+sort_colours     yes    48.3     36      0→0     0           37/0/0     7.6%   0     0              -     0    0     0
+reverse_midway   yes    51.0     42      0→0     0           43/0/0     8.4%   1     0             20     0    0     0
+moved_target     yes    44.5     33      2→2     2           34/2/0     8.1%   0     0              -     0    0     0
+undo             yes    46.1     36      1→1     0           37/0/0     8.0%   0     0              -     0    0     0
+hand_in_path     yes    45.4     32      1→1     1          32/17/0    10.8%   0     0              -     0    0     0
+forbidden_moves  yes    44.3     31      1→1     0          32/19/0    11.5%   0     0              -     0    0     0
+chatter          yes    40.3     30      0→0     0           31/0/0     7.7%   1     0              -     0    0     0
+ambiguous        yes    40.0     31      0→0     1           32/0/0     8.0%   1     0             20     0    0     0
+move_except      yes    50.1     37      0→0     1           38/0/0     7.6%   1     0             20     0    0     0
+completed 10/10; requests 385; violations: forbidden touches 0, hand contacts 0
+agreement with the oracle, per question: next_skill=100% (n=347), task_status=100% (n=347), escalate=100% (n=347), action=100% (n=38), order=100% (n=57)
+
+wall time 0.4 s
+
+$ uv run --frozen python experiments/e12_blocksworld.py --backend oracle --sweep --seed 3
+
+==================== oracle | solved | latency 2 ticks | planner delay 2.0 s ====================
+scenario         done time s skills dist→rec fails req seq/spot/lis req/tick esc gated  utt→chg ticks touch hand floor
+----------------------------------------------------------------------------------------------------------------------
+crawl_sort       yes    36.7     30      0→0     0           31/0/0     8.4%   0     0              -     0    0     0
+sort_colours     yes    45.5     36      0→0     0           37/0/0     8.1%   0     0              -     0    0     0
+reverse_midway   yes    48.5     43      0→0     1           44/0/1     9.3%   0     0              2     0    0     0
+moved_target     yes    40.1     33      2→2     2           34/2/0     9.0%   0     0              -     0    0     0
+undo             yes    44.0     36      1→1     0           37/1/0     8.6%   0     0              -     0    0     0
+hand_in_path     yes    41.7     32      1→1     1          32/17/0    11.7%   0     0              -     0    0     0
+forbidden_moves  yes    38.0     31      1→1     0          32/10/0    11.0%   0     0              -     0    0     0
+chatter          yes    36.7     30      0→0     0           31/0/1     8.7%   0     0              -     0    0     0
+ambiguous        yes    36.8     31      0→0     1           32/0/1     8.9%   0     0              2     0    0     0
+move_except      yes    45.7     37      0→0     1           38/0/1     8.5%   0     0              2     0    0     0
+completed 10/10; requests 382; violations: forbidden touches 0, hand contacts 0
+agreement with the oracle, per question: next_skill=100% (n=348), task_status=100% (n=348), escalate=100% (n=348), action=100% (n=30), order=100% (n=40), intent=100% (n=4), knob:order=100% (n=3), knob:skip=100% (n=4), knob:destination=100% (n=1), when=100% (n=4), escalate=100% (n=4)
+
+==================== oracle | raw | latency 2 ticks | planner delay 2.0 s ====================
+scenario         done time s skills dist→rec fails req seq/spot/lis req/tick esc gated  utt→chg ticks touch hand floor
+----------------------------------------------------------------------------------------------------------------------
+crawl_sort       yes    36.7     30      0→0     0           31/0/0     8.4%   0     0              -     0    0     0
+sort_colours     yes    45.5     36      0→0     0           37/0/0     8.1%   0     0              -     0    0     0
+reverse_midway   yes    48.5     43      0→0     1           44/0/1     9.3%   0     0              2     0    0     0
+moved_target     yes    40.1     33      2→2     2           34/2/0     9.0%   0     0              -     0    0     0
+undo             yes    44.0     36      1→1     0           37/1/0     8.6%   0     0              -     0    0     0
+hand_in_path     yes    41.7     32      1→1     1          32/17/0    11.7%   0     0              -     0    0     0
+forbidden_moves  yes    38.0     31      1→1     0          32/10/0    11.0%   0     0              -     0    0     0
+chatter          yes    36.7     30      0→0     0           31/0/1     8.7%   0     0              -     0    0     0
+ambiguous        yes    36.8     31      0→0     1           32/0/1     8.9%   0     0              2     0    0     0
+move_except      yes    45.7     37      0→0     1           38/0/1     8.5%   0     0              2     0    0     0
+completed 10/10; requests 382; violations: forbidden touches 0, hand contacts 0
+agreement with the oracle, per question: next_skill=100% (n=348), task_status=100% (n=348), escalate=100% (n=348), action=100% (n=30), order=100% (n=40), intent=100% (n=4), knob:order=100% (n=3), knob:skip=100% (n=4), knob:destination=100% (n=1), when=100% (n=4), escalate=100% (n=4)
+
+==================== oracle | solved-nospotter | latency 2 ticks | planner delay 2.0 s ====================
+scenario         done time s skills dist→rec fails req seq/spot/lis req/tick esc gated  utt→chg ticks touch hand floor
+----------------------------------------------------------------------------------------------------------------------
+crawl_sort       yes    36.7     30      0→0     0           31/0/0     8.4%   0     0              -     0    0     0
+sort_colours     yes    45.5     36      0→0     0           37/0/0     8.1%   0     0              -     0    0     0
+reverse_midway   yes    48.5     43      0→0     1           44/0/1     9.3%   0     0              2     0    0     0
+moved_target     yes    40.1     33      2→2     2           34/0/0     8.5%   0     0              -     0    0     0
+undo             yes    44.0     36      1→1     0           37/0/0     8.4%   0     0              -     0    0     0
+hand_in_path     yes    40.1     30      1→1     0           31/0/0     7.7%   0     0              -     0    1    29
+forbidden_moves  yes    37.1     31      1→1     0           32/0/0     8.6%   0     0              -     0    0     0
+chatter          yes    36.7     30      0→0     0           31/0/1     8.7%   0     0              -     0    0     0
+ambiguous        yes    36.8     31      0→0     1           32/0/1     8.9%   0     0              2     0    0     0
+move_except      yes    45.7     37      0→0     1           38/0/1     8.5%   0     0              2     0    0     0
+completed 10/10; requests 351; violations: forbidden touches 0, hand contacts 1
+agreement with the oracle, per question: next_skill=100% (n=347), task_status=100% (n=347), escalate=100% (n=347), intent=100% (n=4), knob:order=100% (n=3), knob:skip=100% (n=4), knob:destination=100% (n=1), when=100% (n=4), escalate=100% (n=4)
+
+==================== oracle | solved-nolistener | latency 2 ticks | planner delay 2.0 s ====================
+scenario         done time s skills dist→rec fails req seq/spot/lis req/tick esc gated  utt→chg ticks touch hand floor
+----------------------------------------------------------------------------------------------------------------------
+crawl_sort       yes    36.7     30      0→0     0           31/0/0     8.4%   0     0              -     0    0     0
+sort_colours     yes    45.5     36      0→0     0           37/0/0     8.1%   0     0              -     0    0     0
+reverse_midway   yes    48.3     42      0→0     0           43/0/0     8.9%   1     0             20     0    0     0
+moved_target     yes    40.1     33      2→2     2           34/2/0     9.0%   0     0              -     0    0     0
+undo             yes    44.0     36      1→1     0           37/1/0     8.6%   0     0              -     0    0     0
+hand_in_path     yes    41.7     32      1→1     1          32/17/0    11.7%   0     0              -     0    0     0
+forbidden_moves  yes    38.0     31      1→1     0          32/10/0    11.0%   0     0              -     0    0     0
+chatter          yes    36.7     30      0→0     0           31/0/0     8.4%   1     0              -     0    0     0
+ambiguous        yes    38.7     31      0→0     1           32/0/0     8.2%   1     0             20     0    0     0
+move_except      yes    47.4     37      0→0     1           38/0/0     8.0%   1     0             20     0    0     0
+completed 10/10; requests 377; violations: forbidden touches 0, hand contacts 0
+agreement with the oracle, per question: next_skill=100% (n=347), task_status=100% (n=347), escalate=100% (n=347), action=100% (n=30), order=100% (n=40)
+
+wall time 0.3 s
+
