@@ -57,7 +57,7 @@ flowchart TB
 
     subgraph decision [" "]
         dec[Decision: one Jev request]
-        dec --> now[Right now: carry on, pause,<br/>back off, re-target, resume]
+        dec --> now[Right now: carry on, hold,<br/>pause, back off, re-target, resume]
         dec --> r_local[Route: stay local]
         dec --> r_llm[Route: fast or<br/>capable LLM]
         dec --> r_user[Route: ask the user]
@@ -65,10 +65,10 @@ flowchart TB
 
     now -- "applied at once" --> run
     r_local -- "in-plan fix: retry, skip,<br/>re-queue, next step" --> run
-    r_llm --> hold[Arm holds at a safe point,<br/>LLM replans]
+    r_llm --> hold[LLM replans while the arm<br/>carries on or holds, per right now]
     hold --> run
     r_user --> paused([Paused until the user answers])
-    dec -- "every object where<br/>the task wants it" --> done([Episode over])
+    dec -- "every done<br/>condition true" --> done([Episode over])
 
     classDef route fill:#fff4d6,stroke:#b8860b
     class r_local,r_llm,r_user route
@@ -77,7 +77,8 @@ flowchart TB
 
 ## 3. An episode in time
 
-"Put the red blocks in the left bin", with a moved block, a correction and a hand.
+"Line the numbered blocks up in the tray, lowest number on the left" (blocks 1, 3, 5, 7, 11, 12),
+with a moved block, a correction and a hand.
 
 ```mermaid
 sequenceDiagram
@@ -88,25 +89,25 @@ sequenceDiagram
     participant L as Fast LLM
     participant K as Skill
 
-    U->>H: "Put the red blocks in the left bin"
+    U->>H: "Line the numbered blocks up in the tray, lowest on the left"
     H->>L: task + world state
-    L-->>H: plan: red_1, red_2, red_3 → left bin (~2-3 s)
-    H->>K: step 1: red_1 → left bin (starts at once)
+    L-->>H: plan: 1 → slot 1, 3 → slot 2, 5 → slot 3, … 12 → slot 6
+    H->>K: step 1: block 1 → slot 1 (starts at once)
     H-)J: new plan: anything wrong?
     J-->>H: plan ok
     K-->>H: step done
     H->>J: step done
-    J-->>H: red_1 in place, next step
-    H->>K: step 2: red_2 → left bin
-    W-->>H: red_2 slid aside, not by the robot
+    J-->>H: block 1 in slot 1, next step
+    W-->>H: block 5 slid aside, not by the robot
     H->>J: scene change
-    J-->>H: right now: re-target, route: stay local
-    U->>H: "actually, right bin"
+    J-->>H: right now: carry on, route: stay local
+    H->>K: block 5 → slot 3, from its new position
+    U->>H: "actually, highest on the left"
     H->>J: user text
-    J-->>H: right now: finish this placement, route: fast LLM
+    J-->>H: right now: hold (this move would be wrong), route: fast LLM
     H->>L: task + correction + world state + plan
-    Note over H,K: Arm finishes its move and holds at a safe point
-    L-->>H: new plan: red_1 out to right bin, red_2, red_3 → right bin
+    Note over H,K: Arm holds block 5 at a safe point
+    L-->>H: new plan: 5 → slot 4, 12 → slot 1, … 1 and 3 move again
     H->>K: carry on with the new plan
     W-->>H: hand reaching toward the arm
     H->>J: scene change
@@ -116,8 +117,8 @@ sequenceDiagram
 
 ## 4. Headline demo: a correction mid-run
 
-Jev reads the correction and routes it in ~150 ms; the LLM replans while the arm finishes its move.
-Nothing about the correction was prepared in advance.
+Jev reads the correction in ~150 ms and decides whether the arm carries on or holds; the LLM works
+out the new order. Nothing about the correction was prepared in advance.
 
 ```mermaid
 sequenceDiagram
@@ -127,19 +128,18 @@ sequenceDiagram
     participant L as Fast LLM
     participant K as Skill
 
-    Note over H,K: Carrying red_2 to the left bin, red_1 already there
-    U->>H: "actually, right bin"
+    Note over H,K: Blocks 1 and 3 in slots 1 and 2, carrying block 5 to slot 3
+    U->>H: "actually, highest on the left"
     H->>J: user text + task + plan position
-    J-->>H: right now: finish this placement, in-plan fix: none, route: fast LLM (~150 ms)
-    H->>K: finish placing red_2
+    J-->>H: right now: hold, in-plan fix: none, route: fast LLM (~150 ms)
     H->>L: task + correction + world state + plan
-    Note over H,K: Arm holds at a safe point
-    L-->>H: new plan: red_1 and red_2 to the right bin, then red_3 (~3-4 s)
+    Note over H,K: Arm holds block 5 at a safe point
+    L-->>H: new plan: 5 → slot 4, move 1 and 3 aside, then 12, 11, 7 → slots 1-3, 3 → slot 5, 1 → slot 6 (a few seconds)
     H-)J: new plan: anything wrong?
-    H->>K: next step of the new plan
+    H->>K: block 5 → slot 4
 ```
 
-## 5. Walk: someone moves the target, then reaches in
+## 5. Walk: someone moves a block, then reaches in
 
 Changes from outside go through the same decision; the right-now answer does the work.
 
@@ -151,12 +151,12 @@ sequenceDiagram
     participant J as Jev (decision)
     participant K as Skill
 
-    H->>K: move above red_2
-    Pe->>W: slides red_2 15 cm left
-    W-->>H: change: red_2 moved, not by the robot
+    H->>K: move above block 5
+    Pe->>W: slides block 5 15 cm left
+    W-->>H: change: block 5 moved, not by the robot
     H->>J: scene change + plan position + nearby objects
     J-->>H: right now: re-target (0.91), route: stay local
-    H->>K: move above red_2 at its new position
+    H->>K: move above block 5 at its new position
     Pe->>W: reaches toward the arm
     W-->>H: change: hand approaching the gripper
     H->>J: scene change
@@ -181,14 +181,14 @@ sequenceDiagram
     participant J as Jev (decision)
     participant K as Skill
 
-    U->>H: "Put all the red blocks in the left bin"
+    U->>H: "Line the numbered blocks up in the tray, lowest on the left"
     H->>L: task + world state
-    L-->>H: plan: red_1, red_2 → left bin (missed red_3)
-    H->>K: step 1: red_1 → left bin (starts at once)
-    H-)J: new plan: per object, does the task ask about it but the plan leave it out?
-    J-->>H: red_3: yes (0.91), route: fast LLM
-    H->>L: task + world state + plan + "red_3 missing"
-    L-->>H: plan patched: red_3 added
+    L-->>H: plan: 1, 3, 5, 11, 12 (missed block 7, half hidden)
+    H->>K: step 1: block 1 → slot 1 (starts at once)
+    H-)J: new plan: per block, does the task ask about it but the plan leave it out?
+    J-->>H: block 7: yes (0.91), route: fast LLM
+    H->>L: task + world state + plan + "block 7 missing"
+    L-->>H: plan patched: 7 → slot 4, 11 and 12 shift right
     Note over H,K: Step 1 was never interrupted
 ```
 
@@ -203,7 +203,7 @@ stateDiagram-v2
     Waiting --> Running: first plan arrives
     Running --> Paused: decision says pause
     Paused --> Running: decision or user says resume
-    Running --> Holding: waiting on an LLM replan
+    Running --> Holding: replan, and the decision says hold
     Holding --> Running: new plan
     Running --> Stopped: STOP button, typed stop, or safety filter
     Paused --> Stopped: STOP button or typed stop
