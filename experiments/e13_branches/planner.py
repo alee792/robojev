@@ -47,6 +47,9 @@ class LLMResult:
     out_tok: int = 0
     error: str | None = None
     model: str | None = None
+    reasoning_tok: int = 0   # part of out_tok (hidden reasoning); logged for latency/cost analysis only
+    cached_tok: int = 0      # part of in_tok served from the prompt cache
+    t_start: float | None = None  # wall-clock start of the call, for the event stream
 
 
 @dataclass
@@ -105,7 +108,8 @@ def get_plan(backend, req: LLMRequest, scene_view: dict, ref=None, retry: bool =
         if plan is not None:
             errs = P.validate(plan, scene_view)
         out.attempts.append({"latency_ms": r.latency_ms, "in_tok": r.in_tok, "out_tok": r.out_tok, "errors": errs,
-                             "error": r.error, "raw": r.raw, "model": r.model})
+                             "error": r.error, "raw": r.raw, "model": r.model,
+                             "reasoning_tok": r.reasoning_tok, "cached_tok": r.cached_tok, "t_start": r.t_start})
         if not errs:
             out.plan = plan
             out.valid_first = attempt == 0
@@ -157,11 +161,12 @@ class OpenAIBackend:
         self.client = openai.OpenAI(max_retries=0, timeout=timeout_s)
 
     def call(self, req: LLMRequest, ref=None) -> LLMResult:
+        t_wall = time.time()
         t0 = time.perf_counter()
         try:
             resp = self.client.responses.create(**openai_kwargs(req, self.model, self.max_output_tokens, self.effort))
         except Exception as e:  # no retries: a failed call is recorded as a failure
-            return LLMResult(None, (time.perf_counter() - t0) * 1000, error=repr(e)[:300])
+            return LLMResult(None, (time.perf_counter() - t0) * 1000, error=repr(e)[:300], t_start=t_wall)
         ms = (time.perf_counter() - t0) * 1000
         u = resp.usage
         err = None
@@ -170,4 +175,7 @@ class OpenAIBackend:
         raw = resp.output_text or None
         if raw is None and err is None:
             err = "no output text (refusal?)"
-        return LLMResult(raw, ms, u.input_tokens if u else 0, u.output_tokens if u else 0, err, getattr(resp, "model", None))
+        rt = getattr(getattr(u, "output_tokens_details", None), "reasoning_tokens", 0) or 0
+        ct = getattr(getattr(u, "input_tokens_details", None), "cached_tokens", 0) or 0
+        return LLMResult(raw, ms, u.input_tokens if u else 0, u.output_tokens if u else 0, err, getattr(resp, "model", None),
+                         rt, ct, t_wall)
