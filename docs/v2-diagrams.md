@@ -2,10 +2,11 @@
 
 Companion to `docs/v2.md`. GitHub renders these.
 
-## 1. Architecture: the event bus
+## 1. Architecture
 
-Perception, the user and skills put events on a bus. The harness takes each event, asks the right
-layer (async), and applies the answer. Only the harness moves the arm, and perception sees the result.
+Perception and the user put events on a bus, and skills report back to the harness. For each event the harness sends one Jev
+request (the decision) and applies the answers. LLM calls run alongside; only the harness moves the
+arm.
 
 ```mermaid
 flowchart TB
@@ -15,191 +16,180 @@ flowchart TB
     user([User])
     bus{{Event bus}}
     subgraph harness [Harness, code]
-        disp[Dispatcher]
+        disp[Turn event into<br/>a decision]
         state[(Plan + world state)]
-        skill[Current skill]
+        skill[Current plan step]
         filter[Safety filter]
     end
-    subgraph jev [Jev, ~150 ms, async]
-        spotter[Spotter<br/>changes from outside]
-        seq[Sequencer<br/>checks the plan,<br/>then progress]
-        router[Router<br/>who handles it]
+    subgraph jev [Decision: one Jev request, ~150 ms]
+        g1[Spotter group<br/>what to do right now]
+        g2[Sequencer group<br/>fix within the plan?]
+        g3[Router group<br/>who handles it]
     end
     subgraph llm [LLM, 1 s or more, async]
         planner[Planner<br/>fast or capable model]
     end
 
     user -- "task, correction" --> bus
-    ws -- "world updated,<br/>change the robot didn't cause" --> bus
-    skill -- "done, failed" --> bus
+    ws -- "change the robot<br/>didn't cause" --> bus
     bus --> disp
-    disp -. "change" .-> spotter
-    disp -. "new plan, skill<br/>done or failed" .-> seq
-    disp -. "correction, skill failed, not on track,<br/>can't place, low confidence" .-> router
-    disp -. "no plan yet, hand off" .-> planner
-    spotter -- "intervention" --> bus
-    seq -- "plan ok, next step,<br/>or not on track" --> bus
-    router -- "route" --> bus
-    planner -- "plan or patch" --> bus
+    disp -. "event + plan position<br/>+ nearby objects" .-> jev
+    jev -- "answers" --> disp
+    disp -. "route: fast or<br/>capable LLM" .-> planner
+    planner -- "new plan" --> state
     disp --> state --> skill --> filter --> arm([Arm])
+    skill -. "step done, failed" .-> disp
     stop([STOP button]) -. "always wins" .-> filter
 ```
 
-## 2. Workflow: start-up and execution
+## 2. An episode
 
-The same loop with the bus left out, read top to bottom. The main path runs one skill at a time; the
-box on the side can fire at any moment, in parallel with it.
+The same loop read top to bottom. Every event goes through the same decision; the route decides
+whether it stays local or goes to an LLM.
 
 ```mermaid
 flowchart TB
-    start([Start]) --> boot[Start perception and the harness]
-    boot --> task[/User gives a task/]
-    task --> plan[Fast LLM writes a plan]
-    plan --> check[Sequencer checks the plan<br/>against the task]
-    check -- "ok" --> run[Run the next skill]
-    check -- "something's wrong" --> replan[Capable LLM replans]
-    replan --> check
-    run --> seq[Sequencer checks progress,<br/>one question per object]
-    seq -- "next step, or retry" --> run
-    seq -- "task done" --> done([Wait for the next task])
-    seq -- "not on track, or unsure" --> r_in
+    start([Task arrives]) --> plan[Fast LLM writes a plan]
+    plan --> run[Run the next plan step]
+    plan -. "checked in parallel" .-> dec
+    run --> ev{{Event: step done or failed,<br/>scene change, user text, new plan}}
+    ev --> dec
 
-    subgraph router [" "]
-        r_in{{Router: pick one route}}
-        r_in --> r_go[Continue]
-        r_in --> r_adj[Adjust a<br/>parameter]
-        r_in --> r_llm[Fast or<br/>capable LLM]
-        r_in --> r_stop[Pause, or<br/>ask the user]
+    subgraph decision [" "]
+        dec[Decision: one Jev request]
+        dec --> now[Right now: carry on, pause,<br/>back off, re-target, resume]
+        dec --> r_local[Route: stay local]
+        dec --> r_llm[Route: fast or<br/>capable LLM]
+        dec --> r_user[Route: ask the user]
     end
-    r_go --> run
-    r_adj --> run
-    r_llm --> patch[LLM patches the plan<br/>arm carries on or holds<br/>at a safe point]
-    patch --> check
-    r_stop --> paused([Paused until the user answers])
 
-    subgraph anytime [At any moment, in parallel]
-        change[/Perception: a change<br/>the robot didn't cause/] --> spotter[Spotter picks<br/>an intervention]
-        corr[/User types a correction/]
-    end
-    spotter -- "re-target, re-queue, pause,<br/>back off, resume, ignore" --> run
-    spotter -- "can't place it" --> r_in
-    corr --> r_in
+    now -- "applied at once" --> run
+    r_local -- "in-plan fix: retry, skip,<br/>re-queue, next step" --> run
+    r_llm --> hold[Arm holds at a safe point,<br/>LLM replans]
+    hold --> run
+    r_user --> paused([Paused until the user answers])
+    dec -- "every object where<br/>the task wants it" --> done([Episode over])
 
     classDef route fill:#fff4d6,stroke:#b8860b
-    class r_go,r_adj,r_llm,r_stop route
-    style router fill:#fffaf0,stroke:#b8860b
+    class r_local,r_llm,r_user route
+    style decision fill:#fffaf0,stroke:#b8860b
 ```
 
-## 3. Start-up and the normal cycle, in time
+## 3. An episode in time
 
-Perception and the harness start first. With no plan, the harness asks the fast LLM for one; the
-first skill runs as soon as it arrives, and everything after that is event-driven.
+"Put the red blocks in the left bin", with a moved block, a correction and a hand.
 
 ```mermaid
 sequenceDiagram
     actor U as User
     participant W as Perception
     participant H as Harness
-    participant P as Fast LLM
+    participant J as Jev (decision)
+    participant L as Fast LLM
     participant K as Skill
-    participant S as Sequencer (Jev)
 
     U->>H: "Put the red blocks in the left bin"
-    par always running
-        W-->>H: world state updates
-    and no plan yet
-        H->>P: task + world state
-        P-->>H: plan: red_1, red_2, red_3 → left bin (~1 s)
-    end
-    H->>S: plan + task + world state: anything wrong?
-    S-->>H: plan ok (~150 ms)
-    loop each step
-        H->>K: start(pick red_1 → left bin)
-        K-->>H: done (event)
-        H->>S: per object: does the task want it in the left bin?
-        S-->>H: answers (event), code compares with the world state
-    end
+    H->>L: task + world state
+    L-->>H: plan: red_1, red_2, red_3 → left bin (~1.5 s)
+    H->>K: step 1: red_1 → left bin (starts at once)
+    H-)J: new plan: anything wrong?
+    J-->>H: plan ok
+    K-->>H: step done
+    H->>J: step done
+    J-->>H: red_1 in place, next step
+    H->>K: step 2: red_2 → left bin
+    W-->>H: red_2 slid aside, not by the robot
+    H->>J: scene change
+    J-->>H: right now: re-target, route: stay local
+    U->>H: "actually, right bin"
+    H->>J: user text
+    J-->>H: right now: finish this placement, route: fast LLM
+    H->>L: task + correction + world state + plan
+    Note over H,K: Arm finishes its move and holds at a safe point
+    L-->>H: new plan: red_1 out to right bin, red_2, red_3 → right bin
+    H->>K: carry on with the new plan
+    W-->>H: hand reaching toward the arm
+    H->>J: scene change
+    J-->>H: right now: pause
+    Note over H,K: The code stop distance applies regardless
 ```
 
-## 4. Headline demo: "actually, reverse it"
+## 4. Headline demo: a correction mid-run
 
-The task is "line the numbered blocks up in the tray, lowest on the left". The correction changes the
-final arrangement, so the sort order parameter flips. Jev maps the words onto the parameter within
-~150 ms; code works out every move from there, including the blocks already placed. No LLM.
+Jev reads the correction and routes it in ~150 ms; the LLM replans while the arm finishes its move.
+Nothing about the correction was prepared in advance.
 
 ```mermaid
 sequenceDiagram
     actor U as User
     participant H as Harness
-    participant Ro as Router (Jev)
+    participant J as Jev (decision)
+    participant L as Fast LLM
     participant K as Skill
 
-    Note over H,K: Blocks 1, 2 in the tray, carrying 3
-    U->>H: "actually, reverse it"
-    H->>Ro: correction + task + parameters
-    Ro-->>H: adjust: sort order = highest on the left (stated: yes), after this block (~150 ms)
-    Note over H: Code recomputes every goal slot. 1 and 2 are now "not at goal"
-    H->>K: finish placing 3 (in its new slot, 4)
-    H->>K: 4 to slot 3 (next block whose slot is free)
-    H->>K: move 1 and 2 out of the slots 6 and 5 need
-    H->>K: 6, 5, 2, 1 into their slots
-    Note over H: The arm never waited, and no LLM was called
+    Note over H,K: Carrying red_2 to the left bin, red_1 already there
+    U->>H: "actually, right bin"
+    H->>J: user text + task + plan position
+    J-->>H: right now: finish this placement, in-plan fix: none, route: fast LLM (~150 ms)
+    H->>K: finish placing red_2
+    H->>L: task + correction + world state + plan
+    Note over H,K: Arm holds at a safe point
+    L-->>H: new plan: red_1 and red_2 to the right bin, then red_3 (~1-2 s)
+    H-)J: new plan: anything wrong?
+    H->>K: next step of the new plan
 ```
 
 ## 5. Walk: someone moves the target, then reaches in
 
-Perception flags changes the robot didn't cause; the Spotter decides what each one means.
+Changes from outside go through the same decision; the right-now answer does the work.
 
 ```mermaid
 sequenceDiagram
     actor Pe as Person
     participant W as Perception
     participant H as Harness
-    participant Sp as Spotter (Jev)
+    participant J as Jev (decision)
     participant K as Skill
 
-    H->>K: move_above(red_2)
+    H->>K: move above red_2
     Pe->>W: slides red_2 15 cm left
     W-->>H: change: red_2 moved, not by the robot
-    H->>Sp: change + task + current skill
-    Sp-->>H: intervention: re-target red_2 (0.91)
-    H->>K: move_above(red_2) at its new position
+    H->>J: scene change + plan position + nearby objects
+    J-->>H: right now: re-target (0.91), route: stay local
+    H->>K: move above red_2 at its new position
     Pe->>W: reaches toward the arm
     W-->>H: change: hand approaching the gripper
-    H->>Sp: change + current skill
-    Sp-->>H: intervention: pause (0.88)
+    H->>J: scene change
+    J-->>H: right now: pause (0.88)
     Note over H,K: The safety filter's own stop distance applies regardless
     Pe->>W: hand withdraws
     W-->>H: change: hand gone
-    H->>Sp: change
-    Sp-->>H: intervention: resume
+    H->>J: scene change
+    J-->>H: right now: resume
 ```
 
 ## 6. A plan that misses something
 
-Nothing outside changed: the fast LLM's plan left out a block that was half hidden behind the bin.
-The Sequencer's check catches it before anything moves; the per-object check after each skill is
-the backstop if it slips through.
+The plan check runs in parallel with the first step. When it finds a problem, that is just another
+decision routed to the LLM.
 
 ```mermaid
 sequenceDiagram
     actor U as User
     participant H as Harness
-    participant P1 as Fast LLM
-    participant S as Sequencer (Jev)
-    participant P2 as Capable LLM
+    participant L as Fast LLM
+    participant J as Jev (decision)
+    participant K as Skill
 
     U->>H: "Put all the red blocks in the left bin"
-    H->>P1: task + world state
-    P1-->>H: plan: red_1, red_2 → left bin (missed red_3)
-    H->>S: per object: does the task ask about it but the plan leave it out?
-    S-->>H: red_3: yes (0.91), others: no
-    H->>P2: task + world state + plan + "red_3 missing"
-    Note over H: Arm still waiting for its first plan
-    P2-->>H: plan: red_1, red_2, red_3 → left bin
-    H->>S: check again
-    S-->>H: plan ok
-    Note over H: First skill runs
+    H->>L: task + world state
+    L-->>H: plan: red_1, red_2 → left bin (missed red_3)
+    H->>K: step 1: red_1 → left bin (starts at once)
+    H-)J: new plan: per object, does the task ask about it but the plan leave it out?
+    J-->>H: red_3: yes (0.91), route: fast LLM
+    H->>L: task + world state + plan + "red_3 missing"
+    L-->>H: plan patched: red_3 added
+    Note over H,K: Step 1 was never interrupted
 ```
 
 ## 7. What the arm is doing
@@ -209,15 +199,15 @@ Only the harness moves the arm between these states. A model can pause it; only 
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Waiting: harness starts, no plan
+    [*] --> Waiting: no task yet
     Waiting --> Running: first plan arrives
-    Running --> Paused: Spotter or Router pause
-    Paused --> Running: Spotter, Router or user resumes
-    Running --> Holding: waiting on an LLM
-    Holding --> Running: new plan or patch
+    Running --> Paused: decision says pause
+    Paused --> Running: decision or user says resume
+    Running --> Holding: waiting on an LLM replan
+    Holding --> Running: new plan
     Running --> Stopped: STOP button, typed stop, or safety filter
     Paused --> Stopped: STOP button or typed stop
     Holding --> Stopped: STOP button or typed stop
     Stopped --> Waiting: user restarts
-    Running --> Waiting: task done
+    Running --> Waiting: episode over
 ```
