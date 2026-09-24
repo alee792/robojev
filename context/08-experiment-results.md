@@ -447,6 +447,34 @@ duplicate or clashing blocks. The always-LLM baseline and the system's escalatio
 correction, so their accuracy on escalated corrections is identical by construction. The event streams'
 times are per correction (t=0 when the user speaks), not wall time.
 
+**Fast-model probe (2026-09-24, 7 tasks × 5 corrections each; small samples).** Same harness and
+prompts, looking for a faster LLM; commands and tables in `experiments/results/e13_probe.txt`, runs in
+`e13_branches.jsonl`, event streams in `e13_events_<run>.md`. Prices for `gpt-5.4-nano` are approximate.
+Jev: 0 errors, p50 84–103 ms throughout.
+
+| model | right: system / always-LLM | LLM per correction p50 / p95 / max | LLM plan p50 / p95 | coverable with a branch | Jev kept (right) | $ per correction |
+|---|---|---|---|---|---|---|
+| gpt-6-luna, `--llm-effort low` | **35/35 / 35/35** | 2.2 / 5.3 / 9.4 s | 2.3 / 6.5 s | 0/14 | 7 (7) | 0.0003 |
+| gpt-5.4-mini | 31/35 / 28/35 | 2.2 / 4.0 / 7.3 s | 1.9 / 7.7 s | 2/14 | 9 (9) | 0.002 |
+| gpt-4.1-mini | 26/30 / 27/30 | 3.7 / 5.6 / 8.1 s | 4.3 / 22.6 s (1 timeout) | **10/12** | **18 (17)** | 0.0013 |
+| gpt-4o-mini | 24/30 / 24/30 | 2.5 / 6.9 / 30 s (timeout) | 2.5 / 7.4 s | 0/12 | 6 (6) | 0.0003 |
+| gpt-5.4-nano | 22/35 / 22/35 | 2.7 / 7.4 / 10.1 s | 1.9 / 4.8 s | 0/14 | 7 (5) | 0.0007 |
+| gpt-4.1-nano | 13/35 / 10/35 | 3.0 / 6.6 / 23.9 s | 2.1 / 3.8 s | 2/14 | 11 (7) | 0.0003 |
+
+(30 corrections where a plan failed validation or timed out: its task's corrections are skipped.)
+
+- **[measured] No model gets an LLM round trip much under ~2 s.** Models with no reasoning step and
+  Luna at low effort all land at 2.2–3.7 s median, 4–7 s p95, with 10–30 s outliers on four of six.
+  **[inferred]** At these prompt sizes (about 1.4k tokens in, 250–450 out), the API round trip and output
+  length dominate, not reasoning. Plan motion around 2–4 s typical and a 30 s worst case.
+- **[measured] `gpt-6-luna` at low effort is the best default seen**: the only 100% model, as fast as the
+  minis, cheapest, and a smaller tail than at default effort (9 s max vs 25 s in the full run).
+- **[measured] `gpt-4.1-mini` is the only model that prepares branches unprompted** (10/12 coverable), so
+  Jev kept 18/30 corrections at a 148 ms system median. But accuracy is lower (87%) and its plan call
+  has a heavy tail (22.6 s p95, one 30 s timeout).
+- **[measured] Nano models and `gpt-4o-mini` are too inaccurate** (37–80%), and nanos also hand Jev
+  wrong branches to pick from (Jev "right" on only 5/7 and 7/11 of the corrections it kept).
+
 ## Getting more out of Jev: recommendations from the TypeSafe docs (inferred, none applied)
 
 Read after E11/E12: the [Jev 1.13 jaggedness page](https://docs.typesafe.ai/model-jaggedness/jev-1.13)
