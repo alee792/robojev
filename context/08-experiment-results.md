@@ -350,6 +350,103 @@ cases to an LLM is a sound fallback. Without prepared branches it fires on two t
 it is not a substitute for preparing them. The `solved` branches were hand-written in E11; whether a
 fast LLM can prepare them at planning time is untested.
 
+## E13 — a fast LLM prepares branches, Jev picks one (2026-09-24)
+
+Run from the bay Mac: Jev `jev-1.13.0`; the LLM through OpenAI's Responses API with strict structured
+output. 28 tasks (4 per task kind) × 5 corrections, open loop. Full runs: **`gpt-5.6-terra`** (the
+handoff's "ChatGPT Terra", the only "terra" id on the account) and **`gpt-6-luna`** (added because
+GPT-6 had just become available). A `gpt-6-sol` run was stopped by hand at 8/28 tasks and a 7-task
+Terra warm-up run is also in the log; neither is in the tables. `gpt-6-astra` was not run (about $6.50
+estimated). Prices: Terra $2 / $12 per M input / output tokens, Luna $0.10 / $0.50. Jev: 280 requests,
+**0 errors**. LLM: 337 calls, 1 invalid plan (Terra; valid on retry), 0 failed calls (Sol had 1 timeout
+at 30 s before it was stopped). Log: `experiments/results/e13_branches.jsonl`; tables: `e13_run.txt`;
+annotated event streams per run: `e13_events_<run>.md` / `.jsonl` (from `experiments/e13_events.py`).
+
+**Step 1: the LLM's plan**
+
+| | Terra | Luna |
+|---|---|---|
+| valid first try / after retry | 28/28 / 28/28 | 28/28 / 28/28 |
+| default arrangement correct | 28/28 | 28/28 |
+| parameters / branches per plan (mean) | 0.1 / 1.1 | 0.2 / 1.3 |
+| coverable corrections with a prepared branch | **2/56 (4%)** | **4/56 (7%)** |
+| task kinds with any branch | colour_to_bin (2/8), alternate (1.8 branches, 0 useful) | parity_bins (4/8), alternate (2.5 branches, 0 useful) |
+
+**Step 2: Jev's route and branch pick**
+
+| correction kind | Terra plans: route right | Luna plans: route right |
+|---|---|---|
+| coverable (56) | 56/56 (answered new_plan_needed 54, adjust 2) | 54/56 |
+| not coverable (56) | 56/56 | 55/56 |
+| chatter (20) | 18/20 (2 sent to the LLM) | 18/20 |
+| pause (7) | 7/7 | 7/7 |
+| all (140) | **138/140** | **135/140** |
+| branch pick where a branch was the answer | 2/2 | 4/4 |
+
+**Gate sweep (replay, no calls):** at every gate from 0.3 to 0.9, Jev keeps about 20% of corrections, and
+all of them are right: 28/28 (Terra plans) and 30/30 (Luna plans). Escalations are 79–80%, and there are
+**no Jev mistakes to catch** (0/0).
+
+**End to end at gate 0.7, against always sending the correction to the LLM**
+
+| correction kind | n | system right | always-LLM right | system p50 / p95 ms | always-LLM p50 / p95 ms |
+|---|---|---|---|---|---|
+| chatter | 20 | 20 / 20 | 20 / 20 | 95–124 / 2,108–2,243 | 2,131–2,214 / 4,404–4,909 |
+| pause | 7 | 7 / 7 | 7 / 7 | **100–128 / 112–154** | 2,072–2,502 / 2,786–3,468 |
+| coverable | 56 | 55 / 54 | 55 / 54 | 2,712–4,195 / 6,921–8,759 | same (escalated) |
+| not coverable | 56 | 54 / 55 | 54 / 55 | 2,778–4,992 / 4,934–8,556 | same |
+| **all** | 140 | **137 / 137** | **137 / 137** | Terra 3,973 / 7,079; Luna 2,599 / 6,325 | Terra 4,056 / 7,000; Luna 2,679 / 6,250 |
+
+(Pairs are Terra / Luna; ranges span the two runs.) The one "restate" correction was handled by Jev in 73–94 ms.
+
+**Latency, tokens and cost per call**
+
+| | Terra | Luna | Jev |
+|---|---|---|---|
+| plan: p50 / p95 / max | 2.3 / 7.1 / 7.8 s | 3.0 / 8.6 / 12.1 s | – |
+| correction (replan): p50 / p95 / max | 4.1 / 7.0 / 11.1 s | **2.7** / 6.3 / **25.2 s** | 96–99 / 164–176 / 223–380 ms |
+| tokens per plan: in / out (reasoning) | 999 / 186 (38) | 999 / 324 (138) | – |
+| tokens per correction: in / out (reasoning) | 1,277 / 297 (43) | 1,279 / 260 (85) | ~820 in |
+| cost per correction | ~$0.0061 | ~$0.0003 | ~$0.00003 |
+| run cost | **$0.98** | **$0.043** | $0.005 per run |
+
+Prompt caching was small: Terra averaged 117 cached input tokens per plan, and Luna had none. Total spend for E13,
+including the warm-up and the partial Sol run, was about $1.40.
+
+**Where the LLM was wrong** (3 of 140 escalations in each run, of the same two kinds): "odd ones on the
+left/right instead" (parity bins: Terra 1, Luna 2), and "sort / line them up by number instead, lowest
+on the left" when the task used a different rule (Terra 2, Luna 1).
+
+**Takeaways**
+- **[measured] The fast LLM does not prepare branches.** Every plan was valid and its default right,
+  but 1.1–1.3 branches per plan covered 4–7% of the corrections a branch could have covered. Branches
+  appeared only where the variable is spelled out in the task (bins by parity; colour to bin). **[inferred]**
+  The prompt makes branches optional, and both models take the option. The harness rule forbids
+  changing the prompt, so this is the result as specified. The v2 design has since dropped prepared
+  variants (`docs/v2.md`, d9539d9), which this supports.
+- **[measured] Jev routes corrections reliably and picks branches when they exist:** route 135–138/140,
+  branch pick 6/6, and every correction it handled itself was right (58/58). Two chatter messages per
+  run were escalated when they didn't need to be; that costs time, not correctness.
+- **[measured] Confidence gating was not tested:** Jev made no mistakes on the corrections it kept, so
+  every gate from 0.3 to 0.9 gives the same outcome. **[inferred]** Keep 0.7 until a run produces Jev
+  errors on kept corrections; E11's replay remains the evidence that low confidence flags them.
+- **[measured] The system equals the always-LLM baseline on accuracy (137/140 in both runs)** and wins on
+  latency only where Jev keeps the correction: chatter and pause take ~0.1 s against 2–2.5 s. Everything
+  else pays Jev's ~100 ms on top of the LLM's round trip.
+- **[measured] An LLM round trip per correction is 2.7–4.1 s median and 6–7 s at p95**, with rare outliers
+  of 11 s (Terra) and 25 s (Luna), and a 30 s timeout on Sol. Anything that blends LLM decisions into motion
+  must let the arm carry on or hold for several seconds, and survive a 25–30 s tail.
+- **[measured] Luna matches Terra's accuracy at about 1/20 of the cost** and has a faster median, but a
+  heavier tail. It spends more of its output on reasoning (85 vs 43 tokens per correction).
+
+**Limits (from the handoff, unchanged).** Open loop: each correction is judged on its own, from the default
+branch, with no arm or simulation. The evaluation oracle is lenient in places (gaps in tray lines, any
+valid arrangement for "any order" tasks), so an uncoverable correction can occasionally match by chance.
+Block ids and destinations are fixed lists in the output schema, so validity failures can only be missing,
+duplicate or clashing blocks. The always-LLM baseline and the system's escalation share one LLM call per
+correction, so their accuracy on escalated corrections is identical by construction. The event streams'
+times are per correction (t=0 when the user speaks), not wall time.
+
 ## Getting more out of Jev: recommendations from the TypeSafe docs (inferred, none applied)
 
 Read after E11/E12: the [Jev 1.13 jaggedness page](https://docs.typesafe.ai/model-jaggedness/jev-1.13)
