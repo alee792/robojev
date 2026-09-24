@@ -26,7 +26,7 @@ flowchart TB
         g2[Sequencer group<br/>fix within the plan?]
         g3[Router group<br/>who handles it]
     end
-    subgraph llm [LLM, 1 s or more, async]
+    subgraph llm [LLM, ~3 s, async]
         planner[Planner<br/>fast or capable model]
     end
 
@@ -90,7 +90,7 @@ sequenceDiagram
 
     U->>H: "Put the red blocks in the left bin"
     H->>L: task + world state
-    L-->>H: plan: red_1, red_2, red_3 → left bin (~1.5 s)
+    L-->>H: plan: red_1, red_2, red_3 → left bin (~2-3 s)
     H->>K: step 1: red_1 → left bin (starts at once)
     H-)J: new plan: anything wrong?
     J-->>H: plan ok
@@ -134,7 +134,7 @@ sequenceDiagram
     H->>K: finish placing red_2
     H->>L: task + correction + world state + plan
     Note over H,K: Arm holds at a safe point
-    L-->>H: new plan: red_1 and red_2 to the right bin, then red_3 (~1-2 s)
+    L-->>H: new plan: red_1 and red_2 to the right bin, then red_3 (~3-4 s)
     H-)J: new plan: anything wrong?
     H->>K: next step of the new plan
 ```
