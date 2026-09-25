@@ -1,15 +1,15 @@
 {
  "arm": "jev",
- "event": "the arm has been paused for 5 s (paused after: the first plan arrived: mock plan for: plan) and nothing has changed",
+ "event": "the arm has been paused for 5 s (paused after: the first plan arrived: Line the numbered blocks up in the tray, lowest number on the left.) and nothing has changed",
  "request": {
   "state": {
    "event": {
     "kind": "paused idle",
-    "what_happened": "the arm has been paused for 5 s (paused after: the first plan arrived: mock plan for: plan) and nothing has changed"
+    "what_happened": "the arm has been paused for 5 s (paused after: the first plan arrived: Line the numbered blocks up in the tray, lowest number on the left.) and nothing has changed"
    },
    "task": "Line the numbered blocks up in the tray, lowest number on the left.",
    "robot": {
-    "mode": "paused (paused after: the first plan arrived: mock plan for: plan); it stays paused until resumed",
+    "mode": "paused (paused after: the first plan arrived: Line the numbered blocks up in the tray, lowest number on the left.); it stays paused until resumed",
     "holding": "nothing",
     "new_plan_being_worked_out": "no"
    },

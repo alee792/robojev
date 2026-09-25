@@ -100,7 +100,7 @@ def plan_schema(ids: dict) -> dict:
         "type": "object", "additionalProperties": False,
         "required": ["reading", "steps", "done_when", "constraints"],
         "properties": {
-            "reading": {"type": "string", "description": "one sentence: the final arrangement the task asks for"},
+            "reading": {"type": "string", "description": "the task as it stands now, in one sentence: the final arrangement wanted, with every user message so far folded in"},
             "steps": arr(_step_schema(ids), "the steps, in the order to run them"),
             "done_when": arr(_cond_schema(ids), "one condition per fact that must hold when the task is done"),
             "constraints": arr(_constraint_schema(ids), "rules that hold for the whole task; empty if none"),
@@ -115,7 +115,7 @@ def diff_schema(ids: dict) -> dict:
         "type": "object", "additionalProperties": False,
         "required": ["reading", "new_steps", "pending_order", "drop_done_when", "new_done_when", "drop_constraints", "new_constraints"],
         "properties": {
-            "reading": {"type": "string", "description": "one sentence: what changes and the final arrangement now wanted"},
+            "reading": {"type": "string", "description": "the task as it stands now, in one sentence, with this change and every earlier user message folded in: the final arrangement now wanted"},
             "new_steps": arr(_step_schema(ids), "only steps that are not already in the plan"),
             "pending_order": arr(s, "ids of every step still to run, in order (kept steps and new ones); a step not listed will not run"),
             "drop_done_when": arr(s, "ids of done conditions that no longer apply"),

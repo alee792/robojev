@@ -48,6 +48,7 @@ class HarnessConfig:
     loop_repeats: int = 3          # A,B alternating this many times = a loop
     max_step_failures: int = 3     # the same step failing this many times = a loop
     decide_plan_arrived: bool = True
+    max_plan_rejections: int = 3   # new plans sent back to the LLM more than this since the user last spoke = a replan loop
 
 
 class LoopDetector:
@@ -118,6 +119,8 @@ class Episode:
         self.new_events: list[Event] = []
         self.replan_seq = 0                     # the newest replan request; older ones are stale
         self.replan_pending = False
+        self.plan_rejections = 0
+        self.trust_next_plan = False
         self.unmet_raised = False
         self.done_answers: dict = {}
         self.last_event_t = 0
@@ -250,6 +253,7 @@ class Episode:
                 break
             for text in self.user.poll(t):
                 self.user_messages.append(text)
+                self.plan_rejections, self.trust_next_plan = 0, False   # a new request: judge plans again
                 if is_stop(text):
                     self._stop('the user typed "stop"')
                     break
@@ -428,6 +432,10 @@ class Episode:
     def _decide(self, ev: Event):
         if ev.kind == "plan_arrived" and not self.cfg.decide_plan_arrived:
             return
+        if ev.kind == "plan_arrived" and self.trust_next_plan:
+            self._log("plan_trusted", why="replan loop: running the new plan without routing it back")
+            self._start_next_now()
+            return
         v = self.view(ev)
         out = self.decider.decide(ev, v)
         out["event"], out["t"] = ev, self.t
@@ -571,6 +579,15 @@ class Episode:
         res.seq = self.replan_seq
         res.t_request = self.t
         self.replan_pending = True
+        if ev is not None and ev.kind == "plan_arrived":
+            self.plan_rejections += 1
+            if self.plan_rejections >= self.cfg.max_plan_rejections and not self.trust_next_plan:
+                # a replan loop: new plans keep coming without progress. From here until the user says
+                # something new, new plans run as they come instead of being routed back to the LLM
+                # (docs/v2.md "Rules that hold everywhere").
+                self.trust_next_plan = True
+                self.r.loops += 1
+                self._log("loop", loop="replans", rejections=self.plan_rejections)
         self.r.llm.append({"t": self.t, "kind": res.kind, "route": res.route, "ok": res.ok, "attempts": res.attempts,
                            "event": ev.kind if ev else None})
         self._log("llm", request=res.kind, route=res.route, ok=res.ok, attempts=res.attempts, why=ev.text if ev else self.task,

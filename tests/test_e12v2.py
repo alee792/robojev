@@ -537,9 +537,9 @@ def test_live_jev_client_shape_errors_and_budget(monkeypatch):
         j.answer({"s": 1}, {"q": {}})
 
 
-def test_a_single_earlier_correction_reaches_every_later_decision():
-    # With exactly one user message, the state used to drop `user_said_earlier` (a `> 1` check), so
-    # after "actually, highest on the left" Jev saw only the original task and a plan contradicting it.
+def test_decisions_see_the_task_as_it_stands_after_a_correction():
+    # After "actually, highest on the left", every decision once the new plan is in must see the task as
+    # corrected (the planner's restatement), not the original task alongside a separate list of messages.
     sc = S.make("sort_correction", 12)
     seen = []
 
@@ -554,6 +554,31 @@ def test_a_single_earlier_correction_reaches_every_later_decision():
                  PlannerClient({"fast_llm": MockLLM(sc, sc.world)}), HarnessConfig(max_s=200))
     ep.run(sc.task)
     assert len(ep.user_messages) == 1
-    after = [s for s in seen if "user_said_earlier" in s]
-    assert after and all(ep.user_messages[0] in s["user_said_earlier"] for s in after)
-    assert "user_said_earlier" not in seen[0]      # nothing said yet at the first plan
+    assert all("user_said_earlier" not in s for s in seen)
+    assert seen[0]["task"] == sc.task                      # nothing said yet at the first plan
+    corrected = [s for s in seen if ep.user_messages[0] in s["task"]]
+    assert corrected and seen[-1] is corrected[-1]          # from the replan on, the task carries the correction
+    pending = [s for s in seen if "change_being_planned" in s]
+    assert all(ep.user_messages[0] == s["change_being_planned"]["user_said"] for s in pending)
+
+
+def test_a_replan_loop_runs_the_next_plan_without_routing_it_back():
+    # A replan loop: new plans keep arriving with no step finishing. Past the limit, the next plan runs
+    # as it comes instead of being sent back to the LLM again.
+    sc = S.make("sort_correction", 12)
+
+    class DoubtEveryPlan(MockJev):
+        def answer(self, state, questions, ref=None):
+            out = super().answer(state, questions, ref)
+            if ref[0].kind == "plan_arrived" and "route" in questions:
+                from e12v2.eval.mocks import _shape_choice
+                out["answers"]["route"] = _shape_choice("fast_llm", list(questions["route"]["criteria"]), 0.95)
+            return out
+
+    from e12v2.core.combine import JevDecider
+    ep = Episode(sc.world, sc.person, make_skills(sc.world), JevDecider(DoubtEveryPlan(sc, sc.world, 0.0, 0.0)),
+                 PlannerClient({"fast_llm": MockLLM(sc, sc.world), "capable_llm": MockLLM(sc, sc.world)}),
+                 HarnessConfig(max_s=240))
+    ep.run(sc.task)
+    assert ep.r.loops >= 1
+    assert ep.r.outcome != "gave_up"

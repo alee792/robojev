@@ -207,11 +207,13 @@ def build_state(event, v: View) -> dict:
     s = {"event": {"kind": event.kind.replace("_", " "), "what_happened": event.text}}
     if event.kind == "user_text":
         s["event"]["user_just_said"] = event.data.get("text", "")
-    s["task"] = v.task
-    if v.user_messages and event.kind != "user_text":
-        s["user_said_earlier"] = v.user_messages[-3:]
-    elif event.kind == "user_text" and len(v.user_messages) > 1:
-        s["user_said_earlier"] = v.user_messages[-4:-1]
+    # The task as it stands now: the planner restates it with every plan, corrections folded in, so Jev
+    # judges against one statement of what the user wants now, never the original task plus a list of
+    # later messages (docs/v2.md "The decision").
+    s["task"] = (v.plan.get("reading") if v.plan else "") or v.task
+    if v.replan_pending and v.user_messages and event.kind != "user_text":
+        s["change_being_planned"] = {"user_said": v.user_messages[-1],
+                                     "note": "a new plan for this is being worked out; `task` does not include it yet"}
     s["robot"] = {"mode": _mode_text(v), "holding": v.name(v.state.arm.holding) if v.state.arm.holding else "nothing",
                   "new_plan_being_worked_out": "yes" if v.replan_pending else "no"}
     s["plan_position"] = plan_position(v)

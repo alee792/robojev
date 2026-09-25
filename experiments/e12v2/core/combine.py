@@ -28,7 +28,7 @@ CAUTIOUS = {"carry_on": "hold", "re_target": "hold", "resume": "carry_on", "hold
 @dataclass
 class Gates:
     right_now: float = 0.5
-    stay_local: float = 0.7      # the in-plan fix / keeping it local (E11: 0.7 caught 71 of 72 mistakes)
+    stay_local: float = 0.8      # the in-plan fix / keeping it local (e12v2: 0.8 caught 98% of wrong answers, 0.7 89%)
     fast_llm: float = 0.3        # below: capable LLM
     capable_llm: float = 0.0
     ask_user: float = 0.5        # below: capable LLM instead of bothering the user

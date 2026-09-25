@@ -283,3 +283,53 @@ table, with its command line, to `experiments/results/e12v2_run.txt`.
 3. The findings added to `docs/spike-outcomes.md` (not `docs/v2.md`, which holds only durable design).
 4. A comment on PR #1 answering questions 1-7 in plain language, ending with a recommendation:
    move to MuJoCo or not, and why.
+
+---
+
+# Handoff 4: rerun e12v2 after the correction fix
+
+Paste the block below into a Claude Code session on the bay Mac (`TYPESAFE_API_KEY`, `OPENAI_API_KEY`).
+
+---
+
+You are rerunning e12v2 for robojev after three fixes to the correction failure found in the last run
+(`sort_correction` looped until the LLM-call cap because Jev saw the original task and the
+correction as separate fields):
+
+1. Decisions see the task as it stands now: the planner restates it with every plan (`reading`),
+   corrections folded in; `user_said_earlier` is gone. While a replan for a correction is pending, the
+   state carries `change_being_planned`.
+2. A replan loop is detected: once new plans have been sent back to the LLM 3 times since the user
+   last spoke, later plans run as they come until the user says something new.
+3. The stay-local gate defaults to 0.8.
+
+**Setup**
+1. `git fetch origin claude/first-principles-approach-ow3jo2 && git checkout claude/first-principles-approach-ow3jo2`
+2. Read `docs/v2.md`, the e12v2 sections of `context/08-experiment-results.md` and
+   `docs/spike-outcomes.md` (the last run and why it failed), and this handoff's Handoff 3 for the
+   commands and rules, which still apply.
+3. `uv run --frozen pytest -q` at the repo root (expect 252 passed, 3 skipped).
+
+**Run** (same as Handoff 3; `gpt-6-luna`, `--llm-effort low`, prices from the last run):
+```
+uv run --frozen python experiments/e12v2.py --dry-run
+cd experiments && OPENAI_MODEL=gpt-6-luna uv run --extra llm python e12v2.py --jev jev --llm openai --llm-effort low --seeds 3 --llm-price-in <in> --llm-price-out <out> && cd ..
+cd experiments && OPENAI_MODEL=gpt-6-luna uv run --extra llm python e12v2.py --jev jev --llm openai --llm-effort low --noise --llm-price-in <in> --llm-price-out <out> && cd ..
+uv run --frozen python experiments/e12v2.py --replay experiments/results/e12v2_<run>.jsonl
+```
+Append the printed tables, with command lines, to `experiments/results/e12v2_run.txt`.
+
+**Questions**
+1. The five pass criteria, as printed, and for each FAIL why (read the log).
+2. `sort_correction`: does it complete now; how many LLM calls; did the replan-loop rule fire, and was
+   the plan it let through right?
+3. Did the fixes change anything else (hand contacts, held-out, correction time, LLM calls, cost)?
+4. The gate sweep at 0.7-0.9: is 0.8 still the right setting?
+
+**Rules** as in Handoff 3: don't change the harness to improve numbers; fix real bugs in their own
+commits and say so.
+
+**Deliverables**, pushed to `claude/first-principles-approach-ow3jo2` (PR #1): logs; a short "e12v2
+rerun" section in `context/08-experiment-results.md`; an update to the e12v2 lines of
+`docs/spike-outcomes.md`; a plain-language comment on PR #1 answering 1-4 and ending with a
+recommendation: move to MuJoCo or not.

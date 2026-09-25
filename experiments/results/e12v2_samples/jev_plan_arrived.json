@@ -1,11 +1,11 @@
 {
  "arm": "jev",
- "event": "the first plan arrived: mock plan for: plan",
+ "event": "the first plan arrived: Line the numbered blocks up in the tray, lowest number on the left.",
  "request": {
   "state": {
    "event": {
     "kind": "plan arrived",
-    "what_happened": "the first plan arrived: mock plan for: plan"
+    "what_happened": "the first plan arrived: Line the numbered blocks up in the tray, lowest number on the left."
    },
    "task": "Line the numbered blocks up in the tray, lowest number on the left.",
    "robot": {
@@ -24,7 +24,7 @@
     "steps_left_after_current": 5
    },
    "plan": {
-    "reading": "mock plan for: plan",
+    "reading": "Line the numbered blocks up in the tray, lowest number on the left.",
     "steps_to_run": [
      "move_object(block 1 \u2192 tray slot 1 (the leftmost slot))",
      "move_object(block 3 \u2192 tray slot 2)",

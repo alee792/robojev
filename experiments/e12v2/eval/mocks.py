@@ -90,7 +90,9 @@ class MockLLM:
         goal, body = self._goal(req)
         ts = self.world.truth()
         holding = ts.arm.holding
-        plan = O.oracle_plan(goal, ts, holding, reading=f"mock plan for: {req.kind}")
+        said = body.get("user_messages", [])
+        reading = body.get("task", "") + (" As corrected: " + "; ".join(said) if said else "")
+        plan = O.oracle_plan(goal, ts, holding, reading=reading)
         err = self.rng.random() < self.error if attempt == 0 else False
         kind = self.rng.choice(["omit", "swap", "invalid"]) if err else None
         if attempt > 0 and self.rng.random() > self.retry_fixes:

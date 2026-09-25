@@ -252,7 +252,7 @@ def main(argv=None):
     ap.add_argument("--mock-conf-noise", type=float, default=0.1)
     ap.add_argument("--mock-llm-error", type=float, default=0.0)
     ap.add_argument("--noise", action="store_true", help="perception noise (jitter 0.5 cm, 2%% drop-outs)")
-    ap.add_argument("--gate", type=float, default=0.7, help="the stay_local gate (in-plan fix); pass criterion 4 is read here")
+    ap.add_argument("--gate", type=float, default=0.8, help="the stay_local gate (in-plan fix); pass criterion 4 is read here")
     ap.add_argument("--gate-right-now", type=float, default=0.5)
     ap.add_argument("--gate-fast", type=float, default=0.3)
     ap.add_argument("--no-right-now", action="store_true", help="run the jev arm with right-now off")

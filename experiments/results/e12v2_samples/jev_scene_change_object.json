@@ -11,7 +11,7 @@
    "robot": {
     "mode": "running the plan",
     "holding": "nothing",
-    "new_plan_being_worked_out": "no"
+    "new_plan_being_worked_out": "yes"
    },
    "plan_position": {
     "current_step": "move_object(block 3 \u2192 tray slot 2)",

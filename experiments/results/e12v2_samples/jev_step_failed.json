@@ -142,33 +142,33 @@
   "right_now": {
    "choice": "carry_on",
    "probabilities": {
-    "carry_on": 0.972,
-    "hold": 0.009,
-    "pause": 0.009,
-    "re_target": 0.009
+    "carry_on": 0.936,
+    "hold": 0.021,
+    "pause": 0.021,
+    "re_target": 0.021
    },
-   "confidence": 0.963
+   "confidence": 0.915
   },
   "in_plan_fix": {
    "choice": "retry",
    "probabilities": {
-    "none": 0.012,
-    "retry": 0.951,
-    "skip": 0.012,
-    "re_queue": 0.012,
-    "another_step_first": 0.012
+    "none": 0.022,
+    "retry": 0.913,
+    "skip": 0.022,
+    "re_queue": 0.022,
+    "another_step_first": 0.022
    },
-   "confidence": 0.939
+   "confidence": 0.891
   },
   "route": {
-   "choice": "stay_local",
+   "choice": "capable_llm",
    "probabilities": {
-    "stay_local": 0.969,
-    "fast_llm": 0.01,
-    "capable_llm": 0.01,
-    "ask_user": 0.01
+    "stay_local": 0.17,
+    "fast_llm": 0.17,
+    "capable_llm": 0.489,
+    "ask_user": 0.17
    },
-   "confidence": 0.958
+   "confidence": 0.319
   }
  }
 }
