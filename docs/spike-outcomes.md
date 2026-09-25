@@ -40,6 +40,20 @@ What each spike found and what it changed in `docs/v2.md`. Full tables and logs:
   was accurate (35/35) and cheapest (~$0.0003 per replan): the default fast LLM. `gpt-4.1-mini` was the
   only model that prepared variants unprompted, letting Jev keep 18/30 corrections, at 87% accuracy.
 
+- **The v2 loop works closed-loop except after a correction (e12v2).** Live Jev + `gpt-6-luna`, 3
+  seeds: `jev` completed 24/27 core and 9/9 held-out episodes with 0 hand contacts. All three misses
+  are `sort_correction`: after the replan, Jev is shown the original task and the correction
+  separately, can't reconcile them, and keeps routing new plans back to the LLM until the 16-call cap.
+  Keyword rules and always-LLM completed 27/27. The state should carry the task as corrected, and a
+  replan loop needs the loop detector.
+- **Right-now earns its place; the router is the weak group (e12v2).** No hand contacts with
+  right-now; 3/3 without it and with always-LLM. Corrections change behaviour in 0.1-0.2 s vs 7.7 s
+  (always-LLM). Route agrees with the oracle 88% (right-now 92%, in-plan fix 98%); removing the router
+  raised completion to 26/27. Jev beat the keyword rules only on held-out phrasing (0.1 s vs 8.4 s).
+- **Gate 0.8 (e12v2).** 0.7 caught 89% of wrong right-now / fix answers; 0.8 caught 98% for 21%
+  escalation (vs 15%). Prompt caching worked (99% of plan input, 59% of replan input). Replans:
+  3.0 s median, 7.3 s p95.
+
 ## What the E12 update must do to test v2
 
 1. One decision request per event, with the three question groups, for every source (user text,

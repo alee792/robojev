@@ -475,6 +475,131 @@ Jev: 0 errors, p50 84–103 ms throughout.
 - **[measured] Nano models and `gpt-4o-mini` are too inaccurate** (37–80%), and nanos also hand Jev
   wrong branches to pick from (Jev "right" on only 5/7 and 7/11 of the corrections it kept).
 
+## E12 update (e12v2) — the v2 design closed loop, with controls (2026-09-25)
+
+Run from the bay Mac: live Jev (`jev-1.13.0`) and live LLM (`gpt-6-luna`, `--llm-effort low`, $0.10 / $0.50
+per M tokens) on 12 scenarios (9 core, 3 held out) × 7 arms. Runs, all in `experiments/results/`
+(`e12v2_run.txt` has every printed table with its command line; the logs are gzipped, so `gunzip -k` one before `--replay`):
+
+| log | what | status |
+|---|---|---|
+| `e12v2_20260925-082336` | live Jev, mock LLM, seed 12 (the small check) | complete; pre-fix |
+| `e12v2_20260925-082511` | live, 3 seeds, all arms | stopped at the 600-LLM-call cap; `jev`, `rules`, `always_llm`, `oracle` complete; pre-fix |
+| `e12v2_20260925-090525` | live, `--noise`, 1 seed, all arms | complete; pre-fix |
+| `e12v2_20260925-092549` | the three ablations, 3 seeds | stopped by hand when the bug below was found |
+| `e12v2_20260925-093744` | the four Jev arms, 3 seeds, after the fix | complete |
+| `e12v2_20260925-101602` | the four Jev arms, `--noise`, after the fix | complete |
+| `e12v2_combined_3seeds`, `_combined_noise` | post-fix Jev arms + the unaffected `rules` / `always_llm` / `oracle` episodes of the same seeds | **used for every table below** |
+
+Errors: **0** failed Jev requests and **0** failed LLM calls in any run (about 4,400 Jev requests, 2,000
+LLM calls in total). Total spend about **$1.00** (Jev ≈ $0.28, LLM ≈ $0.72).
+
+**Harness bug found and fixed (commit `36bf0f4`).** `core/decision.build_state` added
+`user_said_earlier` only when there was *more than one* user message. With exactly one (e.g.
+`sort_correction`'s "actually, highest on the left"), every later Jev decision saw only the original task
+next to a replanned plan that contradicted it. The planner always got every message; only Jev's view was
+wrong. It affected the `jev` arm and its ablations (`rules`, `always_llm` and `oracle` don't read it); those
+four arms were rerun for 3 seeds and for `--noise`. The fix did **not** change the headline: `jev`
+still fails `sort_correction` (below).
+
+**Pass criteria** (3 seeds, combined log):
+
+| # | criterion | result | verdict |
+|---|---|---|---|
+| 1 | `jev` completes ≥ 90% of core episodes, zero hand contacts | 24/27 (89%), 0 contacts | **FAIL** (all 3 misses are `sort_correction`) |
+| 2 | `jev` beats `rules` on held-out completion or correction time | completion 9/9 vs 9/9; correction → behaviour 0.10 s vs 8.40 s | **PASS** |
+| 3 | `jev` faster than `always_llm` on correction time, without lower completion | 0.20 s vs 7.70 s; but 24/27 vs 27/27 | **FAIL** (completion) |
+| 4 | ≥ 90% of Jev's wrong right-now / in-plan-fix answers caught at gate 0.7 | 42/47 (89%) | **FAIL** (by one answer) |
+| 5 | held-out completion (no threshold) | `jev` 9/9; every arm 9/9 | reported |
+
+With `--noise` (1 seed): 1 fails (8/9, `sort_correction`), 2 passes (held out 3/3 vs rules 2/3; 0.10 s vs
+10.7 s), 3 fails (8/9 vs 9/9), 4 passes (9/10).
+
+**Core scenarios, 3 seeds**
+
+| arm | done | LLM calls | LLM wait s | hold s | contacts | correction → behaviour s (med) | chatter needlessly escalated | Jev p50 / p95 ms | Jev agrees with oracle: right-now / fix / route |
+|---|---|---|---|---|---|---|---|---|---|
+| jev | 24/27 | 96 | 414 | 53 | 0 | **0.20** | 0 | 93 / 168 | 303/331 / 218/223 / 290/331 |
+| rules | **27/27** | 35 | 179 | 42 | 0 | 0.10 | 0 | – | – |
+| always_llm | 27/27 | 93 | 403 | 25 | **3** | 7.70 | 3 | – | – |
+| oracle | 26/27 | 36 | 170 | 50 | 0 | 0.20 | 0 | – | – |
+| jev-no-right-now | 24/27 | 108 | 426 | 0 | **3** | 15.75 (1 missed) | 0 | 96 / 154 | – / 223/230 / 264/312 |
+| jev-no-in-plan-fix | 24/27 | 103 | 373 | 39 | 0 | 0.10 | 0 | 93 / 160 | 307/340 / – / 289/340 |
+| jev-no-router | 26/27 | 78 | 275 | 35 | 0 | 0.10 | 3 | 85 / 138 | 259/282 / 207/212 / – |
+
+Per scenario, `jev` completes 3/3 everywhere except **`sort_correction` 0/3** (48 LLM calls: every episode
+gives up at the 16-call cap). `rules` and `always_llm` complete it 3/3; `jev-no-router` 3/3; `oracle` 2/3
+(one invalid LLM replan).
+
+**Held-out scenarios, 3 seeds** (never tuned on)
+
+| arm | done | correction → behaviour s (med) | LLM calls | notes |
+|---|---|---|---|---|
+| jev | 9/9 | **0.10** | 49 | `tower` used 32 LLM calls over 3 seeds |
+| rules | 9/9 | 8.40 | 18 | missed "Hmm, yellow in the middle please…" (no keyword) and waited for the LLM |
+| always_llm | 9/9 | 6.70 | 61 | `handover` 38 LLM calls |
+| jev-no-right-now | 9/9 | 9.40 | 56 | |
+| jev-no-in-plan-fix / jev-no-router | 9/9 each | 0.10 | 55 / 56 | no-router: `handover` 41 LLM calls |
+
+**Gate sweep** (right-now + in-plan-fix answers, 3 seeds): 706 answers, 47 wrong.
+
+| gate | wrong caught | escalated or fell back | accuracy of acted-on answers |
+|---|---|---|---|
+| 0.5 | 22/47 (47%) | 7.1% | 96.2% |
+| 0.6 | 30/47 (64%) | 10.6% | 97.3% |
+| **0.7** | 42/47 (89%) | 15.4% | 99.2% |
+| **0.8** | **46/47 (98%)** | 20.7% | 99.8% |
+| 0.9 | 47/47 | 32.2% | 100% |
+
+**LLM calls** (all arms, 3 seeds; `gpt-6-luna`, low effort)
+
+| call | n | p50 / p95 / max | input tokens (cached) | output (reasoning) |
+|---|---|---|---|---|
+| plan | 252 | 4.3 / 6.2 / 9.3 s | 2,205 (99% cached) | 409 (31) |
+| replan | 496 | 3.0 / 7.3 / 24.4 s | 2,901 (59%) | 266 (138) |
+| react (`always_llm`) | 111 | 3.4 / 6.6 / 8.9 s | 2,734 (59%) | 233 (130) |
+
+Cost per arm over the 36 episodes: `jev` LLM $0.062 + Jev $0.032; `always_llm` $0.063; `rules` $0.023.
+
+**What went wrong: `sort_correction` (read from the log).** After "actually, highest on the left" the LLM
+replans correctly (a plan reading "highest to lowest… 12, 11, 7, 5, 3, 1"). From then on, Jev's state
+shows `task: "…lowest number on the left"` and, after the fix, `user_said_earlier: ["actually, highest on
+the left"]`. Jev does not reconcile the two: on each new plan its `route` is `stay_local` at 0.29–0.66
+(below the gate, so it escalates), and after finished steps it routes `fast_llm` at 0.76–0.82 (the plan
+"contradicts the task"). Each replan produces another `plan_arrived`, and the loop detector doesn't cover
+replan loops, so the episode hits the 16-LLM-call cap. `jev-no-router` (route = stay local unless there
+is a fix) avoids it and completes 3/3.
+
+**Takeaways**
+- **[measured] Right-now works, and it earns its place.** 0 hand contacts in every Jev arm that has it;
+  `always_llm` and `jev-no-right-now` touched the hand in 3/3 `sort_hand_in_path` runs. Corrections change
+  behaviour in 0.1–0.2 s against 7.7 s (`always_llm`) and 15.8 s (`jev-no-right-now`).
+- **[measured] Jev beats keyword rules only where the phrasing is new.** On the held-out tower ("Hmm,
+  yellow in the middle please, red goes up top.") the rules have no keyword and wait for the LLM: 8.4 s
+  against 0.1 s. On the core scenarios, written against the rules' phrasings, the rules complete 27/27
+  with a third of Jev's LLM calls (35 vs 96).
+- **[measured] The router is the weak group.** Route agreement with the oracle is 290/331 (88%), against
+  303/331 (92%) for right-now and 218/223 (98%) for in-plan fix. All three `jev` failures are route
+  loops, and removing the router (`jev-no-router`) raises completion to 26/27. Its one failure is a
+  `sort_hand_in_path` run, and it escalates chatter needlessly (3 times).
+- **[inferred] The cause is the state, not the gate:** Jev is asked to judge a plan against the
+  original task plus a later correction, a two-step inference (the docs' "indirection"). A single
+  "task as corrected" field (the planner's `reading` already is one) would likely fix it. And a replan
+  loop needs the loop detector.
+- **[measured] The in-plan fix adds little here.** Without it, completion is the same (24/27), with 7% more
+  LLM calls (103 vs 96).
+- **[measured] Set the gate at 0.8, not 0.7.** 0.7 catches 89% of wrong answers (misses criterion 4 by
+  one); 0.8 catches 98% for 5 points more escalation (20.7% vs 15.4%).
+- **[measured] LLM latency matches E13:** replans 3.0 s median, 7.3 s p95, one 24 s outlier. Prompt caching
+  works: 99% of plan input and 59% of replan input tokens were served from the cache.
+- **[measured] With perception noise (1 seed) nothing new broke:** the same `sort_correction` failure,
+  and 0 contacts for `jev`.
+
+**Limits (from the handoff).** The world, skills and person are simulated in text; perception is ground
+truth unless `--noise`. The rules control is fair but written knowing the core phrasings, so criterion 2
+is judged on the held-out scenarios. Seeds vary little without `--noise`. The combined logs mix post-fix
+Jev arms with pre-fix control arms of the same seeds; the controls don't read the fixed field.
+
 ## Getting more out of Jev: recommendations from the TypeSafe docs (inferred, none applied)
 
 Read after E11/E12: the [Jev 1.13 jaggedness page](https://docs.typesafe.ai/model-jaggedness/jev-1.13)
