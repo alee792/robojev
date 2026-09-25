@@ -494,7 +494,7 @@ per M tokens) on 12 scenarios (9 core, 3 held out) × 7 arms. Runs, all in `expe
 Errors: **0** failed Jev requests and **0** failed LLM calls in any run (about 4,400 Jev requests, 2,000
 LLM calls in total). Total spend about **$1.00** (Jev ≈ $0.28, LLM ≈ $0.72).
 
-**Harness bug found and fixed (commit `36bf0f4`).** `core/decision.build_state` added
+**Harness bug found and fixed (commit `7924a29`).** `core/decision.build_state` added
 `user_said_earlier` only when there was *more than one* user message. With exactly one (e.g.
 `sort_correction`'s "actually, highest on the left"), every later Jev decision saw only the original task
 next to a replanned plan that contradicted it. The planner always got every message; only Jev's view was

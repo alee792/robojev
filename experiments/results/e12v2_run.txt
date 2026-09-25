@@ -239,7 +239,7 @@ expected (from the same run with mocks): ~1132 Jev requests (~$0.051), ~288 Open
 E12 update: 3 arms x 12 scenarios x 3 seeds; Jev=jev LLM=openai
   jev-no-right-now     33/36 completed  (581.0 s wall)
 
-# --- harness fix 36bf0f4 (user_said_earlier dropped a single earlier message): the four Jev arms are rerun below; the rows for jev and its ablations above are superseded ---
+# --- harness fix 7924a29 (user_said_earlier dropped a single earlier message): the four Jev arms are rerun below; the rows for jev and its ablations above are superseded ---
 
 $ cd experiments && OPENAI_MODEL=gpt-6-luna uv run --extra llm python e12v2.py --jev jev --llm openai --llm-effort low --arms jev,jev-no-right-now,jev-no-in-plan-fix,jev-no-router --seeds 3 --max-llm-calls 1200 --max-jev-requests 4000 --llm-price-in 0.10 --llm-price-out 0.50
 expected (from the same run with mocks): ~1503 Jev requests (~$0.074), ~366 OpenAI calls; caps: --max-jev-requests 4000, --max-llm-calls 1200
