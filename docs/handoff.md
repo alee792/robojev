@@ -215,3 +215,71 @@ table, with its command line, to `experiments/results/e13_run.txt`.
 3. Add E13 to "What the spikes say" at the end of `docs/v2.md`: does the LLM-prepares-branches,
    Jev-picks design hold, what gate to use, and what to change.
 4. A comment on PR #1 answering questions 1-5 in a few lines each, in plain language.
+
+---
+
+# Handoff 3: run the E12 update (e12v2, the v2 design closed loop)
+
+Paste the block below into a Claude Code session on the bay Mac. It needs `TYPESAFE_API_KEY` and
+`OPENAI_API_KEY`.
+
+---
+
+You are running e12v2 for robojev: a text-only, closed-loop simulation of the v2 design
+(`docs/v2.md`), with controls. Its results decide whether we move on to building the real harness
+in MuJoCo. It is built and tested offline; nothing has been run against the real models.
+
+**Setup**
+1. `git fetch origin claude/first-principles-approach-ow3jo2 && git checkout claude/first-principles-approach-ow3jo2`
+2. Read `docs/v2.md` and `docs/v2-diagrams.md` (the design), `docs/spike-outcomes.md` (what earlier
+   spikes found), and the "E12 update (e12v2)" section of `context/07-experiments-to-run.md` (arms,
+   scenarios, pass criteria).
+3. Confirm `TYPESAFE_API_KEY` and `OPENAI_API_KEY` are set (environment or `.env`). Never print them.
+4. `uv run --frozen pytest -q` at the repo root (expect 250 passed, 3 skipped).
+5. Use `OPENAI_MODEL=gpt-6-luna` with `--llm-effort low` (the cheapest accurate model in E13). Look up
+   its price and pass `--llm-price-in/--llm-price-out`.
+
+**Run, in this order. Stop and report if more than 2% of Jev calls or 5% of LLM calls fail.**
+```
+uv run --frozen python experiments/e12v2.py --dry-run
+uv run --frozen python experiments/e12v2.py --show-rules
+# small live check: live Jev, mock LLM
+uv run --frozen python experiments/e12v2.py --jev jev
+# full run: live Jev and LLM, 3 seeds (about 1,500 Jev requests, ~600 LLM calls)
+cd experiments && OPENAI_MODEL=gpt-6-luna uv run --extra llm python e12v2.py --jev jev --llm openai --llm-effort low --seeds 3 --llm-price-in <in> --llm-price-out <out> && cd ..
+# the same with perception noise, 1 seed
+cd experiments && OPENAI_MODEL=gpt-6-luna uv run --extra llm python e12v2.py --jev jev --llm openai --llm-effort low --noise --llm-price-in <in> --llm-price-out <out> && cd ..
+# offline gate sweep from each run's log (free)
+uv run --frozen python experiments/e12v2.py --replay experiments/results/e12v2_<run>.jsonl
+```
+If the dry run's cost estimate for the full run is over $5, ask the user first. Save every printed
+table, with its command line, to `experiments/results/e12v2_run.txt`.
+
+**Questions to answer, with numbers**
+1. The five pass criteria, as printed. For each FAIL, why (read the log).
+2. Where does `jev` beat `rules`, and where do the rules win? Name the scenarios and events.
+3. Against `always_llm`: correction-to-behaviour time, LLM calls, time the arm spent holding, cost.
+4. What each ablation (`jev-no-right-now`, `jev-no-in-plan-fix`, `jev-no-router`) breaks.
+5. Jev's mistakes by question group, and whether the gate caught them; the gate you would set.
+6. LLM plan and replan latency and tokens, and whether prompt caching happened (cached tokens are
+   logged).
+7. Held-out results, separately.
+
+**Known limits, to keep in mind**
+- The world, skills and person are simulated in text; perception is ground truth unless `--noise`.
+- The rules control is a fair rule set but written knowing the core scenarios' phrasing; criterion 2
+  is therefore judged on the held-out scenarios.
+- Seeds vary little without `--noise`.
+
+**Rules**
+- Do not change the harness, prompts or rules control to improve the numbers. If you find a harness
+  bug, fix it in its own commit, say what it changed, and rerun what it affected.
+- Keep the limits above in the write-up.
+
+**Deliverables**, pushed to `claude/first-principles-approach-ow3jo2` (PR #1):
+1. The run logs in `experiments/results/` (gzip any over 50 MB) and `e12v2_run.txt`.
+2. An "E12 update (e12v2)" section in `context/08-experiment-results.md`: tables, then takeaways
+   with numbers, each marked measured or inferred.
+3. The findings added to `docs/spike-outcomes.md` (not `docs/v2.md`, which holds only durable design).
+4. A comment on PR #1 answering questions 1-7 in plain language, ending with a recommendation:
+   move to MuJoCo or not, and why.

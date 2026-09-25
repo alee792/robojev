@@ -309,3 +309,125 @@ order", "alternating") it accepts every arrangement that fits. Route truth is re
 plan: if the LLM prepared a branch for "leave the blue ones out", then `adjust` is right for it.
 Corrections are independent and each starts from the default branch (open loop: no arm, nothing is
 half-placed). The mocks read the oracle, so mock numbers only check the pipeline and tables.
+
+## E12 update (e12v2) — v2 design closed loop, with controls (not yet run)
+
+**Question.** Does the v2 design (`docs/v2.md`) hold up over whole episodes with a person
+interfering and correcting: one Jev decision per event with three question groups (Spotter: right
+now; Sequencer: in-plan fix; Router: who handles it), code combining them, an LLM replanning with a
+diff while the arm carries on or holds? And does it beat the obvious alternatives: hand-written rules
+in place of Jev, and sending every event to the LLM? This is the "what the E12 update must do" list in
+`docs/spike-outcomes.md`, and its result decides whether we move to MuJoCo.
+
+**Code.** `experiments/e12v2/` (entry `experiments/e12v2.py`), split so the core can be promoted
+into the robot harness:
+- `core/` — design logic only, imports nothing from `sim/` or `eval/` (a test checks): events,
+  the decision request (three groups + one Noul per done condition code can't measure + one plan-check
+  Noul per object the plan never mentions; state = event + literal plan position + nearby objects,
+  with code-computed bands), the combiner (right-now at once with a cautious fallback; in-plan fix only
+  on stay-local above its gate; per-route thresholds on the weakest confidence), the harness loop
+  (event queue, plan runner, plan check alongside step 1, replans superseding each other, carry-on
+  vs hold, loop detector, STOP and typed "stop" in code, safety filter on every command), the plan
+  schema + generic validator + diffs, the planner (strict JSON schema, object ids/places as enums, one
+  shared cacheable instruction prefix), and the World / UserChannel / Skill / PlanFormat / backend
+  interfaces.
+- `sim/` — the text world (E12's frame, hand and noise reused): numbered/coloured blocks, a tray,
+  bins, stacks; motor-only skills `move_object`, `hand_over`, `stack_on`, `push`, `survey`, `hold`;
+  a scripted person (moves blocks, takes one back out, reaches into the path, holds out a hand,
+  types corrections and chatter).
+- `eval/` — scenarios, the oracle (never imported by the system under test; AST test), mocks,
+  controls, metrics, CLI. `backends.py` — live Jev (common.py, no retries) and OpenAI (E13's backend
+  plus `prompt_cache_key`).
+
+**Scenarios.** Core (sorting): static sort; a person slides the block about to be picked; takes a
+placed block back out; a hand reaches into the carry path; "actually, highest on the left" with a
+block in the gripper; chatter; "wait" / "ok go on"; group by colour into bins; "don't touch the green
+block" with the green block slid against the next target. Held out (reported separately, never
+tuned on, phrased differently): a three-block tower with the order changed mid-task ("Hmm, yellow in
+the middle please, red goes up top."); hand block 4 to the person ("hang on a sec" / "right, go
+ahead"); a standing rule (keep the yellow block out of the tray) while the person keeps putting it in.
+
+**Arms** (same scenarios, same seeds): `jev` (the design); `rules` (no Jev: keyword matching for
+wait/go/correction/praise, fixed hand distances, moved target → re-target, taken-back → re-queue,
+anything unmatched → LLM; the full list is in `eval/controls.py`, `--show-rules`); `always_llm`
+(every event except a routine step-finished goes to the LLM, which picks the reaction and replans;
+code still enforces safety); `oracle` (perfect decisions, the ceiling); ablations `jev-no-right-now`,
+`jev-no-in-plan-fix`, `jev-no-router` (route = stay local if there is a fix, else fast LLM).
+
+**Hypothesis.** The right-now group keeps hands clear and makes corrections change behaviour at Jev
+speed (~150-300 ms) rather than LLM speed (seconds); the router keeps chatter, hands and routine
+events off the LLM; the gate catches Jev's wrong answers; and Jev generalises to held-out phrasing
+and tasks where the keyword rules do not.
+
+**Pass criteria** (printed with the results; they decide whether we move to MuJoCo):
+1. `jev` completes ≥ 90% of core episodes with zero hand contacts.
+2. `jev` beats `rules` on completion or correction time on the held-out interference/correction
+   scenarios, whose phrasing the rules were not written against. (The core comparison is printed
+   next to it, for information: the rules were written knowing the core phrasings.)
+3. `jev` is faster than `always_llm` on median correction-to-behaviour time without lower completion.
+4. At the chosen gate (`--gate`, default 0.7), ≥ 90% of Jev's wrong in-plan fixes / right-now answers
+   are caught (fell back or escalated).
+5. Held-out completion reported (no threshold).
+
+**Mock results (pipeline check only; the mocks read the oracle).** All 7 arms complete 12/12 at
+seed 12 and 60/60 over 5 seeds. Criteria 1, 3, 4 pass and criterion 2 fails on core: the rules are
+written against the core phrasings and react in one tick (0.1 s) against Jev's two (0.2 s), and
+both complete everything. On the held-out scenarios the rules miss "Hmm, yellow in the middle please,
+red goes up top." (no keyword): they keep stacking until the LLM answers (3-6 s vs Jev's 0.2 s).
+`always_llm` and `jev-no-right-now` touch the hand in `sort_hand_in_path`; `jev` and `rules` do not.
+Criterion 4 passes by construction in mock (a wrong mock answer gets confidence U[0, 0.7]); only
+the live run says anything about it.
+
+**Run** (repo root; the OpenAI SDK is the `llm` extra of `experiments/pyproject.toml`, so live LLM
+runs go from `experiments/`). No default OpenAI model: set `--llm-model` or `OPENAI_MODEL`
+(suggested: `gpt-6-luna`, low effort, E13's cheapest accurate replanner).
+```
+uv run --frozen python experiments/e12v2.py --dry-run          # samples -> experiments/results/e12v2_samples/, call counts, cost
+uv run --frozen python experiments/e12v2.py                    # offline: every arm x scenario, mock Jev + mock LLM
+uv run --frozen python experiments/e12v2.py --seeds 5 --mock-jev-error 0.15 --mock-llm-error 0.1 --noise
+uv run --frozen python experiments/e12v2.py --jev jev          # live Jev, mock LLM (TYPESAFE_API_KEY)
+cd experiments && OPENAI_MODEL=gpt-6-luna uv run --extra llm python e12v2.py --jev jev --llm openai --llm-effort low \
+    --llm-price-in <$/M> --llm-price-out <$/M>                 # the real run: live Jev + live LLM
+uv run --frozen python experiments/e12v2.py --replay experiments/results/e12v2_<run>.jsonl   # tables + gate sweep, no calls
+uv run --frozen python experiments/e12v2.py --show-rules       # the rules control's rule list
+```
+Live runs log every event, decision request and answers, combine result, LLM call (latency,
+tokens, cached tokens) and applied action to `experiments/results/e12v2_<time>.jsonl`, print the
+expected call counts before starting, and stop cleanly at `--max-jev-requests` (2500) /
+`--max-llm-calls` (600). Jev: 5 s timeout, no retries (a failed request is treated as low confidence
+everywhere). OpenAI: 30 s timeout, no retries, one retry only for an invalid plan.
+
+**Cost** (default live run: 7 arms × 12 scenarios × 1 seed; counts from the mock run of the same
+configuration). Jev: ~500 requests over the four Jev arms (`oracle`, `rules` and `always_llm` make
+none), ~600k input tokens ≈ **$0.025**. LLM: ~200 calls, ~490k input / ~35k visible output
+tokens (reasoning models add hidden output, budget 2-5×); at E13's ~$0.0003 per `gpt-6-luna`
+replan that is roughly $0.05-0.10. `--seeds 5` multiplies both by 5 (Jev still ≈ $0.13).
+
+**Choices where `docs/v2.md` left room** (listed so they can be revisited):
+- *Hold* ends when the new plan arrives, or after 1 s if no replan is pending. *Pause* lasts until a
+  decision says resume; a pause with nothing happening for 5 s becomes a `paused_idle` event (a
+  re-ask, not a heartbeat). *Carry on* while paused means stay paused. The user's answer to an
+  "ask the user" question ends that pause (diagram 2).
+- *Cautious fallback* below the right-now gate: carry on / re-target → hold (pause if a hand is in
+  view), resume → stay as is, back off → pause.
+- *Per-route thresholds*: a low-confidence route moves one rung up (stay local → fast → capable; ask
+  the user → capable). A failed step or an unmet plan with no in-plan fix can't stay local. A plan
+  check that says yes, or is unsure, sends the plan back to the LLM.
+- *Options code has checked*: re-target only with an object not yet grasped; resume only when paused
+  or holding; re-queue only for an object whose step already ran; "another step first" only when one
+  can start; skip only for a failed step or a running step with nothing in the gripper. When only
+  "none" applies, the in-plan-fix question is not asked.
+- *Plans that arrive late*: a replan is checked against the world when it arrives (the arm kept
+  moving); if it no longer fits, the LLM is asked again (at most twice). A step with its object in
+  the gripper is never dropped by a replan. The episode is not done while a replan is pending.
+- *Done conditions* are structured (object, relation in/on/not_in, target) so code measures them;
+  relation "other" goes to Jev as a progress Noul. The controls treat unmeasurable ones as true.
+- *always_llm* skips the plan check (the LLM just wrote the plan) and its first plan is the same as
+  every arm's.
+- `oracle` uses the same planner backend as the other arms (mock or OpenAI), so it isolates decisions.
+
+**Caveats.** Text-only world; skills are scripts with perfect grasps; perception noise is optional
+and mild. The scripted person acts on triggers, so every arm meets the same disturbance at the same
+point of the task. Correction-to-behaviour is the time until the arm stops executing a step that the
+correction made wrong (a hold, a pause, or a step that fits the new task). Mock numbers check the
+pipeline and the tables; they are not evidence about Jev.
