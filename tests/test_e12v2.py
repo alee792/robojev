@@ -535,3 +535,25 @@ def test_live_jev_client_shape_errors_and_budget(monkeypatch):
     assert b["answers"] is None and j.errors == 1                         # -> the combiner's jev_error path
     with pytest.raises(backends.BudgetExceeded):
         j.answer({"s": 1}, {"q": {}})
+
+
+def test_a_single_earlier_correction_reaches_every_later_decision():
+    # With exactly one user message, the state used to drop `user_said_earlier` (a `> 1` check), so
+    # after "actually, highest on the left" Jev saw only the original task and a plan contradicting it.
+    sc = S.make("sort_correction", 12)
+    seen = []
+
+    class Grab(MockJev):
+        def answer(self, state, questions, ref=None):
+            if ref[0].kind != "user_text":
+                seen.append(state)
+            return super().answer(state, questions, ref)
+
+    from e12v2.core.combine import JevDecider
+    ep = Episode(sc.world, sc.person, make_skills(sc.world), JevDecider(Grab(sc, sc.world, 0.0, 0.0)),
+                 PlannerClient({"fast_llm": MockLLM(sc, sc.world)}), HarnessConfig(max_s=200))
+    ep.run(sc.task)
+    assert len(ep.user_messages) == 1
+    after = [s for s in seen if "user_said_earlier" in s]
+    assert after and all(ep.user_messages[0] in s["user_said_earlier"] for s in after)
+    assert "user_said_earlier" not in seen[0]      # nothing said yet at the first plan

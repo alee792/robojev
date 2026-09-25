@@ -208,7 +208,7 @@ def build_state(event, v: View) -> dict:
     if event.kind == "user_text":
         s["event"]["user_just_said"] = event.data.get("text", "")
     s["task"] = v.task
-    if len(v.user_messages) > 1 and event.kind != "user_text":
+    if v.user_messages and event.kind != "user_text":
         s["user_said_earlier"] = v.user_messages[-3:]
     elif event.kind == "user_text" and len(v.user_messages) > 1:
         s["user_said_earlier"] = v.user_messages[-4:-1]
