@@ -1,0 +1,94 @@
+{
+ "request": {
+  "state": {
+   "task": "Put each block in the bin whose sticker matches its colour.",
+   "user_just_said": "other way round: each colour in the other bin",
+   "plan": {
+    "robot_is_doing": "Put each block in the bin whose sticker matches its colour.",
+    "parameters": [
+     {
+      "name": "bin_matching",
+      "controls": "which bin each colour goes in",
+      "current_value": "matching_sticker",
+      "values": {
+       "matching_sticker": "each block in the bin whose sticker is its colour",
+       "other_bin": "each block in the bin whose sticker is NOT its colour"
+      }
+     }
+    ]
+   }
+  },
+  "model": "jev-1.13.0",
+  "questions": {
+   "route": {
+    "type": "choice",
+    "instructions": {
+     "question": "What does the user's latest message (`user_just_said`) need from the robot, which is partway through `task` following `plan`?",
+     "note": "`plan.parameters` lists every setting the robot can change on its own, with the values it has prepared."
+    },
+    "criteria": {
+     "continue": {
+      "what": "Carry on with the plan exactly as it is: the message is praise, chatter, a remark to someone else, or confirms what the robot is already doing.",
+      "not_for": "any request to change where blocks end up, however small",
+      "examples": [
+       "great",
+       "perfect, thanks"
+      ]
+     },
+     "adjust": {
+      "what": "The user wants a different end result that setting one or more of `plan.parameters` to one of its listed values fully expresses.",
+      "not_for": "a change the listed values cannot express, even partly (use new_plan_needed)",
+      "examples": [
+       "asking for another listed value of a setting"
+      ]
+     },
+     "new_plan_needed": {
+      "what": "The user wants a different end result that no combination of the listed parameter values expresses: e.g. leaving some blocks out, a different container for some blocks, a different rule, or a new task.",
+      "not_for": "a change fully covered by the listed parameter values (use adjust)",
+      "examples": [
+       "a request about blocks or places that no parameter mentions"
+      ]
+     },
+     "pause": {
+      "what": "The user asks the robot to wait or hold on for a moment before carrying on.",
+      "not_for": "a request to change the task",
+      "examples": [
+       "one moment"
+      ]
+     }
+    }
+   },
+   "p0.value": {
+    "type": "choice",
+    "instructions": {
+     "question": "After the user's latest message (`user_just_said`), which value should the setting `plan.parameters[0]` (which bin each colour goes in) have?",
+     "if_not_mentioned": "keep its current value, `plan.parameters[0].current_value`"
+    },
+    "criteria": {
+     "matching_sticker": "each block in the bin whose sticker is its colour",
+     "other_bin": "each block in the bin whose sticker is NOT its colour"
+    }
+   },
+   "p0.stated": {
+    "type": "noul",
+    "instructions": "Does the user's latest message (`user_just_said`) ask for, or state, a particular value of `plan.parameters[0]`: which bin each colour goes in?",
+    "criteria": {
+     "true": "The message names or clearly implies a value for this setting, including asking for the opposite, the other one, or a switch.",
+     "false": "The message says nothing about this setting."
+    }
+   }
+  }
+ },
+ "truth": {
+  "route": [
+   "adjust"
+  ],
+  "branch_ok": {
+   "bin_matching=matching_sticker": false,
+   "bin_matching=other_bin": true
+  },
+  "target_key": "bin_matching=other_bin"
+ },
+ "category": "coverable",
+ "note": "plan made by the mock LLM"
+}

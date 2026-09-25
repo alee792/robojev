@@ -1,0 +1,531 @@
+$ uv run --frozen python experiments/e12v2.py --dry-run --llm-price-in 0.10 --llm-price-out 0.50
+dry run: 7 arms x 12 scenarios x 1 seeds, all offline (mock Jev + mock LLM)
+samples: 8 Jev decision requests (paused_idle, plan_arrived, plan_done_unmet, scene_change_hand, scene_change_object, step_done, step_failed, user_text) and 3 LLM requests (plan, react, replan) in /Users/anthonylee/code/robojev/.claude/worktrees/widowx-doom-loop-fc1569/experiments/results/e12v2_samples
+
+per arm (from the mock run; a live run makes about the same calls):
+  jev                  Jev requests   123   LLM calls   26
+  rules                Jev requests     0   LLM calls   16
+  always_llm           Jev requests     0   LLM calls   47
+  oracle               Jev requests   110   LLM calls   16
+  jev-no-right-now     Jev requests   127   LLM calls   30
+  jev-no-in-plan-fix   Jev requests   120   LLM calls   23
+  jev-no-router        Jev requests   133   LLM calls   47
+
+Jev (live arms: jev, jev-no-right-now, jev-no-in-plan-fix, jev-no-router): 503 requests, ~581k input tokens ≈ $0.024 at $0.042/M
+LLM: 205 calls, ~488k input / ~35k visible output tokens (reasoning models add hidden output; budget 2-5x)
+LLM cost at $0.1/M in, $0.5/M out (x3 output for reasoning) ≈ $0.10
+
+$ uv run --frozen python experiments/e12v2.py --show-rules
+The controls: the same harness with Jev replaced. Neither may import the oracle (tests check).
+
+RulesDecider  hand-written reactions, written against the core scenarios the way an engineer would
+              write them, with fixed numbers where Jev gets bands. Rules, in priority order
+              (typed "stop" and the STOP button are code in every arm, before any of this):
+  User text
+   U1  matches WAIT (wait, hold on, hang on, one sec/second/moment, just a sec, pause, freeze)  -> pause, stay local
+   U2  matches GO (go on, carry on, continue, go ahead, resume, keep going, ok go, proceed)     -> resume, stay local
+   U3  matches CHANGE (actually, instead, rather, change, swap, switch, reverse, other way,
+       opposite, wrong, no, not, don't, highest, lowest, biggest, smallest, left, right, first,
+       last, order)                                                                             -> hold, fast LLM
+   U4  matches PRAISE (nice, good, great, thanks, cool, lovely, perfect, well done, awesome)     -> carry on, stay local
+   U5  anything else                                                                            -> carry on, fast LLM
+  Hands (distances from the gripper, cm)
+   H1  hand held out still while the current step is a hand_over                                -> carry on (resume if paused for a hand)
+   H2  hand closer than 10                                                                      -> back off
+   H3  hand closer than 30 and coming closer, or in the arm's path (8 cm corridor)             -> pause
+   H4  no hand, or farther than 30 and not coming closer, while paused for a hand              -> resume
+   H5  otherwise                                                                                -> carry on
+  Objects moved by someone else
+   M1  the current step's object, not yet grasped                                               -> re-target
+   M2  a dont_touch object now within 6 cm of an object a pending step moves                   -> hold, fast LLM
+   M3  a keep_out_of object now in its forbidden place: re-queue its step if it has one,       else fast LLM
+   M4  an object whose step already ran and that is no longer where it put it                  -> re-queue
+   M5  an object with a pending step                                                            -> carry on
+   M6  anything else                                                                            -> carry on, fast LLM
+  Steps
+   S1  step finished                                                                            -> next step
+   S2  failed: nothing grasped / a hand in the way / handover timed out, first two failures     -> retry
+   S3  could not start: place occupied or object covered, and another step can run             -> run it first
+   S4  failed: blocked by a constraint                                                          -> hold, fast LLM
+   S5  any other failure                                                                        -> fast LLM
+  Other
+   P1  a new plan: an object named in the task text (by its name, e.g. "block 4", or colour for
+       an unnumbered block) that the plan never mentions                                        -> fast LLM, else carry on
+   P2  paused with nothing happening: as H4                                                     -> resume or stay
+   P3  every step ran but done conditions are false: re-queue the object's step if it has one,  else fast LLM
+
+AlwaysLLMDecider  no Jev: every event except a routine step-finished goes to the fast LLM, which
+              picks the reaction (right now) and replans; the arm carries on until it answers. Code
+              still enforces safety (stop distance, constraints, STOP).
+
+
+$ uv run --frozen python experiments/e12v2.py --jev jev
+expected (from the same run with mocks): ~503 Jev requests (~$0.024), ~0 OpenAI calls; caps: --max-jev-requests 2500, --max-llm-calls 600
+E12 update: 7 arms x 12 scenarios x 1 seeds; Jev=jev LLM=mock (MOCK LLM: pipeline check, not evidence)
+  jev                  11/12 completed  (17.0 s wall)
+  rules                12/12 completed  (0.1 s wall)
+  always_llm           12/12 completed  (0.1 s wall)
+  oracle               12/12 completed  (0.1 s wall)
+  jev-no-right-now     12/12 completed  (16.3 s wall)
+  jev-no-in-plan-fix   12/12 completed  (16.5 s wall)
+  jev-no-router        12/12 completed  (12.4 s wall)
+
+## E12 update (MOCK LLM): core scenarios
+
+| arm | done | sim s (med) | LLM calls | LLM wait s | hold s | pause s | recovered/dist | contacts | violations | corr→behaviour s (med) | corr missed | wait/go s (med) | chatter spurious | Jev req | Jev p50/p95 ms | agree right-now / fix / route |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| jev | 8/9 | 48.2 | 42 | 110.5 | 59.4 | 7.8 | 4/5 | 0 | 0 | 0.20 (n=1) | 0 | 0.10 | 0 | 116 | 91/146 | 108/116 / 71/73 / 111/116 |
+| rules | 9/9 | 45.9 | 11 | 26.1 | 4.6 | 8.3 | 5/5 | 0 | 0 | 0.10 (n=1) | 0 | 0.10 | 0 | 0 | -/- | - / - / - |
+| always_llm | 9/9 | 47.4 | 26 | 63.6 | 0.0 | 7.2 | 5/5 | 1 | 0 | 2.70 (n=1) | 0 | 3.75 | 1 | 0 | -/- | - / - / - |
+| oracle | 9/9 | 46.5 | 11 | 26.1 | 4.6 | 8.0 | 5/5 | 0 | 0 | 0.20 (n=1) | 0 | 0.20 | 0 | 81 | 150/150 | 81/81 / 69/69 / 81/81 |
+| jev-no-right-now | 9/9 | 45.4 | 32 | 85.1 | 0.0 | 0.0 | 5/5 | 1 | 0 | 2.70 (n=1) | 0 | 0.10 | 0 | 107 | 96/146 | - / 84/86 / 102/108 |
+| jev-no-in-plan-fix | 9/9 | 48.1 | 28 | 75.5 | 19.5 | 6.2 | 5/5 | 0 | 0 | 0.10 (n=1) | 0 | 0.10 | 0 | 120 | 95/160 | 106/120 / - / 116/120 |
+| jev-no-router | 9/9 | 47.3 | 22 | 54.1 | 6.6 | 8.1 | 5/5 | 0 | 0 | 0.20 (n=1) | 0 | 0.15 | 1 | 87 | 93/144 | 83/87 / 71/71 / - |
+
+Completed per scenario (runs completed / runs):
+
+| scenario | jev | rules | always_llm | oracle | jev-no-right-now | jev-no-in-plan-fix | jev-no-router |
+|---|---|---|---|---|---|---|---|
+| sort_static | 1/1 (1 LLM) | 1/1 (1 LLM) | 1/1 (1 LLM) | 1/1 (1 LLM) | 1/1 (1 LLM) | 1/1 (1 LLM) | 1/1 (1 LLM) |
+| sort_moved_target | 1/1 (15 LLM) | 1/1 (1 LLM) | 1/1 (3 LLM) | 1/1 (1 LLM) | 1/1 (10 LLM) | 1/1 (11 LLM) | 1/1 (2 LLM) |
+| sort_take_back | 1/1 (4 LLM) | 1/1 (1 LLM) | 1/1 (2 LLM) | 1/1 (1 LLM) | 1/1 (4 LLM) | 1/1 (5 LLM) | 1/1 (1 LLM) |
+| sort_hand_in_path | 1/1 (1 LLM) | 1/1 (1 LLM) | 1/1 (1 contact, 9 LLM) | 1/1 (1 LLM) | 1/1 (1 contact, 1 LLM) | 1/1 (1 LLM) | 1/1 (7 LLM) |
+| sort_correction | 1/1 (corr 0.2s, 2 LLM) | 1/1 (corr 0.1s, 2 LLM) | 1/1 (corr 2.7s, 2 LLM) | 1/1 (corr 0.2s, 2 LLM) | 1/1 (corr 2.7s, 2 LLM) | 1/1 (corr 0.1s, 2 LLM) | 1/1 (corr 0.2s, 2 LLM) |
+| sort_chatter | 1/1 (1 LLM) | 1/1 (1 LLM) | 1/1 (2 LLM) | 1/1 (1 LLM) | 1/1 (1 LLM) | 1/1 (1 LLM) | 1/1 (2 LLM) |
+| sort_wait_go | 1/1 (1 LLM) | 1/1 (1 LLM) | 1/1 (3 LLM) | 1/1 (1 LLM) | 1/1 (1 LLM) | 1/1 (1 LLM) | 1/1 (3 LLM) |
+| group_colour | 1/1 (1 LLM) | 1/1 (1 LLM) | 1/1 (2 LLM) | 1/1 (1 LLM) | 1/1 (1 LLM) | 1/1 (1 LLM) | 1/1 (2 LLM) |
+| sort_constraint | 0/1 (16 LLM) | 1/1 (2 LLM) | 1/1 (2 LLM) | 1/1 (2 LLM) | 1/1 (11 LLM) | 1/1 (5 LLM) | 1/1 (2 LLM) |
+
+## E12 update (MOCK LLM): HELD-OUT scenarios (reported separately, never tuned on)
+
+| arm | done | sim s (med) | LLM calls | LLM wait s | hold s | pause s | recovered/dist | contacts | violations | corr→behaviour s (med) | corr missed | wait/go s (med) | chatter spurious | Jev req | Jev p50/p95 ms | agree right-now / fix / route |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| jev | 3/3 | 33.4 | 23 | 63.2 | 19.0 | 3.7 | 3/3 | 0 | 0 | 0.20 (n=1) | 0 | 0.15 | 0 | 45 | 94/138 | 46/49 / 21/21 / 48/49 |
+| rules | 3/3 | 30.1 | 5 | 15.2 | 0.0 | 3.0 | 3/3 | 0 | 0 | 6.20 (n=1) | 0 | 0.10 | 0 | 0 | -/- | - / - / - |
+| always_llm | 3/3 | 37.3 | 21 | 58.9 | 0.0 | 0.0 | 3/3 | 0 | 0 | 3.00 (n=1) | 0 | - | 0 | 0 | -/- | - / - / - |
+| oracle | 3/3 | 30.9 | 5 | 15.2 | 6.1 | 3.3 | 3/3 | 0 | 0 | 0.20 (n=1) | 0 | 0.20 | 0 | 29 | 150/150 | 29/29 / 16/16 / 29/29 |
+| jev-no-right-now | 3/3 | 35.2 | 22 | 58.9 | 0.0 | 0.0 | 3/3 | 0 | 0 | 6.20 (n=1) | 0 | - | 0 | 43 | 96/131 | - / 24/24 / 45/47 |
+| jev-no-in-plan-fix | 3/3 | 32.8 | 17 | 46.9 | 8.7 | 3.8 | 3/3 | 0 | 0 | 0.10 (n=1) | 0 | 0.10 | 0 | 37 | 93/128 | 36/38 / - / 37/38 |
+| jev-no-router | 3/3 | 28.3 | 18 | 50.0 | 3.8 | 3.7 | 3/3 | 0 | 0 | 0.20 (n=1) | 0 | 0.15 | 0 | 34 | 92/136 | 32/35 / 16/16 / - |
+
+Completed per scenario (runs completed / runs):
+
+| scenario | jev | rules | always_llm | oracle | jev-no-right-now | jev-no-in-plan-fix | jev-no-router |
+|---|---|---|---|---|---|---|---|
+| tower | 1/1 (corr 0.2s, 5 LLM) | 1/1 (corr 6.2s, 2 LLM) | 1/1 (corr 3.0s, 5 LLM) | 1/1 (corr 0.2s, 2 LLM) | 1/1 (corr 6.2s, 9 LLM) | 1/1 (corr 0.1s, 7 LLM) | 1/1 (corr 0.2s, 3 LLM) |
+| handover | 1/1 (2 LLM) | 1/1 (1 LLM) | 1/1 (13 LLM) | 1/1 (1 LLM) | 1/1 (2 LLM) | 1/1 (1 LLM) | 1/1 (13 LLM) |
+| standing_rule | 1/1 (16 LLM) | 1/1 (2 LLM) | 1/1 (3 LLM) | 1/1 (2 LLM) | 1/1 (11 LLM) | 1/1 (9 LLM) | 1/1 (2 LLM) |
+
+## Gate sweep (right-now + in-plan fix answers; offline, from the answers logged)
+
+| gate | answers | wrong | wrong caught | caught % | escalated/fallback % | accuracy of acted-on answers % |
+|---|---|---|---|---|---|---|
+| 0.3 | 256 | 14 | 1 | 7 | 0.8 | 94.9 |
+| 0.4 | 256 | 14 | 6 | 43 | 9.8 | 96.5 |
+| 0.5 | 256 | 14 | 9 | 64 | 17.2 | 97.6 |
+| 0.6 | 256 | 14 | 10 | 71 | 21.9 | 98.0 |
+| 0.7 | 256 | 14 | 12 | 86 | 25.0 | 99.0 |
+| 0.8 | 256 | 14 | 14 | 100 | 32.0 | 100.0 |
+| 0.9 | 256 | 14 | 14 | 100 | 42.6 | 100.0 |
+
+## Pass criteria (decide whether we move to MuJoCo)
+
+1. `jev` completes >= 90% of core episodes with zero hand contacts: 8/9 completed, 0 contacts -> **FAIL**
+2. `jev` beats `rules` on completion or correction time on the held-out interference/correction scenarios: completion 3/3 vs 3/3; median correction→behaviour 0.20 s vs 6.20 s -> **PASS**
+   (information, not part of the verdict: on the core scenarios, whose phrasing the rules were written against, completion 5/6 vs 6/6; median correction→behaviour 0.20 s vs 0.10 s)
+3. `jev` faster than `always_llm` on median correction→behaviour without lower completion: 0.20 s vs 2.70 s; completion 8/9 vs 9/9 -> **FAIL**
+4. At the chosen gate (0.7), >= 90% of Jev's wrong in-plan fixes / right-now answers are caught: 12/14 (86%) -> **FAIL**
+5. Held-out completion (`jev`, no threshold): 3/3; always_llm 3/3, jev-no-in-plan-fix 3/3, jev-no-right-now 3/3, jev-no-router 3/3, oracle 3/3, rules 3/3
+
+Cost: Jev 589 requests, 871712 input tokens ≈ $0.0366; LLM 283 calls, 696151 input (0 cached) / 39126 output tokens (pass --llm-price-in/--llm-price-out for $)
+
+log: /Users/anthonylee/code/robojev/.claude/worktrees/widowx-doom-loop-fc1569/experiments/results/e12v2_20260925-082336.jsonl
+
+$ cd experiments && OPENAI_MODEL=gpt-6-luna uv run --extra llm python e12v2.py --jev jev --llm openai --llm-effort low --seeds 3 --llm-price-in 0.10 --llm-price-out 0.50
+expected (from the same run with mocks): ~1503 Jev requests (~$0.073), ~608 OpenAI calls; caps: --max-jev-requests 2500, --max-llm-calls 600
+E12 update: 7 arms x 12 scenarios x 3 seeds; Jev=jev LLM=openai
+  jev                  33/36 completed  (690.3 s wall)
+  rules                36/36 completed  (245.4 s wall)
+  always_llm           36/36 completed  (625.7 s wall)
+  oracle               35/36 completed  (222.1 s wall)
+STOPPED: --max-llm-calls 600 reached
+
+$ cd experiments && OPENAI_MODEL=gpt-6-luna uv run --extra llm python e12v2.py --jev jev --llm openai --llm-effort low --noise --llm-price-in 0.10 --llm-price-out 0.50
+expected (from the same run with mocks): ~622 Jev requests (~$0.030), ~276 OpenAI calls; caps: --max-jev-requests 2500, --max-llm-calls 600
+E12 update: 7 arms x 12 scenarios x 1 seeds; Jev=jev LLM=openai
+  jev                  11/12 completed  (165.3 s wall)
+  rules                11/12 completed  (114.8 s wall)
+  always_llm           12/12 completed  (226.3 s wall)
+  oracle               12/12 completed  (67.9 s wall)
+  jev-no-right-now     11/12 completed  (221.1 s wall)
+  jev-no-in-plan-fix   12/12 completed  (165.9 s wall)
+  jev-no-router        11/12 completed  (229.6 s wall)
+
+## E12 update: core scenarios
+
+| arm | done | sim s (med) | LLM calls | LLM wait s | hold s | pause s | recovered/dist | contacts | violations | corr→behaviour s (med) | corr missed | wait/go s (med) | chatter spurious | Jev req | Jev p50/p95 ms | agree right-now / fix / route |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| jev | 9/9 | 48.6 | 34 | 115.4 | 7.1 | 8.2 | 5/5 | 0 | 0 | 0.20 (n=1) | 0 | 0.15 | 0 | 126 | 94/156 | 121/127 / 92/94 / 109/127 |
+| rules | 9/9 | 49.0 | 20 | 78.7 | 15.2 | 8.3 | 5/5 | 0 | 0 | 0.10 (n=1) | 0 | 0.10 | 0 | 0 | -/- | - / - / - |
+| always_llm | 9/9 | 49.5 | 44 | 153.5 | 8.7 | 7.9 | 5/5 | 1 | 0 | 8.00 (n=1) | 0 | 3.55 | 1 | 0 | -/- | - / - / - |
+| oracle | 9/9 | 49.5 | 12 | 50.4 | 14.9 | 8.0 | 5/5 | 0 | 0 | 0.20 (n=1) | 0 | 0.20 | 0 | 106 | 150/150 | 106/106 / 84/84 / 106/106 |
+| jev-no-right-now | 8/9 | 46.9 | 38 | 151.6 | 0.0 | 0.0 | 5/5 | 1 | 0 | 30.90 (n=1) | 0 | 0.10 | 0 | 126 | 94/149 | - / 95/99 / 118/127 |
+| jev-no-in-plan-fix | 9/9 | 47.0 | 30 | 106.2 | 7.9 | 7.7 | 5/5 | 0 | 1 | 0.10 (n=1) | 0 | 0.20 | 0 | 113 | 92/145 | 108/115 / - / 96/115 |
+| jev-no-router | 9/9 | 48.2 | 45 | 137.6 | 5.9 | 8.2 | 5/5 | 0 | 0 | 0.10 (n=1) | 0 | 0.10 | 1 | 125 | 94/141 | 122/126 / 95/96 / - |
+
+Completed per scenario (runs completed / runs):
+
+| scenario | jev | rules | always_llm | oracle | jev-no-right-now | jev-no-in-plan-fix | jev-no-router |
+|---|---|---|---|---|---|---|---|
+| sort_static | 1/1 (4 LLM) | 1/1 (4 LLM) | 1/1 (1 LLM) | 1/1 (1 LLM) | 1/1 (2 LLM) | 1/1 (1 LLM) | 1/1 (3 LLM) |
+| sort_moved_target | 1/1 (1 LLM) | 1/1 (2 LLM) | 1/1 (4 LLM) | 1/1 (1 LLM) | 1/1 (5 LLM) | 1/1 (1 LLM) | 1/1 (3 LLM) |
+| sort_take_back | 1/1 (2 LLM) | 1/1 (1 LLM) | 1/1 (2 LLM) | 1/1 (1 LLM) | 1/1 (3 LLM) | 1/1 (2 LLM) | 1/1 (6 LLM) |
+| sort_hand_in_path | 1/1 (4 LLM) | 1/1 (1 LLM) | 1/1 (1 contact, 13 LLM) | 1/1 (1 LLM) | 1/1 (1 contact, 1 LLM) | 1/1 (3 LLM) | 1/1 (5 LLM) |
+| sort_correction | 1/1 (corr 0.2s, 14 LLM) | 1/1 (corr 0.1s, 2 LLM) | 1/1 (corr 8.0s, 5 LLM) | 1/1 (corr 0.2s, 2 LLM) | 0/1 (corr 30.9s, 16 LLM) | 1/1 (corr 0.1s, 16 LLM) | 1/1 (corr 0.1s, 8 LLM) |
+| sort_chatter | 1/1 (1 LLM) | 1/1 (1 LLM) | 1/1 (4 LLM) | 1/1 (1 LLM) | 1/1 (1 LLM) | 1/1 (1 LLM) | 1/1 (2 LLM) |
+| sort_wait_go | 1/1 (3 LLM) | 1/1 (1 LLM) | 1/1 (7 LLM) | 1/1 (1 LLM) | 1/1 (1 LLM) | 1/1 (1 LLM) | 1/1 (10 LLM) |
+| group_colour | 1/1 (1 LLM) | 1/1 (2 LLM) | 1/1 (2 LLM) | 1/1 (1 LLM) | 1/1 (1 LLM) | 1/1 (1 LLM) | 1/1 (4 LLM) |
+| sort_constraint | 1/1 (4 LLM) | 1/1 (6 LLM) | 1/1 (6 LLM) | 1/1 (3 LLM) | 1/1 (8 LLM) | 1/1 (4 LLM) | 1/1 (4 LLM) |
+
+## E12 update: HELD-OUT scenarios (reported separately, never tuned on)
+
+| arm | done | sim s (med) | LLM calls | LLM wait s | hold s | pause s | recovered/dist | contacts | violations | corr→behaviour s (med) | corr missed | wait/go s (med) | chatter spurious | Jev req | Jev p50/p95 ms | agree right-now / fix / route |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| jev | 2/3 | 23.6 | 10 | 32.5 | 11.2 | 4.7 | 1/2 | 0 | 0 | 0.10 (n=1) | 0 | 0.10 | 0 | 34 | 98/186 | 31/35 / 17/17 / 35/35 |
+| rules | 2/3 | 20.6 | 10 | 35.8 | 0.0 | 3.0 | 2/3 | 0 | 0 | 10.70 (n=1) | 0 | 0.10 | 0 | 0 | -/- | - / - / - |
+| always_llm | 3/3 | 34.1 | 24 | 72.3 | 0.0 | 0.0 | 2/2 | 0 | 0 | 6.30 (n=1) | 0 | - | 0 | 0 | -/- | - / - / - |
+| oracle | 3/3 | 28.3 | 5 | 17.1 | 4.3 | 3.3 | 2/2 | 0 | 0 | 0.20 (n=1) | 0 | 0.20 | 0 | 33 | 150/150 | 33/33 / 18/18 / 33/33 |
+| jev-no-right-now | 3/3 | 34.9 | 15 | 52.4 | 0.0 | 0.0 | 2/2 | 0 | 0 | 12.60 (n=1) | 0 | - | 0 | 38 | 84/146 | - / 20/22 / 35/40 |
+| jev-no-in-plan-fix | 3/3 | 31.4 | 15 | 43.9 | 9.3 | 3.8 | 3/3 | 0 | 0 | 0.10 (n=1) | 0 | 0.10 | 0 | 37 | 92/134 | 36/38 / - / 30/38 |
+| jev-no-router | 2/3 | 35.4 | 27 | 74.4 | 12.8 | 3.6 | 2/2 | 0 | 0 | 0.10 (n=1) | 0 | 0.15 | 0 | 42 | 93/182 | 39/42 / 20/20 / - |
+
+Completed per scenario (runs completed / runs):
+
+| scenario | jev | rules | always_llm | oracle | jev-no-right-now | jev-no-in-plan-fix | jev-no-router |
+|---|---|---|---|---|---|---|---|
+| tower | 0/1 (corr 0.1s, 4 LLM) | 0/1 (corr 10.7s, 6 LLM) | 1/1 (corr 6.3s, 7 LLM) | 1/1 (corr 0.2s, 2 LLM) | 1/1 (corr 12.6s, 9 LLM) | 1/1 (corr 0.1s, 10 LLM) | 1/1 (corr 0.1s, 9 LLM) |
+| handover | 1/1 (2 LLM) | 1/1 (1 LLM) | 1/1 (14 LLM) | 1/1 (1 LLM) | 1/1 (3 LLM) | 1/1 (1 LLM) | 0/1 (16 LLM) |
+| standing_rule | 1/1 (4 LLM) | 1/1 (3 LLM) | 1/1 (3 LLM) | 1/1 (2 LLM) | 1/1 (3 LLM) | 1/1 (4 LLM) | 1/1 (2 LLM) |
+
+## Gate sweep (right-now + in-plan fix answers; offline, from the answers logged)
+
+| gate | answers | wrong | wrong caught | caught % | escalated/fallback % | accuracy of acted-on answers % |
+|---|---|---|---|---|---|---|
+| 0.3 | 268 | 13 | 0 | 0 | 0.4 | 95.1 |
+| 0.4 | 268 | 13 | 7 | 54 | 4.1 | 97.7 |
+| 0.5 | 268 | 13 | 8 | 62 | 6.0 | 98.0 |
+| 0.6 | 268 | 13 | 9 | 69 | 9.3 | 98.4 |
+| 0.7 | 268 | 13 | 11 | 85 | 14.9 | 99.1 |
+| 0.8 | 268 | 13 | 12 | 92 | 22.4 | 99.5 |
+| 0.9 | 268 | 13 | 13 | 100 | 30.6 | 100.0 |
+
+## Pass criteria (decide whether we move to MuJoCo)
+
+1. `jev` completes >= 90% of core episodes with zero hand contacts: 9/9 completed, 0 contacts -> **PASS**
+2. `jev` beats `rules` on completion or correction time on the held-out interference/correction scenarios: completion 2/3 vs 2/3; median correction→behaviour 0.10 s vs 10.70 s -> **PASS**
+   (information, not part of the verdict: on the core scenarios, whose phrasing the rules were written against, completion 6/6 vs 6/6; median correction→behaviour 0.20 s vs 0.10 s)
+3. `jev` faster than `always_llm` on median correction→behaviour without lower completion: 0.20 s vs 8.00 s; completion 9/9 vs 9/9 -> **PASS**
+4. At the chosen gate (0.7), >= 90% of Jev's wrong in-plan fixes / right-now answers are caught: 11/13 (85%) -> **FAIL**
+5. Held-out completion (`jev`, no threshold): 2/3; always_llm 3/3, jev-no-in-plan-fix 3/3, jev-no-right-now 3/3, jev-no-router 2/3, oracle 3/3, rules 2/3
+
+Cost: Jev 641 requests, 951810 input tokens ≈ $0.0400; LLM 329 calls, 890429 input (597533 cached) / 93077 output tokens ≈ $0.136
+
+log: /Users/anthonylee/code/robojev/.claude/worktrees/widowx-doom-loop-fc1569/experiments/results/e12v2_20260925-090525.jsonl
+
+# The --seeds 3 run above stopped at the 600-LLM-call cap (log e12v2_20260925-082511.jsonl) after finishing jev, rules, always_llm and oracle for all 3 seeds and 10/12 scenarios of jev-no-right-now; the ablations are rerun here on their own.
+
+$ cd experiments && OPENAI_MODEL=gpt-6-luna uv run --extra llm python e12v2.py --jev jev --llm openai --llm-effort low --seeds 3 --arms jev-no-right-now,jev-no-in-plan-fix,jev-no-router --llm-price-in 0.10 --llm-price-out 0.50
+expected (from the same run with mocks): ~1132 Jev requests (~$0.051), ~288 OpenAI calls; caps: --max-jev-requests 2500, --max-llm-calls 600
+E12 update: 3 arms x 12 scenarios x 3 seeds; Jev=jev LLM=openai
+  jev-no-right-now     33/36 completed  (581.0 s wall)
+
+# --- harness fix 7924a29 (user_said_earlier dropped a single earlier message): the four Jev arms are rerun below; the rows for jev and its ablations above are superseded ---
+
+$ cd experiments && OPENAI_MODEL=gpt-6-luna uv run --extra llm python e12v2.py --jev jev --llm openai --llm-effort low --arms jev,jev-no-right-now,jev-no-in-plan-fix,jev-no-router --seeds 3 --max-llm-calls 1200 --max-jev-requests 4000 --llm-price-in 0.10 --llm-price-out 0.50
+expected (from the same run with mocks): ~1503 Jev requests (~$0.074), ~366 OpenAI calls; caps: --max-jev-requests 4000, --max-llm-calls 1200
+E12 update: 4 arms x 12 scenarios x 3 seeds; Jev=jev LLM=openai
+  jev                  33/36 completed  (610.0 s wall)
+  jev-no-right-now     33/36 completed  (639.1 s wall)
+  jev-no-in-plan-fix   33/36 completed  (583.7 s wall)
+  jev-no-router        35/36 completed  (464.1 s wall)
+
+## E12 update: core scenarios
+
+| arm | done | sim s (med) | LLM calls | LLM wait s | hold s | pause s | recovered/dist | contacts | violations | corr→behaviour s (med) | corr missed | wait/go s (med) | chatter spurious | Jev req | Jev p50/p95 ms | agree right-now / fix / route |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| jev | 24/27 | 47.3 | 96 | 413.8 | 53.4 | 20.7 | 15/15 | 0 | 0 | 0.20 (n=3) | 0 | 0.10 | 0 | 331 | 93/168 | 303/331 / 218/223 / 290/331 |
+| jev-no-right-now | 24/27 | 46.6 | 108 | 426.0 | 0.0 | 0.0 | 15/15 | 3 | 0 | 15.75 (n=2) | 1 | 0.10 | 0 | 312 | 96/154 | - / 223/230 / 264/312 |
+| jev-no-in-plan-fix | 24/27 | 46.3 | 103 | 373.4 | 38.7 | 20.6 | 15/15 | 0 | 0 | 0.10 (n=3) | 0 | 0.10 | 0 | 340 | 93/160 | 307/340 / - / 289/340 |
+| jev-no-router | 26/27 | 46.5 | 78 | 275.1 | 34.8 | 31.1 | 14/15 | 0 | 0 | 0.10 (n=3) | 0 | 0.10 | 3 | 282 | 85/138 | 259/282 / 207/212 / - |
+
+Completed per scenario (runs completed / runs):
+
+| scenario | jev | jev-no-right-now | jev-no-in-plan-fix | jev-no-router |
+|---|---|---|---|---|
+| sort_static | 3/3 (4 LLM) | 3/3 (3 LLM) | 3/3 (12 LLM) | 3/3 (3 LLM) |
+| sort_moved_target | 3/3 (13 LLM) | 3/3 (11 LLM) | 3/3 (7 LLM) | 3/3 (6 LLM) |
+| sort_take_back | 3/3 (9 LLM) | 3/3 (9 LLM) | 3/3 (6 LLM) | 3/3 (3 LLM) |
+| sort_hand_in_path | 3/3 (3 LLM) | 3/3 (3 contact, 13 LLM) | 3/3 (3 LLM) | 2/3 (30 LLM) |
+| sort_correction | 0/3 (corr 0.2s, 48 LLM) | 0/3 (corr 15.8s, 48 LLM) | 0/3 (corr 0.1s, 48 LLM) | 3/3 (corr 0.1s, 7 LLM) |
+| sort_chatter | 3/3 (3 LLM) | 3/3 (3 LLM) | 3/3 (3 LLM) | 3/3 (6 LLM) |
+| sort_wait_go | 3/3 (3 LLM) | 3/3 (9 LLM) | 3/3 (3 LLM) | 3/3 (10 LLM) |
+| group_colour | 3/3 (3 LLM) | 3/3 (3 LLM) | 3/3 (3 LLM) | 3/3 (6 LLM) |
+| sort_constraint | 3/3 (10 LLM) | 3/3 (9 LLM) | 3/3 (18 LLM) | 3/3 (7 LLM) |
+
+## E12 update: HELD-OUT scenarios (reported separately, never tuned on)
+
+| arm | done | sim s (med) | LLM calls | LLM wait s | hold s | pause s | recovered/dist | contacts | violations | corr→behaviour s (med) | corr missed | wait/go s (med) | chatter spurious | Jev req | Jev p50/p95 ms | agree right-now / fix / route |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| jev | 9/9 | 31.4 | 49 | 148.6 | 27.5 | 11.5 | 8/8 | 0 | 0 | 0.10 (n=3) | 0 | 0.15 | 0 | 110 | 90/161 | 106/116 / 54/54 / 105/116 |
+| jev-no-right-now | 9/9 | 35.1 | 56 | 166.2 | 0.0 | 0.0 | 8/8 | 0 | 0 | 9.40 (n=3) | 0 | - | 0 | 116 | 98/165 | - / 63/63 / 109/122 |
+| jev-no-in-plan-fix | 9/9 | 30.3 | 55 | 163.2 | 17.5 | 11.7 | 9/9 | 0 | 0 | 0.10 (n=3) | 0 | 0.10 | 0 | 110 | 87/124 | 108/113 / - / 98/113 |
+| jev-no-router | 9/9 | 27.4 | 56 | 150.2 | 15.6 | 10.1 | 8/8 | 0 | 0 | 0.10 (n=3) | 0 | 0.10 | 0 | 101 | 97/149 | 95/104 / 49/49 / - |
+
+Completed per scenario (runs completed / runs):
+
+| scenario | jev | jev-no-right-now | jev-no-in-plan-fix | jev-no-router |
+|---|---|---|---|---|
+| tower | 3/3 (corr 0.1s, 32 LLM) | 3/3 (corr 9.4s, 36 LLM) | 3/3 (corr 0.1s, 32 LLM) | 3/3 (corr 0.1s, 9 LLM) |
+| handover | 3/3 (6 LLM) | 3/3 (7 LLM) | 3/3 (3 LLM) | 3/3 (41 LLM) |
+| standing_rule | 3/3 (11 LLM) | 3/3 (13 LLM) | 3/3 (20 LLM) | 3/3 (6 LLM) |
+
+## Gate sweep (right-now + in-plan fix answers; offline, from the answers logged)
+
+| gate | answers | wrong | wrong caught | caught % | escalated/fallback % | accuracy of acted-on answers % |
+|---|---|---|---|---|---|---|
+| 0.3 | 706 | 47 | 5 | 11 | 1.3 | 94.0 |
+| 0.4 | 706 | 47 | 16 | 34 | 3.7 | 95.4 |
+| 0.5 | 706 | 47 | 22 | 47 | 7.1 | 96.2 |
+| 0.6 | 706 | 47 | 30 | 64 | 10.6 | 97.3 |
+| 0.7 | 706 | 47 | 42 | 89 | 15.4 | 99.2 |
+| 0.8 | 706 | 47 | 46 | 98 | 20.7 | 99.8 |
+| 0.9 | 706 | 47 | 47 | 100 | 32.2 | 100.0 |
+
+## Pass criteria (decide whether we move to MuJoCo)
+
+1. `jev` completes >= 90% of core episodes with zero hand contacts: 24/27 completed, 0 contacts -> **FAIL**
+2. (no `rules` arm in this run)
+3. (no `always_llm` arm in this run)
+4. At the chosen gate (0.7), >= 90% of Jev's wrong in-plan fixes / right-now answers are caught: 42/47 (89%) -> **FAIL**
+5. Held-out completion (`jev`, no threshold): 9/9; jev-no-in-plan-fix 9/9, jev-no-right-now 9/9, jev-no-router 9/9
+
+Cost: Jev 1702 requests, 2551185 input tokens ≈ $0.1071; LLM 601 calls, 1646439 input (1113124 cached) / 172804 output tokens ≈ $0.251
+
+log: /Users/anthonylee/code/robojev/.claude/worktrees/widowx-doom-loop-fc1569/experiments/results/e12v2_20260925-093744.jsonl
+
+$ cd experiments && OPENAI_MODEL=gpt-6-luna uv run --extra llm python e12v2.py --jev jev --llm openai --llm-effort low --arms jev,jev-no-right-now,jev-no-in-plan-fix,jev-no-router --noise --llm-price-in 0.10 --llm-price-out 0.50
+expected (from the same run with mocks): ~622 Jev requests (~$0.030), ~161 OpenAI calls; caps: --max-jev-requests 2500, --max-llm-calls 600
+E12 update: 4 arms x 12 scenarios x 1 seeds; Jev=jev LLM=openai
+  jev                  11/12 completed  (212.8 s wall)
+  jev-no-right-now     11/12 completed  (233.0 s wall)
+  jev-no-in-plan-fix   11/12 completed  (216.9 s wall)
+  jev-no-router        12/12 completed  (183.3 s wall)
+
+## E12 update: core scenarios
+
+| arm | done | sim s (med) | LLM calls | LLM wait s | hold s | pause s | recovered/dist | contacts | violations | corr→behaviour s (med) | corr missed | wait/go s (med) | chatter spurious | Jev req | Jev p50/p95 ms | agree right-now / fix / route |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| jev | 8/9 | 47.2 | 50 | 152.9 | 7.1 | 7.9 | 5/5 | 0 | 0 | 0.10 (n=1) | 0 | 0.15 | 0 | 121 | 89/150 | 115/120 / 85/86 / 92/120 |
+| jev-no-right-now | 8/9 | 47.7 | 31 | 151.7 | 0.0 | 0.0 | 5/5 | 1 | 0 | 31.00 (n=1) | 0 | 0.10 | 0 | 120 | 86/153 | - / 95/98 / 108/120 |
+| jev-no-in-plan-fix | 8/9 | 48.8 | 38 | 156.7 | 30.8 | 8.2 | 5/5 | 0 | 0 | 0.10 (n=1) | 0 | 0.10 | 0 | 110 | 87/176 | 108/110 / - / 99/110 |
+| jev-no-router | 9/9 | 46.7 | 35 | 110.2 | 7.4 | 7.9 | 5/5 | 0 | 0 | 0.10 (n=1) | 0 | 0.10 | 1 | 110 | 89/145 | 104/110 / 80/81 / - |
+
+Completed per scenario (runs completed / runs):
+
+| scenario | jev | jev-no-right-now | jev-no-in-plan-fix | jev-no-router |
+|---|---|---|---|---|
+| sort_static | 1/1 (1 LLM) | 1/1 (1 LLM) | 1/1 (1 LLM) | 1/1 (1 LLM) |
+| sort_moved_target | 1/1 (2 LLM) | 1/1 (4 LLM) | 1/1 (8 LLM) | 1/1 (2 LLM) |
+| sort_take_back | 1/1 (10 LLM) | 1/1 (4 LLM) | 1/1 (2 LLM) | 1/1 (2 LLM) |
+| sort_hand_in_path | 1/1 (1 LLM) | 1/1 (1 contact, 1 LLM) | 1/1 (1 LLM) | 1/1 (9 LLM) |
+| sort_correction | 0/1 (corr 0.1s, 16 LLM) | 0/1 (corr 31.0s, 16 LLM) | 0/1 (corr 0.1s, 16 LLM) | 1/1 (corr 0.1s, 4 LLM) |
+| sort_chatter | 1/1 (1 LLM) | 1/1 (1 LLM) | 1/1 (1 LLM) | 1/1 (5 LLM) |
+| sort_wait_go | 1/1 (14 LLM) | 1/1 (1 LLM) | 1/1 (1 LLM) | 1/1 (4 LLM) |
+| group_colour | 1/1 (1 LLM) | 1/1 (1 LLM) | 1/1 (1 LLM) | 1/1 (4 LLM) |
+| sort_constraint | 1/1 (4 LLM) | 1/1 (2 LLM) | 1/1 (7 LLM) | 1/1 (4 LLM) |
+
+## E12 update: HELD-OUT scenarios (reported separately, never tuned on)
+
+| arm | done | sim s (med) | LLM calls | LLM wait s | hold s | pause s | recovered/dist | contacts | violations | corr→behaviour s (med) | corr missed | wait/go s (med) | chatter spurious | Jev req | Jev p50/p95 ms | agree right-now / fix / route |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| jev | 3/3 | 27.9 | 13 | 38.9 | 4.1 | 3.9 | 2/2 | 0 | 0 | 0.10 (n=1) | 0 | 0.10 | 0 | 37 | 87/127 | 36/39 / 18/18 / 36/39 |
+| jev-no-right-now | 3/3 | 36.1 | 22 | 64.6 | 0.0 | 0.0 | 3/3 | 0 | 0 | 9.80 (n=1) | 0 | - | 0 | 46 | 86/150 | - / 24/25 / 45/48 |
+| jev-no-in-plan-fix | 3/3 | 33.5 | 16 | 44.7 | 10.5 | 3.3 | 3/3 | 0 | 0 | 0.10 (n=1) | 0 | 0.15 | 0 | 39 | 87/141 | 37/40 / - / 36/40 |
+| jev-no-router | 3/3 | 27.5 | 23 | 57.8 | 4.5 | 5.0 | 2/2 | 0 | 0 | 0.10 (n=1) | 0 | 0.15 | 0 | 38 | 96/135 | 36/39 / 19/19 / - |
+
+Completed per scenario (runs completed / runs):
+
+| scenario | jev | jev-no-right-now | jev-no-in-plan-fix | jev-no-router |
+|---|---|---|---|---|
+| tower | 1/1 (corr 0.1s, 9 LLM) | 1/1 (corr 9.8s, 12 LLM) | 1/1 (corr 0.1s, 12 LLM) | 1/1 (corr 0.1s, 3 LLM) |
+| handover | 1/1 (2 LLM) | 1/1 (3 LLM) | 1/1 (1 LLM) | 1/1 (14 LLM) |
+| standing_rule | 1/1 (2 LLM) | 1/1 (7 LLM) | 1/1 (3 LLM) | 1/1 (6 LLM) |
+
+## Gate sweep (right-now + in-plan fix answers; offline, from the answers logged)
+
+| gate | answers | wrong | wrong caught | caught % | escalated/fallback % | accuracy of acted-on answers % |
+|---|---|---|---|---|---|---|
+| 0.3 | 250 | 10 | 1 | 10 | 0.8 | 96.4 |
+| 0.4 | 250 | 10 | 3 | 30 | 1.6 | 97.2 |
+| 0.5 | 250 | 10 | 6 | 60 | 4.8 | 98.3 |
+| 0.6 | 250 | 10 | 6 | 60 | 7.6 | 98.3 |
+| 0.7 | 250 | 10 | 9 | 90 | 12.8 | 99.5 |
+| 0.8 | 250 | 10 | 9 | 90 | 21.6 | 99.5 |
+| 0.9 | 250 | 10 | 10 | 100 | 35.6 | 100.0 |
+
+## Pass criteria (decide whether we move to MuJoCo)
+
+1. `jev` completes >= 90% of core episodes with zero hand contacts: 8/9 completed, 0 contacts -> **FAIL**
+2. (no `rules` arm in this run)
+3. (no `always_llm` arm in this run)
+4. At the chosen gate (0.7), >= 90% of Jev's wrong in-plan fixes / right-now answers are caught: 9/10 (90%) -> **PASS**
+5. Held-out completion (`jev`, no threshold): 3/3; jev-no-in-plan-fix 3/3, jev-no-right-now 3/3, jev-no-router 3/3
+
+Cost: Jev 621 requests, 928006 input tokens ≈ $0.0390; LLM 228 calls, 635228 input (409737 cached) / 67798 output tokens ≈ $0.097
+
+log: /Users/anthonylee/code/robojev/.claude/worktrees/widowx-doom-loop-fc1569/experiments/results/e12v2_20260925-101602.jsonl
+
+# Combined logs for the verdict: the four Jev arms after the fix + rules/always_llm/oracle (unaffected) from the pre-fix runs of the same seeds.
+
+$ uv run --frozen python experiments/e12v2.py --replay experiments/results/e12v2_combined_3seeds.jsonl
+
+## replay e12v2_combined_3seeds.jsonl: core scenarios
+
+| arm | done | sim s (med) | LLM calls | LLM wait s | hold s | pause s | recovered/dist | contacts | violations | corr→behaviour s (med) | corr missed | wait/go s (med) | chatter spurious | Jev req | Jev p50/p95 ms | agree right-now / fix / route |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| jev | 24/27 | 47.3 | 96 | 413.8 | 53.4 | 20.7 | 15/15 | 0 | 0 | 0.20 (n=3) | 0 | 0.10 | 0 | 331 | 93/168 | 303/331 / 218/223 / 290/331 |
+| rules | 27/27 | 47.6 | 35 | 179.2 | 41.5 | 24.9 | 15/15 | 0 | 0 | 0.10 (n=3) | 0 | 0.10 | 0 | 0 | -/- | - / - / - |
+| always_llm | 27/27 | 47.2 | 93 | 403.4 | 24.6 | 8.6 | 15/15 | 3 | 0 | 7.70 (n=3) | 0 | 2.80 | 3 | 0 | -/- | - / - / - |
+| oracle | 26/27 | 47.9 | 36 | 169.9 | 49.6 | 24.0 | 15/15 | 0 | 0 | 0.20 (n=3) | 0 | 0.20 | 0 | 246 | 150/150 | 246/246 / 209/209 / 246/246 |
+| jev-no-right-now | 24/27 | 46.6 | 108 | 426.0 | 0.0 | 0.0 | 15/15 | 3 | 0 | 15.75 (n=2) | 1 | 0.10 | 0 | 312 | 96/154 | - / 223/230 / 264/312 |
+| jev-no-in-plan-fix | 24/27 | 46.3 | 103 | 373.4 | 38.7 | 20.6 | 15/15 | 0 | 0 | 0.10 (n=3) | 0 | 0.10 | 0 | 340 | 93/160 | 307/340 / - / 289/340 |
+| jev-no-router | 26/27 | 46.5 | 78 | 275.1 | 34.8 | 31.1 | 14/15 | 0 | 0 | 0.10 (n=3) | 0 | 0.10 | 3 | 282 | 85/138 | 259/282 / 207/212 / - |
+
+Completed per scenario (runs completed / runs):
+
+| scenario | jev | rules | always_llm | oracle | jev-no-right-now | jev-no-in-plan-fix | jev-no-router |
+|---|---|---|---|---|---|---|---|
+| sort_static | 3/3 (4 LLM) | 3/3 (3 LLM) | 3/3 (3 LLM) | 3/3 (3 LLM) | 3/3 (3 LLM) | 3/3 (12 LLM) | 3/3 (3 LLM) |
+| sort_moved_target | 3/3 (13 LLM) | 3/3 (3 LLM) | 3/3 (9 LLM) | 3/3 (3 LLM) | 3/3 (11 LLM) | 3/3 (7 LLM) | 3/3 (6 LLM) |
+| sort_take_back | 3/3 (9 LLM) | 3/3 (3 LLM) | 3/3 (6 LLM) | 3/3 (3 LLM) | 3/3 (9 LLM) | 3/3 (6 LLM) | 3/3 (3 LLM) |
+| sort_hand_in_path | 3/3 (3 LLM) | 3/3 (3 LLM) | 3/3 (3 contact, 36 LLM) | 3/3 (3 LLM) | 3/3 (3 contact, 13 LLM) | 3/3 (3 LLM) | 2/3 (30 LLM) |
+| sort_correction | 0/3 (corr 0.2s, 48 LLM) | 3/3 (corr 0.1s, 6 LLM) | 3/3 (corr 7.7s, 9 LLM) | 2/3 (corr 0.2s, 7 LLM) | 0/3 (corr 15.8s, 48 LLM) | 0/3 (corr 0.1s, 48 LLM) | 3/3 (corr 0.1s, 7 LLM) |
+| sort_chatter | 3/3 (3 LLM) | 3/3 (3 LLM) | 3/3 (6 LLM) | 3/3 (3 LLM) | 3/3 (3 LLM) | 3/3 (3 LLM) | 3/3 (6 LLM) |
+| sort_wait_go | 3/3 (3 LLM) | 3/3 (3 LLM) | 3/3 (9 LLM) | 3/3 (3 LLM) | 3/3 (9 LLM) | 3/3 (3 LLM) | 3/3 (10 LLM) |
+| group_colour | 3/3 (3 LLM) | 3/3 (3 LLM) | 3/3 (6 LLM) | 3/3 (3 LLM) | 3/3 (3 LLM) | 3/3 (3 LLM) | 3/3 (6 LLM) |
+| sort_constraint | 3/3 (10 LLM) | 3/3 (8 LLM) | 3/3 (9 LLM) | 3/3 (8 LLM) | 3/3 (9 LLM) | 3/3 (18 LLM) | 3/3 (7 LLM) |
+
+## replay e12v2_combined_3seeds.jsonl: HELD-OUT scenarios (reported separately, never tuned on)
+
+| arm | done | sim s (med) | LLM calls | LLM wait s | hold s | pause s | recovered/dist | contacts | violations | corr→behaviour s (med) | corr missed | wait/go s (med) | chatter spurious | Jev req | Jev p50/p95 ms | agree right-now / fix / route |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| jev | 9/9 | 31.4 | 49 | 148.6 | 27.5 | 11.5 | 8/8 | 0 | 0 | 0.10 (n=3) | 0 | 0.15 | 0 | 110 | 90/161 | 106/116 / 54/54 / 105/116 |
+| rules | 9/9 | 30.6 | 18 | 65.4 | 0.0 | 9.0 | 8/8 | 0 | 0 | 8.40 (n=3) | 0 | 0.10 | 0 | 0 | -/- | - / - / - |
+| always_llm | 9/9 | 35.8 | 61 | 221.4 | 0.0 | 0.0 | 6/6 | 0 | 0 | 6.70 (n=3) | 0 | - | 0 | 0 | -/- | - / - / - |
+| oracle | 9/9 | 27.5 | 15 | 51.4 | 14.2 | 7.2 | 6/6 | 0 | 0 | 0.20 (n=3) | 0 | 0.20 | 0 | 80 | 150/150 | 80/80 / 47/47 / 80/80 |
+| jev-no-right-now | 9/9 | 35.1 | 56 | 166.2 | 0.0 | 0.0 | 8/8 | 0 | 0 | 9.40 (n=3) | 0 | - | 0 | 116 | 98/165 | - / 63/63 / 109/122 |
+| jev-no-in-plan-fix | 9/9 | 30.3 | 55 | 163.2 | 17.5 | 11.7 | 9/9 | 0 | 0 | 0.10 (n=3) | 0 | 0.10 | 0 | 110 | 87/124 | 108/113 / - / 98/113 |
+| jev-no-router | 9/9 | 27.4 | 56 | 150.2 | 15.6 | 10.1 | 8/8 | 0 | 0 | 0.10 (n=3) | 0 | 0.10 | 0 | 101 | 97/149 | 95/104 / 49/49 / - |
+
+Completed per scenario (runs completed / runs):
+
+| scenario | jev | rules | always_llm | oracle | jev-no-right-now | jev-no-in-plan-fix | jev-no-router |
+|---|---|---|---|---|---|---|---|
+| tower | 3/3 (corr 0.1s, 32 LLM) | 3/3 (corr 8.4s, 9 LLM) | 3/3 (corr 6.7s, 17 LLM) | 3/3 (corr 0.2s, 6 LLM) | 3/3 (corr 9.4s, 36 LLM) | 3/3 (corr 0.1s, 32 LLM) | 3/3 (corr 0.1s, 9 LLM) |
+| handover | 3/3 (6 LLM) | 3/3 (3 LLM) | 3/3 (38 LLM) | 3/3 (3 LLM) | 3/3 (7 LLM) | 3/3 (3 LLM) | 3/3 (41 LLM) |
+| standing_rule | 3/3 (11 LLM) | 3/3 (6 LLM) | 3/3 (6 LLM) | 3/3 (6 LLM) | 3/3 (13 LLM) | 3/3 (20 LLM) | 3/3 (6 LLM) |
+
+## Gate sweep (right-now + in-plan fix answers; offline, from the answers logged)
+
+| gate | answers | wrong | wrong caught | caught % | escalated/fallback % | accuracy of acted-on answers % |
+|---|---|---|---|---|---|---|
+| 0.3 | 706 | 47 | 5 | 11 | 1.3 | 94.0 |
+| 0.4 | 706 | 47 | 16 | 34 | 3.7 | 95.4 |
+| 0.5 | 706 | 47 | 22 | 47 | 7.1 | 96.2 |
+| 0.6 | 706 | 47 | 30 | 64 | 10.6 | 97.3 |
+| 0.7 | 706 | 47 | 42 | 89 | 15.4 | 99.2 |
+| 0.8 | 706 | 47 | 46 | 98 | 20.7 | 99.8 |
+| 0.9 | 706 | 47 | 47 | 100 | 32.2 | 100.0 |
+
+## Pass criteria (decide whether we move to MuJoCo)
+
+1. `jev` completes >= 90% of core episodes with zero hand contacts: 24/27 completed, 0 contacts -> **FAIL**
+2. `jev` beats `rules` on completion or correction time on the held-out interference/correction scenarios: completion 9/9 vs 9/9; median correction→behaviour 0.10 s vs 8.40 s -> **PASS**
+   (information, not part of the verdict: on the core scenarios, whose phrasing the rules were written against, completion 15/18 vs 18/18; median correction→behaviour 0.20 s vs 0.10 s)
+3. `jev` faster than `always_llm` on median correction→behaviour without lower completion: 0.20 s vs 7.70 s; completion 24/27 vs 27/27 -> **FAIL**
+4. At the chosen gate (0.7), >= 90% of Jev's wrong in-plan fixes / right-now answers are caught: 42/47 (89%) -> **FAIL**
+5. Held-out completion (`jev`, no threshold): 9/9; always_llm 9/9, jev-no-in-plan-fix 9/9, jev-no-right-now 9/9, jev-no-router 9/9, oracle 9/9, rules 9/9
+
+Cost: Jev 1702 requests, 2551185 input tokens ≈ $0.1071; LLM 859 calls, 2298453 input (1597724 cached) / 261373 output tokens (pass --llm-price-in/--llm-price-out for $)
+
+$ uv run --frozen python experiments/e12v2.py --replay experiments/results/e12v2_combined_noise.jsonl
+
+## replay e12v2_combined_noise.jsonl: core scenarios
+
+| arm | done | sim s (med) | LLM calls | LLM wait s | hold s | pause s | recovered/dist | contacts | violations | corr→behaviour s (med) | corr missed | wait/go s (med) | chatter spurious | Jev req | Jev p50/p95 ms | agree right-now / fix / route |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| jev | 8/9 | 47.2 | 50 | 152.9 | 7.1 | 7.9 | 5/5 | 0 | 0 | 0.10 (n=1) | 0 | 0.15 | 0 | 121 | 89/150 | 115/120 / 85/86 / 92/120 |
+| rules | 9/9 | 49.0 | 20 | 78.7 | 15.2 | 8.3 | 5/5 | 0 | 0 | 0.10 (n=1) | 0 | 0.10 | 0 | 0 | -/- | - / - / - |
+| always_llm | 9/9 | 49.5 | 44 | 153.5 | 8.7 | 7.9 | 5/5 | 1 | 0 | 8.00 (n=1) | 0 | 3.55 | 1 | 0 | -/- | - / - / - |
+| oracle | 9/9 | 49.5 | 12 | 50.4 | 14.9 | 8.0 | 5/5 | 0 | 0 | 0.20 (n=1) | 0 | 0.20 | 0 | 106 | 150/150 | 106/106 / 84/84 / 106/106 |
+| jev-no-right-now | 8/9 | 47.7 | 31 | 151.7 | 0.0 | 0.0 | 5/5 | 1 | 0 | 31.00 (n=1) | 0 | 0.10 | 0 | 120 | 86/153 | - / 95/98 / 108/120 |
+| jev-no-in-plan-fix | 8/9 | 48.8 | 38 | 156.7 | 30.8 | 8.2 | 5/5 | 0 | 0 | 0.10 (n=1) | 0 | 0.10 | 0 | 110 | 87/176 | 108/110 / - / 99/110 |
+| jev-no-router | 9/9 | 46.7 | 35 | 110.2 | 7.4 | 7.9 | 5/5 | 0 | 0 | 0.10 (n=1) | 0 | 0.10 | 1 | 110 | 89/145 | 104/110 / 80/81 / - |
+
+Completed per scenario (runs completed / runs):
+
+| scenario | jev | rules | always_llm | oracle | jev-no-right-now | jev-no-in-plan-fix | jev-no-router |
+|---|---|---|---|---|---|---|---|
+| sort_static | 1/1 (1 LLM) | 1/1 (4 LLM) | 1/1 (1 LLM) | 1/1 (1 LLM) | 1/1 (1 LLM) | 1/1 (1 LLM) | 1/1 (1 LLM) |
+| sort_moved_target | 1/1 (2 LLM) | 1/1 (2 LLM) | 1/1 (4 LLM) | 1/1 (1 LLM) | 1/1 (4 LLM) | 1/1 (8 LLM) | 1/1 (2 LLM) |
+| sort_take_back | 1/1 (10 LLM) | 1/1 (1 LLM) | 1/1 (2 LLM) | 1/1 (1 LLM) | 1/1 (4 LLM) | 1/1 (2 LLM) | 1/1 (2 LLM) |
+| sort_hand_in_path | 1/1 (1 LLM) | 1/1 (1 LLM) | 1/1 (1 contact, 13 LLM) | 1/1 (1 LLM) | 1/1 (1 contact, 1 LLM) | 1/1 (1 LLM) | 1/1 (9 LLM) |
+| sort_correction | 0/1 (corr 0.1s, 16 LLM) | 1/1 (corr 0.1s, 2 LLM) | 1/1 (corr 8.0s, 5 LLM) | 1/1 (corr 0.2s, 2 LLM) | 0/1 (corr 31.0s, 16 LLM) | 0/1 (corr 0.1s, 16 LLM) | 1/1 (corr 0.1s, 4 LLM) |
+| sort_chatter | 1/1 (1 LLM) | 1/1 (1 LLM) | 1/1 (4 LLM) | 1/1 (1 LLM) | 1/1 (1 LLM) | 1/1 (1 LLM) | 1/1 (5 LLM) |
+| sort_wait_go | 1/1 (14 LLM) | 1/1 (1 LLM) | 1/1 (7 LLM) | 1/1 (1 LLM) | 1/1 (1 LLM) | 1/1 (1 LLM) | 1/1 (4 LLM) |
+| group_colour | 1/1 (1 LLM) | 1/1 (2 LLM) | 1/1 (2 LLM) | 1/1 (1 LLM) | 1/1 (1 LLM) | 1/1 (1 LLM) | 1/1 (4 LLM) |
+| sort_constraint | 1/1 (4 LLM) | 1/1 (6 LLM) | 1/1 (6 LLM) | 1/1 (3 LLM) | 1/1 (2 LLM) | 1/1 (7 LLM) | 1/1 (4 LLM) |
+
+## replay e12v2_combined_noise.jsonl: HELD-OUT scenarios (reported separately, never tuned on)
+
+| arm | done | sim s (med) | LLM calls | LLM wait s | hold s | pause s | recovered/dist | contacts | violations | corr→behaviour s (med) | corr missed | wait/go s (med) | chatter spurious | Jev req | Jev p50/p95 ms | agree right-now / fix / route |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| jev | 3/3 | 27.9 | 13 | 38.9 | 4.1 | 3.9 | 2/2 | 0 | 0 | 0.10 (n=1) | 0 | 0.10 | 0 | 37 | 87/127 | 36/39 / 18/18 / 36/39 |
+| rules | 2/3 | 20.6 | 10 | 35.8 | 0.0 | 3.0 | 2/3 | 0 | 0 | 10.70 (n=1) | 0 | 0.10 | 0 | 0 | -/- | - / - / - |
+| always_llm | 3/3 | 34.1 | 24 | 72.3 | 0.0 | 0.0 | 2/2 | 0 | 0 | 6.30 (n=1) | 0 | - | 0 | 0 | -/- | - / - / - |
+| oracle | 3/3 | 28.3 | 5 | 17.1 | 4.3 | 3.3 | 2/2 | 0 | 0 | 0.20 (n=1) | 0 | 0.20 | 0 | 33 | 150/150 | 33/33 / 18/18 / 33/33 |
+| jev-no-right-now | 3/3 | 36.1 | 22 | 64.6 | 0.0 | 0.0 | 3/3 | 0 | 0 | 9.80 (n=1) | 0 | - | 0 | 46 | 86/150 | - / 24/25 / 45/48 |
+| jev-no-in-plan-fix | 3/3 | 33.5 | 16 | 44.7 | 10.5 | 3.3 | 3/3 | 0 | 0 | 0.10 (n=1) | 0 | 0.15 | 0 | 39 | 87/141 | 37/40 / - / 36/40 |
+| jev-no-router | 3/3 | 27.5 | 23 | 57.8 | 4.5 | 5.0 | 2/2 | 0 | 0 | 0.10 (n=1) | 0 | 0.15 | 0 | 38 | 96/135 | 36/39 / 19/19 / - |
+
+Completed per scenario (runs completed / runs):
+
+| scenario | jev | rules | always_llm | oracle | jev-no-right-now | jev-no-in-plan-fix | jev-no-router |
+|---|---|---|---|---|---|---|---|
+| tower | 1/1 (corr 0.1s, 9 LLM) | 0/1 (corr 10.7s, 6 LLM) | 1/1 (corr 6.3s, 7 LLM) | 1/1 (corr 0.2s, 2 LLM) | 1/1 (corr 9.8s, 12 LLM) | 1/1 (corr 0.1s, 12 LLM) | 1/1 (corr 0.1s, 3 LLM) |
+| handover | 1/1 (2 LLM) | 1/1 (1 LLM) | 1/1 (14 LLM) | 1/1 (1 LLM) | 1/1 (3 LLM) | 1/1 (1 LLM) | 1/1 (14 LLM) |
+| standing_rule | 1/1 (2 LLM) | 1/1 (3 LLM) | 1/1 (3 LLM) | 1/1 (2 LLM) | 1/1 (7 LLM) | 1/1 (3 LLM) | 1/1 (6 LLM) |
+
+## Gate sweep (right-now + in-plan fix answers; offline, from the answers logged)
+
+| gate | answers | wrong | wrong caught | caught % | escalated/fallback % | accuracy of acted-on answers % |
+|---|---|---|---|---|---|---|
+| 0.3 | 250 | 10 | 1 | 10 | 0.8 | 96.4 |
+| 0.4 | 250 | 10 | 3 | 30 | 1.6 | 97.2 |
+| 0.5 | 250 | 10 | 6 | 60 | 4.8 | 98.3 |
+| 0.6 | 250 | 10 | 6 | 60 | 7.6 | 98.3 |
+| 0.7 | 250 | 10 | 9 | 90 | 12.8 | 99.5 |
+| 0.8 | 250 | 10 | 9 | 90 | 21.6 | 99.5 |
+| 0.9 | 250 | 10 | 10 | 100 | 35.6 | 100.0 |
+
+## Pass criteria (decide whether we move to MuJoCo)
+
+1. `jev` completes >= 90% of core episodes with zero hand contacts: 8/9 completed, 0 contacts -> **FAIL**
+2. `jev` beats `rules` on completion or correction time on the held-out interference/correction scenarios: completion 3/3 vs 2/3; median correction→behaviour 0.10 s vs 10.70 s -> **PASS**
+   (information, not part of the verdict: on the core scenarios, whose phrasing the rules were written against, completion 5/6 vs 6/6; median correction→behaviour 0.10 s vs 0.10 s)
+3. `jev` faster than `always_llm` on median correction→behaviour without lower completion: 0.10 s vs 8.00 s; completion 8/9 vs 9/9 -> **FAIL**
+4. At the chosen gate (0.7), >= 90% of Jev's wrong in-plan fixes / right-now answers are caught: 9/10 (90%) -> **PASS**
+5. Held-out completion (`jev`, no threshold): 3/3; always_llm 3/3, jev-no-in-plan-fix 3/3, jev-no-right-now 3/3, jev-no-router 3/3, oracle 3/3, rules 2/3
+
+Cost: Jev 621 requests, 928006 input tokens ≈ $0.0390; LLM 343 calls, 937495 input (623210 cached) / 103402 output tokens (pass --llm-price-in/--llm-price-out for $)
+

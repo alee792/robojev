@@ -1,0 +1,272 @@
+{
+ "model": "<OPENAI_MODEL>",
+ "instructions": "You plan for a robot arm working on a table. The input's `world` lists every object (id, name, colour, number, size, where it is, x/y in cm: x grows to the robot's right, y grows away from the robot) and every place (tray slots that hold one object each, bins that hold any number, \"table\" for a free spot on the table, \"person\" for handing an object to the person, and \"tray\" meaning any tray slot, for conditions and constraints only).\n\nThe arm's skills are motor capabilities only; they do not know the task:\n- move_object(object, target place): pick the object up, carry it and put it down in the place (a tray slot, a bin, or \"table\" for a free spot on the table).\n- hand_over(object): pick the object up and hand it to the person (target \"person\"); done when the person has taken it.\n- stack_on(object, target object): pick the object up and set it on top of the target object.\n- push(object, direction): slide the object about 6 cm in a direction (left, right, toward_robot, away_from_robot; the robot's point of view) with one fingertip, without grasping it.\n- survey(): lift the gripper and look over the table again.\n- hold(): stay still for about a second.\n\nA plan has:\n- steps: skill calls with their objects filled in, run in order. Put an object into a one-object place only when that place is empty at that point in the plan; move whatever is in the way first (to \"table\" if it has nowhere else to go). Do not move objects the task does not ask about unless they are in the way.\n- done_when: one condition per fact that must hold when the task is done, e.g. \"block_5 is in tray_slot_3\". Use a relation code can check:\n  - in: the object is in the target place (a slot, a bin, \"tray\" for any tray slot, \"table\", or \"person\" = the person is holding it)\n  - on: the object sits directly on top of the target object\n  - not_in: the object is not in the target place\n  - other: anything else (then object and target may be \"none\"; the text says it all)\n- constraints: rules that hold for the whole task (e.g. \"never touch the blue cup\", \"keep the marker out of the left bin\"):\n  - dont_touch: the robot must never touch or move the object\n  - keep_out_of: the object must never be put into the place (\"tray\" = any tray slot); if it gets there, it must be taken out\n  Steps must never break a constraint. If an object that must be picked up is so close to a dont_touch object that the gripper would touch it, push the object away from the dont_touch object first.\n- If `world.arm.holding` names an object, the first step must put that object somewhere.\n\nThe input's `request` says what to return:\n- \"plan\": the full plan for `task` (and anything in `user_messages`) from the world as it is now. Step ids s1, s2, ...; condition ids d1, d2, ...; constraint ids c1, c2, ....\n- \"replan\": the robot is partway through `current_plan` when `why` happened. Work out the final arrangement now wanted (the task as the user's latest messages have changed it) and return ONLY what changes: new steps (new ids n1, n2, ... not used before), the full order of the steps still to run by id (kept and new; a step not listed will not run; a step already done can be listed again to run it again), and the done conditions and constraints to drop or add. Blocks already moved can be moved again. `arm_now` says what the arm is doing; if it is carrying on, keep its current step first when it is still right.\n- \"react\": as \"replan\", and also choose what the arm should do right now (right_now) about `why`: carry_on (no change), hold (stop at a safe point while the plan changes), pause (stop until told to go on: a hand coming toward the gripper or in its path, or the user asks to wait), back_off (move away from a hand very close to the gripper, then stop), re_target (aim at where the current step's object is now), resume (start again after a pause or hold). Set change_plan to false and leave the plan fields empty when the plan needs no change.\n\nWork the arrangement out carefully: the robot follows the plan exactly.",
+ "input": "{\"request\": \"react\", \"task\": \"Line the numbered blocks up in the tray, lowest number on the left.\", \"user_messages\": [], \"world\": {\"objects\": [{\"id\": \"block_1\", \"name\": \"block 1\", \"colour\": \"purple\", \"number\": 1, \"size\": \"small\", \"where\": \"tray_slot_1\", \"x\": 25, \"y\": 55}, {\"id\": \"block_3\", \"name\": \"block 3\", \"colour\": \"orange\", \"number\": 3, \"size\": \"medium\", \"where\": \"table\", \"x\": 84, \"y\": 12}, {\"id\": \"block_5\", \"name\": \"block 5\", \"colour\": \"orange\", \"number\": 5, \"size\": \"medium\", \"where\": \"table\", \"x\": 51, \"y\": 28}, {\"id\": \"block_7\", \"name\": \"block 7\", \"colour\": \"white\", \"number\": 7, \"size\": \"small\", \"where\": \"table\", \"x\": 27, \"y\": 28}, {\"id\": \"block_11\", \"name\": \"block 11\", \"colour\": \"white\", \"number\": 11, \"size\": \"small\", \"where\": \"table\", \"x\": 75, \"y\": 14}, {\"id\": \"block_12\", \"name\": \"block 12\", \"colour\": \"white\", \"number\": 12, \"size\": \"small\", \"where\": \"table\", \"x\": 39, \"y\": 14}], \"places\": [{\"id\": \"tray_slot_1\", \"name\": \"tray slot 1 (the leftmost slot)\", \"kind\": \"slot\", \"holds\": \"one object\"}, {\"id\": \"tray_slot_2\", \"name\": \"tray slot 2\", \"kind\": \"slot\", \"holds\": \"one object\"}, {\"id\": \"tray_slot_3\", \"name\": \"tray slot 3\", \"kind\": \"slot\", \"holds\": \"one object\"}, {\"id\": \"tray_slot_4\", \"name\": \"tray slot 4\", \"kind\": \"slot\", \"holds\": \"one object\"}, {\"id\": \"tray_slot_5\", \"name\": \"tray slot 5\", \"kind\": \"slot\", \"holds\": \"one object\"}, {\"id\": \"tray_slot_6\", \"name\": \"tray slot 6 (the rightmost slot)\", \"kind\": \"slot\", \"holds\": \"one object\"}, {\"id\": \"tray\", \"name\": \"the tray (any of its slots)\", \"kind\": \"group\", \"holds\": \"any number\"}, {\"id\": \"table\", \"name\": \"a free spot on the table\", \"kind\": \"table\", \"holds\": \"any number\"}, {\"id\": \"person\", \"name\": \"the person's hand\", \"kind\": \"person\", \"holds\": \"any number\"}], \"arm\": {\"holding\": \"nothing\"}}, \"current_plan\": {\"reading\": \"Line the numbered blocks up in the tray, lowest number on the left.\", \"steps\": [{\"id\": \"s1\", \"skill\": \"move_object\", \"object\": \"block_1\", \"target\": \"tray_slot_1\", \"direction\": \"none\", \"status\": \"done\"}, {\"id\": \"s2\", \"skill\": \"move_object\", \"object\": \"block_3\", \"target\": \"tray_slot_2\", \"direction\": \"none\", \"status\": \"running\"}, {\"id\": \"s3\", \"skill\": \"move_object\", \"object\": \"block_5\", \"target\": \"tray_slot_3\", \"direction\": \"none\", \"status\": \"pending\"}, {\"id\": \"s4\", \"skill\": \"move_object\", \"object\": \"block_7\", \"target\": \"tray_slot_4\", \"direction\": \"none\", \"status\": \"pending\"}, {\"id\": \"s5\", \"skill\": \"move_object\", \"object\": \"block_11\", \"target\": \"tray_slot_5\", \"direction\": \"none\", \"status\": \"pending\"}, {\"id\": \"s6\", \"skill\": \"move_object\", \"object\": \"block_12\", \"target\": \"tray_slot_6\", \"direction\": \"none\", \"status\": \"pending\"}], \"pending_order\": [\"s2\", \"s3\", \"s4\", \"s5\", \"s6\"], \"done_when\": [{\"id\": \"d1\", \"text\": \"block_1 is in tray_slot_1\", \"object\": \"block_1\", \"relation\": \"in\", \"target\": \"tray_slot_1\", \"true_now\": true}, {\"id\": \"d2\", \"text\": \"block_3 is in tray_slot_2\", \"object\": \"block_3\", \"relation\": \"in\", \"target\": \"tray_slot_2\", \"true_now\": false}, {\"id\": \"d3\", \"text\": \"block_5 is in tray_slot_3\", \"object\": \"block_5\", \"relation\": \"in\", \"target\": \"tray_slot_3\", \"true_now\": false}, {\"id\": \"d4\", \"text\": \"block_7 is in tray_slot_4\", \"object\": \"block_7\", \"relation\": \"in\", \"target\": \"tray_slot_4\", \"true_now\": false}, {\"id\": \"d5\", \"text\": \"block_11 is in tray_slot_5\", \"object\": \"block_11\", \"relation\": \"in\", \"target\": \"tray_slot_5\", \"true_now\": false}, {\"id\": \"d6\", \"text\": \"block_12 is in tray_slot_6\", \"object\": \"block_12\", \"relation\": \"in\", \"target\": \"tray_slot_6\", \"true_now\": false}], \"constraints\": []}, \"arm_now\": {\"current_step\": \"s2\", \"doing\": \"moving the empty gripper toward where block 3 was when this step started, 6 cm away; block 3 itself is now 21 cm from that spot; nothing grasped yet\", \"while_you_plan\": \"carrying on\"}, \"why\": \"block 3 was moved by someone else (not the robot): still on the table, about 21 cm from where it was\"}",
+ "text": {
+  "format": {
+   "type": "json_schema",
+   "name": "reaction",
+   "schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+     "right_now",
+     "change_plan",
+     "reading",
+     "new_steps",
+     "pending_order",
+     "drop_done_when",
+     "new_done_when",
+     "drop_constraints",
+     "new_constraints"
+    ],
+    "properties": {
+     "right_now": {
+      "type": "string",
+      "enum": [
+       "carry_on",
+       "hold",
+       "pause",
+       "back_off",
+       "re_target",
+       "resume"
+      ]
+     },
+     "change_plan": {
+      "type": "boolean"
+     },
+     "reading": {
+      "type": "string",
+      "description": "the task as it stands now, in one sentence, with this change and every earlier user message folded in: the final arrangement now wanted"
+     },
+     "new_steps": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "additionalProperties": false,
+       "required": [
+        "id",
+        "skill",
+        "object",
+        "target",
+        "direction"
+       ],
+       "properties": {
+        "id": {
+         "type": "string",
+         "description": "short unique id, e.g. s1 (new ids in a replan: n1, n2, ...)"
+        },
+        "skill": {
+         "type": "string",
+         "enum": [
+          "move_object",
+          "hand_over",
+          "stack_on",
+          "push",
+          "survey",
+          "hold"
+         ]
+        },
+        "object": {
+         "type": "string",
+         "enum": [
+          "block_1",
+          "block_11",
+          "block_12",
+          "block_3",
+          "block_5",
+          "block_7",
+          "none"
+         ]
+        },
+        "target": {
+         "type": "string",
+         "enum": [
+          "person",
+          "table",
+          "tray",
+          "tray_slot_1",
+          "tray_slot_2",
+          "tray_slot_3",
+          "tray_slot_4",
+          "tray_slot_5",
+          "tray_slot_6",
+          "block_1",
+          "block_11",
+          "block_12",
+          "block_3",
+          "block_5",
+          "block_7",
+          "none"
+         ],
+         "description": "a place for move_object, \"person\" for hand_over, an object for stack_on, else none"
+        },
+        "direction": {
+         "type": "string",
+         "enum": [
+          "left",
+          "right",
+          "toward_robot",
+          "away_from_robot",
+          "none"
+         ],
+         "description": "push only, else none"
+        }
+       }
+      },
+      "description": "only steps that are not already in the plan"
+     },
+     "pending_order": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "ids of every step still to run, in order (kept steps and new ones); a step not listed will not run"
+     },
+     "drop_done_when": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "ids of done conditions that no longer apply"
+     },
+     "new_done_when": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "additionalProperties": false,
+       "required": [
+        "id",
+        "text",
+        "object",
+        "relation",
+        "target"
+       ],
+       "properties": {
+        "id": {
+         "type": "string",
+         "description": "short unique id, e.g. d1"
+        },
+        "text": {
+         "type": "string",
+         "description": "the condition as a plain statement, e.g. \"block_5 is in tray_slot_3\""
+        },
+        "object": {
+         "type": "string",
+         "enum": [
+          "block_1",
+          "block_11",
+          "block_12",
+          "block_3",
+          "block_5",
+          "block_7",
+          "none"
+         ]
+        },
+        "relation": {
+         "type": "string",
+         "enum": [
+          "in",
+          "on",
+          "not_in",
+          "other"
+         ]
+        },
+        "target": {
+         "type": "string",
+         "enum": [
+          "person",
+          "table",
+          "tray",
+          "tray_slot_1",
+          "tray_slot_2",
+          "tray_slot_3",
+          "tray_slot_4",
+          "tray_slot_5",
+          "tray_slot_6",
+          "block_1",
+          "block_11",
+          "block_12",
+          "block_3",
+          "block_5",
+          "block_7",
+          "none"
+         ]
+        }
+       }
+      },
+      "description": "only conditions that are not already in the plan"
+     },
+     "drop_constraints": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "ids of constraints that no longer apply"
+     },
+     "new_constraints": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "additionalProperties": false,
+       "required": [
+        "id",
+        "text",
+        "kind",
+        "object",
+        "place"
+       ],
+       "properties": {
+        "id": {
+         "type": "string",
+         "description": "short unique id, e.g. c1"
+        },
+        "text": {
+         "type": "string"
+        },
+        "kind": {
+         "type": "string",
+         "enum": [
+          "dont_touch",
+          "keep_out_of"
+         ]
+        },
+        "object": {
+         "type": "string",
+         "enum": [
+          "block_1",
+          "block_11",
+          "block_12",
+          "block_3",
+          "block_5",
+          "block_7"
+         ]
+        },
+        "place": {
+         "type": "string",
+         "enum": [
+          "person",
+          "table",
+          "tray",
+          "tray_slot_1",
+          "tray_slot_2",
+          "tray_slot_3",
+          "tray_slot_4",
+          "tray_slot_5",
+          "tray_slot_6",
+          "none"
+         ],
+         "description": "keep_out_of only, else none"
+        }
+       }
+      },
+      "description": "only constraints that are not already in the plan"
+     }
+    }
+   },
+   "strict": true
+  }
+ },
+ "store": false,
+ "prompt_cache_key": "e12v2-planner"
+}

@@ -1,0 +1,122 @@
+{
+ "template": "sort_number",
+ "task": "Put the numbered blocks into the tray, one per slot, sorted by number.",
+ "bindings": {
+  "blocks": [
+   "b1",
+   "b2",
+   "b3",
+   "b4",
+   "b5"
+  ],
+  "container": "tray",
+  "slots": 5,
+  "slot_1": "the robot's left end of the tray"
+ },
+ "knobs": {
+  "order": {
+   "describe": "which way the numbers run along the tray",
+   "values": {
+    "ascending": "smallest number in slot 1 (the robot's left end of the tray), numbers increasing to the right",
+    "descending": "largest number in slot 1 (the robot's left end of the tray), numbers decreasing to the right"
+   },
+   "default": "ascending"
+  },
+  "pace": {
+   "describe": "how fast the arm moves",
+   "values": {
+    "normal": "normal speed",
+    "slow": "half speed; for when the user wants the arm slower or more careful"
+   },
+   "default": "normal"
+  },
+  "skip": {
+   "describe": "a one-off: set aside the block the arm is going for right now and do it last",
+   "values": {
+    "current_target": "set aside the block the arm is currently going for (do it last) and start on another block"
+   },
+   "default": null,
+   "event": true
+  }
+ },
+ "goal": {
+  "rule": "slot_by_rank",
+  "knob": "order"
+ },
+ "skill_graph": {
+  "start": "survey",
+  "per_block": [
+   "move_above(block)",
+   "pick(block)",
+   "carry_to(goal)",
+   "place",
+   "release",
+   "retreat"
+  ],
+  "on_failure": "survey, or move_above(block) where the block is now, or retreat if the gripper is low",
+  "goal_taken": "carry_to(park), a free table spot; come back to that block later",
+  "crowded_by_forbidden": "nudge_clear(block) before pick",
+  "done_when": "every bound block is at its goal, the hand is empty and the gripper is up"
+ },
+ "orders": [
+  {
+   "id": "clear_of_hands",
+   "kind": "conditional",
+   "text": "While a person's hand is within 40 cm of the gripper, keep at least 15 cm from it and never move toward it.",
+   "condition": "a person's hand is within 40 cm of the gripper",
+   "enforce": {
+    "hand_clearance_cm": 15
+   }
+  }
+ ],
+ "question_templates": {
+  "sequencer": {
+   "next_skill": {
+    "question": "Which skill should the arm run next to make progress on `task`, within `orders`?",
+    "rules": [
+     "Only skills whose preconditions hold right now are listed.",
+     "Each block goes: move above it, pick it, carry it to its goal, place, release, retreat.",
+     "Where `facts` already answers something (where a block belongs, which step is next), use it rather than re-deriving it.",
+     "If `status.last_result` is a failure, choose the skill that recovers (look again, move above the block where it is now, or retreat).",
+     "If a block's goal is taken by another block, carry the held block to a free spot on the table and come back to it later.",
+     "If everything is already where it belongs, choose to stay still."
+    ]
+   },
+   "task_status": {
+    "question": "Is `task` complete?"
+   },
+   "escalate": {
+    "question": "Can the arm's next step be decided confidently from this state by direct lookup, without careful multi-step reasoning?"
+   }
+  },
+  "listener": {
+   "intent": {
+    "question": "What is the user's new message (`utterance.text`) asking the robot to do, given what it is doing now (`task`, `status`)?"
+   },
+   "knob": {
+    "question": "After the user's new message (`utterance.text`), what should the knob `{knob}` ({describe}) be? It is `{now}` now."
+   },
+   "when": {
+    "question": "If the user's new message (`utterance.text`) changes anything, when should the change take effect?"
+   },
+   "escalate": {
+    "question": "Can the user's new message (`utterance.text`) be handled with the knobs listed in `knobs` and the intents offered, without a smarter model re-planning the task?"
+   }
+  },
+  "spotter": {
+   "action": {
+    "question": "What should the arm do right now about what is happening around it (`hands`, `nearby`), within `orders`?",
+    "rules": [
+     "This overrides the arm's current skill.",
+     "A hand close to the gripper (under 15 cm) calls for backing off, or lifting straight up if it is still coming closer and very close.",
+     "A hand that is coming toward the gripper, or sits in the arm's path, calls for holding still.",
+     "A hand that is present but neither coming closer nor in the path calls for slowing down.",
+     "Blocks being moved by a person are not a reason to stop unless a hand is involved."
+    ]
+   },
+   "order": {
+    "question": "Does this condition hold right now: {condition}?"
+   }
+  }
+ }
+}

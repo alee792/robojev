@@ -1,0 +1,110 @@
+{
+ "arm": "jev",
+ "event": "the user typed: \"actually, highest on the left\"",
+ "request": {
+  "state": {
+   "event": {
+    "kind": "user text",
+    "what_happened": "the user typed: \"actually, highest on the left\"",
+    "user_just_said": "actually, highest on the left"
+   },
+   "task": "Line the numbered blocks up in the tray, lowest number on the left.",
+   "robot": {
+    "mode": "running the plan",
+    "holding": "block 5",
+    "new_plan_being_worked_out": "no"
+   },
+   "plan_position": {
+    "current_step": "move_object(block 5 \u2192 tray slot 3)",
+    "arm_in_step": "holding block 5 at travel height, carrying it to tray slot 3, 24 cm away",
+    "steps_done": 2,
+    "next_steps": [
+     "move_object(block 7 \u2192 tray slot 4)",
+     "move_object(block 11 \u2192 tray slot 5)"
+    ],
+    "steps_left_after_current": 3
+   },
+   "hand": "no person's hand in view",
+   "nearby_objects": [
+    {
+     "name": "block 3",
+     "where": "in tray slot 2",
+     "distance_from_gripper": "mid-range",
+     "in_the_arms_path": "no",
+     "its_step": "move_object(block 3 \u2192 tray slot 2): done, and it is still there",
+     "is_the_current_steps_object": "no"
+    }
+   ]
+  },
+  "model": "jev-1.13.0",
+  "questions": {
+   "right_now": {
+    "type": "choice",
+    "instructions": {
+     "question": "Given `event`, what should the arm do right now?",
+     "context": "`plan_position.arm_in_step` says literally where the arm is in its current step; `robot.mode` says whether it is moving, paused or holding. The code's own stop distance for hands applies regardless of this answer."
+    },
+    "criteria": {
+     "carry_on": {
+      "what": "No change: the arm keeps doing what it is doing now (moving on with the current step, or staying paused or holding if it already is).",
+      "not_for": "a person's hand coming toward the gripper or into the arm's path while the arm moves; the user asking the robot to wait; a change that makes the move in progress wrong"
+     },
+     "hold": {
+      "what": "Stop at a safe point, keeping anything in the gripper, because the move in progress may be wrong now: the task or the plan is about to change.",
+      "not_for": "a person's hand nearby (use pause or back_off); the user asking the robot to wait (use pause); an object moved that the plan still handles as written"
+     },
+     "pause": {
+      "what": "Stop where it is and stay stopped until told to go on: a person's hand is coming toward the gripper or is in the arm's path, or the user asks the robot to wait.",
+      "not_for": "a hand that is already very close to the gripper (use back_off); a hand held out, still, to take an object the robot is handing over"
+     }
+    }
+   },
+   "route": {
+    "type": "choice",
+    "instructions": {
+     "question": "Who should handle `event`: the robot on its own with the current plan, or a planner that writes a new plan, or the user?",
+     "ask_about": "whether the end result or the steps must change, not what the event is about"
+    },
+    "criteria": {
+     "stay_local": {
+      "what": "The plan still holds as written, with at most the fix above: steps finishing, objects moved that their own steps will still handle, a placed object to be put back, hands, waits, remarks, temporary failures.",
+      "not_for": "the user asking for a different end result; an object the plan now has to deal with but has no step for; a plan that would break a constraint or leaves out an object the task asks about"
+     },
+     "fast_llm": {
+      "what": "The plan must change: the user asks for a different end result, or the world changed so the plan needs new or different steps. Most replans.",
+      "not_for": "anything the plan already covers; requests that could mean two different things"
+     },
+     "capable_llm": {
+      "what": "The plan must change and working out how is hard: several constraints conflict, the same step keeps failing, or the request needs careful multi-step reasoning.",
+      "not_for": "an ordinary correction or a single new step (use fast_llm)"
+     },
+     "ask_user": {
+      "what": "The user's words could reasonably mean two different end results, and guessing wrong would undo work.",
+      "not_for": "a clear request, however big the change; remarks that ask for nothing"
+     }
+    }
+   }
+  }
+ },
+ "mock_answers": {
+  "right_now": {
+   "choice": "hold",
+   "probabilities": {
+    "carry_on": 0.039,
+    "hold": 0.921,
+    "pause": 0.039
+   },
+   "confidence": 0.882
+  },
+  "route": {
+   "choice": "fast_llm",
+   "probabilities": {
+    "stay_local": 0.023,
+    "fast_llm": 0.93,
+    "capable_llm": 0.023,
+    "ask_user": 0.023
+   },
+   "confidence": 0.907
+  }
+ }
+}
