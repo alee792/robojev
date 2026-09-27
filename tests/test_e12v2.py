@@ -582,3 +582,16 @@ def test_a_replan_loop_runs_the_next_plan_without_routing_it_back():
     ep.run(sc.task)
     assert ep.r.loops >= 1
     assert ep.r.outcome != "gave_up"
+
+
+def test_a_pause_during_user_text_records_what_the_user_said():
+    # A cautious fallback pause on "right, go ahead" used to be recorded as "the user asked the robot to
+    # wait", which told every later decision the user wanted a pause, so nothing resumed the arm.
+    sc = S.make("sort_wait_go", 12)
+    from e12v2.core.combine import JevDecider
+    ep = Episode(sc.world, sc.person, make_skills(sc.world), JevDecider(MockJev(sc, sc.world, 0.0, 0.0)),
+                 PlannerClient({"fast_llm": MockLLM(sc, sc.world)}), HarnessConfig(max_s=200))
+    ev = Event(1, 0, "user_text", 'the user typed: "right, go ahead"', data={"text": "right, go ahead"})
+    ep.mode = "running"
+    ep._right_now("pause", ev)
+    assert ep.mode == "paused" and ep.pause_reason == 'the user said "right, go ahead"'

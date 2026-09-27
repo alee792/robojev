@@ -488,7 +488,9 @@ class Episode:
         elif rn == "pause":
             if self.mode != "paused":
                 self.mode = "paused"
-                self.pause_reason = ("the user asked the robot to wait" if ev.kind == "user_text" else
+                # the user's own words, not an interpretation: this pause may be the cautious fallback on
+                # an unsure answer to "right, go ahead", and calling it "asked to wait" kept it paused
+                self.pause_reason = (f'the user said "{ev.data.get("text", "")}"' if ev.kind == "user_text" else
                                      "a person's hand came near" if "hand" in ev.text else f"paused after: {ev.text}")
         elif rn == "back_off":
             h, a = self.state.hand, self.state.arm

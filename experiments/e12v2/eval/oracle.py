@@ -216,7 +216,7 @@ def truth(ev, view, scenario, world) -> dict:
     hf = _hand(ts, heading)
     cur = view.current
     handing_over = bool(cur and cur["skill"] == "hand_over")
-    user_wait = (view.pause_reason or "").startswith("the user asked")
+    user_wait = (view.pause_reason or "").startswith("the user said")
     if user_wait:   # lifted if the user's latest wait/go line is a "go on"
         kinds = [scenario.utts[m].kind for m in view.user_messages if m in scenario.utts and scenario.utts[m].kind in ("wait", "go_on")]
         user_wait = not kinds or kinds[-1] == "wait"
