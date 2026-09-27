@@ -40,19 +40,24 @@ What each spike found and what it changed in `docs/v2.md`. Full tables and logs:
   was accurate (35/35) and cheapest (~$0.0003 per replan): the default fast LLM. `gpt-4.1-mini` was the
   only model that prepared variants unprompted, letting Jev keep 18/30 corrections, at 87% accuracy.
 
-- **The v2 loop works closed-loop except after a correction (e12v2).** Live Jev + `gpt-6-luna`, 3
-  seeds: `jev` completed 24/27 core and 9/9 held-out episodes with 0 hand contacts. All three misses
-  are `sort_correction`: after the replan, Jev is shown the original task and the correction
-  separately, can't reconcile them, and keeps routing new plans back to the LLM until the 16-call cap.
-  Keyword rules and always-LLM completed 27/27. The state should carry the task as corrected, and a
-  replan loop needs the loop detector.
-- **Right-now earns its place; the router is the weak group (e12v2).** No hand contacts with
-  right-now; 3/3 without it and with always-LLM. Corrections change behaviour in 0.1-0.2 s vs 7.7 s
-  (always-LLM). Route agrees with the oracle 88% (right-now 92%, in-plan fix 98%); removing the router
-  raised completion to 26/27. Jev beat the keyword rules only on held-out phrasing (0.1 s vs 8.4 s).
-- **Gate 0.8 (e12v2).** 0.7 caught 89% of wrong right-now / fix answers; 0.8 caught 98% for 21%
-  escalation (vs 15%). Prompt caching worked (99% of plan input, 59% of replan input). Replans:
-  3.0 s median, 7.3 s p95.
+- **The v2 loop passes closed loop (e12v2, rerun 2026-09-27).** Live Jev + `gpt-6-luna`, with the
+  task as the planner restates it, a replan-loop rule and gate 0.8: all four criteria pass with 3
+  seeds and with noise. `jev` completed 27/27 core and 9/9 held-out episodes, 0 hand contacts, and
+  corrections change behaviour in 0.2 s vs 6.7 s (always-LLM) and 4.4 s (keyword rules on held-out
+  phrasing). `sort_correction` went from 0/3 to 3/3. (The first run failed it: Jev saw the original
+  task and the correction separately and kept sending plans back.)
+- **Right-now earns its place (e12v2).** No hand contacts with it; 3/3 `sort_hand_in_path` runs touched
+  the hand without it and with always-LLM. Agreement with the oracle: right-now 95%, in-plan fix 99%,
+  route 93%.
+- **Jev rejects good plans too often; the loop rule hides it (e12v2 rerun).** Of 79 new plans, all
+  fine, Jev sent 31 (39%) back to the LLM (22 unsure "stay local" under the gate, 8 confident
+  "replan"). The loop rule let 12 through, all right. The plan check needs to be stricter about what
+  counts as wrong, or every episode pays about one needless 3 s replan.
+- **Restated tasks can absorb transient commands (e12v2).** A "wait" that falls under the gate goes to
+  the LLM, whose restatement may add "the user asked to wait"; nothing clears it, so the arm stays
+  paused (seen once, 217 s). A restatement should hold only the end result.
+- **Gate 0.8 (e12v2).** 94% of wrong right-now / fix answers caught for 15% escalation (81% / 11% at
+  0.7). Prompt caching worked (99% of plan input, 59% of replan input). Replans: 3.0 s median, 7.3 s p95.
 
 ## What the E12 update must do to test v2
 

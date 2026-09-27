@@ -600,6 +600,89 @@ truth unless `--noise`. The rules control is fair but written knowing the core p
 is judged on the held-out scenarios. Seeds vary little without `--noise`. The combined logs mix post-fix
 Jev arms with pre-fix control arms of the same seeds; the controls don't read the fixed field.
 
+## e12v2 rerun after the correction fix (2026-09-27)
+
+Handoff 4: the same runs as the last e12v2 section (`gpt-6-luna`, low effort; 3 seeds, then `--noise`) after
+three changes: decisions see the task as the planner restates it (`reading`, corrections folded in;
+`user_said_earlier` removed), a replan-loop rule (after 3 plans are sent back since the user last spoke,
+later plans run as they come), and the stay-local gate at 0.8. The caps were raised to 1,200 LLM calls /
+4,000 Jev requests so the 3-seed run couldn't stop early. 0 Jev errors and 0 LLM errors in 3,300 Jev
+requests and 1,560 LLM calls. Spend about $1.25, including the superseded first pass.
+
+**Harness bug found and fixed (commit `19268f7`).** A pause applied on a user message was recorded
+as "the user asked the robot to wait", even when it was the cautious fallback on an unsure answer to
+"right, go ahead". Every later decision was told the user wanted a pause, so the arm stayed paused
+until the 240 s timeout (held-out `handover`, seed 13, 233 s paused). The reason is now the user's own
+words; the oracle's wait check reads the new label. The first pass (`e12v2_20260927-143315` / `-151544`)
+is superseded, and every table below comes from the full rerun (`e12v2_20260927-153408` / `-161449`).
+
+**Pass criteria**
+
+| # | 3 seeds | `--noise` |
+|---|---|---|
+| 1 core completion, contacts | **PASS** 27/27, 0 | **PASS** 9/9, 0 |
+| 2 vs `rules`, held out | **PASS** 9/9 vs 9/9; 0.20 s vs 4.40 s | **PASS** 3/3 vs 3/3; 0.20 s vs 10.70 s |
+| 3 vs `always_llm` | **PASS** 0.20 s vs 6.70 s; 27/27 vs 27/27 | **PASS** 0.20 s vs 6.10 s; 9/9 vs 9/9 |
+| 4 wrong answers caught at 0.8 | **PASS** 30/32 (94%) | **PASS** 22/23 (96%) |
+| 5 held-out completion | 9/9 (every arm 9/9) | 3/3 (every arm 3/3) |
+
+**Core and held-out, 3 seeds**
+
+| arm | core done | held out done | LLM calls core / held out | contacts | correction → behaviour s, core / held out | Jev agrees: right-now / fix / route |
+|---|---|---|---|---|---|---|
+| jev | **27/27** | **9/9** | 74 / 48 | 0 | **0.20 / 0.20** | 270/284 / 216/219 / 265/284 |
+| rules | 26/27 | 9/9 | 38 / 15 | 0 | 0.10 / 4.40 | – |
+| always_llm | 27/27 | 9/9 | 88 / 68 | **3** | 6.70 / 7.50 | – |
+| oracle | 26/27 | 9/9 | 37 / 16 | 0 | 0.20 / 0.20 | – |
+| jev-no-right-now | 27/27 | 9/9 | 123 / 61 | **3** | 15.90 / 6.20 | – / 228/234 / 292/322 |
+| jev-no-in-plan-fix | 26/27 | 9/9 | 78 / 21 | 0 | 0.10 / 0.20 | 271/289 / – / 266/289 |
+| jev-no-router | 27/27 | 9/9 | 81 / 61 | 0 | 0.10 / 0.10 | 265/286 / 206/209 / – |
+
+(`rules` and `oracle` each missed one `sort_correction` episode this time.)
+
+**`sort_correction`:** `jev` 3/3 with 11 LLM calls in all (was 0/3 with 48), and corrections change
+behaviour in 0.2 s.
+
+**The replan-loop rule** fired in 8 of 36 `jev` episodes (3 seeds). These were in `sort_static`,
+`sort_moved_target`, `sort_take_back`, `sort_hand_in_path`, `sort_correction`, `sort_constraint` and
+`standing_rule` ×2, and 4 of 12 in the noise run. It let 12 plans through; every one was right, and every
+episode completed. The rule is compensating for a weak plan check: of 79 plans that arrived in `jev`
+episodes, the oracle judged all 79 fine, and Jev sent 31 (39%) back to the LLM. In 22 of those it
+answered `stay_local` below the 0.8 gate, and in 8 it answered `fast_llm` confidently. Each needless
+replan costs about 3 s of LLM time; the arm carries on meanwhile.
+
+**Gate sweep (3 seeds): 650 answers, 32 wrong**
+
+| gate | wrong caught | escalated or fell back | accuracy of acted-on answers |
+|---|---|---|---|
+| 0.6 | 22/32 (69%) | 7.2% | 98.3% |
+| 0.7 | 26/32 (81%) | 11.1% | 99.0% |
+| **0.8** | **30/32 (94%)** | 15.1% | 99.6% |
+| 0.9 | 32/32 (100%) | 23.1% | 100% |
+
+(Noise run: 96% at both 0.7 and 0.8.)
+
+**Takeaways**
+- **[measured] The v2 design passes all four criteria**, with 3 seeds and with perception noise:
+  27/27 core and 9/9 held-out episodes, 0 hand contacts, corrections acted on in 0.2 s against 6.7 s
+  (always-LLM) and 4.4 s (keyword rules on held-out phrasing).
+- **[measured] The correction fix works:** `sort_correction` went from 0/3 to 3/3. Route agreement
+  rose from 88% to 93% (265/284).
+- **[measured] Jev is too quick to reject good plans (39% of new plans), and the loop rule hides it.**
+  All 12 plans it let through were right. **[inferred]** Before MuJoCo, either make the plan check
+  stricter about what counts as "wrong" (per-object Nouls, as the design says) or accept about one needless
+  replan per episode. Relying on the loop rule means some bad plan will eventually be run.
+- **[measured] Keep the gate at 0.8:** 94% of wrong answers caught for 15% escalation, against 81% / 11%
+  at 0.7.
+- **[measured] The first pass found a second stuck-pause path (design, not fixed).** When "wait" falls
+  under the gate it goes to the LLM, and the planner's restated task can absorb it ("…; the user asked
+  to wait."). In the first pass that stuck `sort_wait_go` (seed 12) paused for 217 s. It did not recur
+  in the rerun, but nothing prevents it: a restatement should hold only the end result, never
+  transient commands. In the rerun, `jev-no-router` still shows restated tasks mentioning the wait in
+  `sort_wait_go` and `handover`.
+- **[measured] Cost and calls:** `jev` used 74 LLM calls on the core scenarios against 88 for always-LLM
+  and 38 for the rules; the needless plan rejections are most of the gap to the rules.
+
 ## Getting more out of Jev: recommendations from the TypeSafe docs (inferred, none applied)
 
 Read after E11/E12: the [Jev 1.13 jaggedness page](https://docs.typesafe.ai/model-jaggedness/jev-1.13)
