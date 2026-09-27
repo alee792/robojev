@@ -1,0 +1,164 @@
+{
+ "scenario": "ambiguous",
+ "variant": "solved",
+ "tick": 66,
+ "reason": "utterance",
+ "telling": true,
+ "request": {
+  "state": {
+   "task": "Put the numbered blocks into the tray, one per slot, sorted by number. Order: ascending, i.e. smallest number in slot 1 (the robot's left end of the tray), numbers increasing to the right.",
+   "status": {
+    "holding": "nothing",
+    "current_skill": "move_above(block 2)"
+   },
+   "knobs": {
+    "order": {
+     "controls": "which way the numbers run along the tray",
+     "now": "ascending",
+     "values": {
+      "ascending": "smallest number in slot 1 (the robot's left end of the tray), numbers increasing to the right",
+      "descending": "largest number in slot 1 (the robot's left end of the tray), numbers decreasing to the right"
+     }
+    },
+    "pace": {
+     "controls": "how fast the arm moves",
+     "now": "normal",
+     "values": {
+      "normal": "normal speed",
+      "slow": "half speed; for when the user wants the arm slower or more careful"
+     }
+    },
+    "skip": {
+     "controls": "a one-off: set aside the block the arm is going for right now and do it last",
+     "now": "n/a (one-off)",
+     "values": {
+      "current_target": "set aside the block the arm is currently going for (do it last) and start on another block"
+     }
+    }
+   },
+   "facts_under_each_knob_value": {
+    "order = ascending": {
+     "blocks_not_at_their_goal": [
+      "block 2",
+      "block 3",
+      "block 4",
+      "block 5"
+     ],
+     "next_step": "move_above(block 2)",
+     "task_complete": false
+    },
+    "order = descending": {
+     "blocks_not_at_their_goal": [
+      "block 5",
+      "block 4",
+      "block 3",
+      "block 2",
+      "block 1"
+     ],
+     "next_step": "move_above(block 4)",
+     "task_complete": false
+    }
+   },
+   "facts_if_skip_current_target": {
+    "would_set_aside": "block 2"
+   },
+   "utterance": {
+    "text": "not that one",
+    "said_while": "move_above(block 2)"
+   }
+  },
+  "model": "jev-1.13.0",
+  "questions": {
+   "intent": {
+    "type": "choice",
+    "instructions": {
+     "question": "What is the user's new message (`utterance.text`) asking the robot to do, given what it is doing now (`task`, `status`)?"
+    },
+    "criteria": {
+     "adjust": "Change a setting of the current task: one of the knobs in `knobs` (e.g. the order, the speed, the bin, or setting aside the block the arm is going for)",
+     "stop": "Stop the task now and stay stopped",
+     "pause": "Wait for a moment, then carry on with the same task (e.g. 'hold on', 'one sec')",
+     "resume": "Carry on after a pause (e.g. 'ok, go on')",
+     "new_task": "Drop this task and do something different that the knobs cannot express",
+     "continue": "Carry on exactly as before; confirms or praises what the arm is doing (e.g. 'keep going', 'looks good')",
+     "not_for_me": "Not addressed to the robot, or not an instruction at all"
+    }
+   },
+   "knob:order": {
+    "type": "choice",
+    "instructions": {
+     "question": "After the user's new message (`utterance.text`), what should the knob `order` (which way the numbers run along the tray) be? It is `ascending` now."
+    },
+    "criteria": {
+     "ascending": "smallest number in slot 1 (the robot's left end of the tray), numbers increasing to the right",
+     "descending": "largest number in slot 1 (the robot's left end of the tray), numbers decreasing to the right",
+     "unchanged": "the message does not ask to change this"
+    }
+   },
+   "knob:pace": {
+    "type": "choice",
+    "instructions": {
+     "question": "After the user's new message (`utterance.text`), what should the knob `pace` (how fast the arm moves) be? It is `normal` now."
+    },
+    "criteria": {
+     "normal": "normal speed",
+     "slow": "half speed; for when the user wants the arm slower or more careful",
+     "unchanged": "the message does not ask to change this"
+    }
+   },
+   "knob:skip": {
+    "type": "choice",
+    "instructions": {
+     "question": "After the user's new message (`utterance.text`), what should the knob `skip` (a one-off: set aside the block the arm is going for right now and do it last) be? It is `none` now."
+    },
+    "criteria": {
+     "current_target": "set aside the block the arm is currently going for (do it last) and start on another block",
+     "unchanged": "the message does not ask to change this"
+    }
+   },
+   "when": {
+    "type": "choice",
+    "instructions": {
+     "question": "If the user's new message (`utterance.text`) changes anything, when should the change take effect?"
+    },
+    "criteria": {
+     "now": "right away, even in the middle of the current move",
+     "at_next_safe_point": "after the current step finishes"
+    }
+   },
+   "escalate": {
+    "type": "choice",
+    "instructions": {
+     "question": "Can the user's new message (`utterance.text`) be handled with the knobs listed in `knobs` and the intents offered, without a smarter model re-planning the task?"
+    },
+    "criteria": {
+     "decide_now": "yes: the answer can be read directly off the state and the options offered",
+     "ask_a_smarter_model": "no: it is unclear, contradictory, refers to something not in the state, or needs several reasoning steps not already done in the state"
+    }
+   }
+  }
+ },
+ "truth": {
+  "intent": [
+   "adjust"
+  ],
+  "knob:order": [
+   "unchanged"
+  ],
+  "knob:pace": [
+   "unchanged"
+  ],
+  "knob:skip": [
+   "current_target",
+   "unchanged"
+  ],
+  "when": [
+   "now",
+   "at_next_safe_point"
+  ],
+  "escalate": [
+   "decide_now",
+   "ask_a_smarter_model"
+  ]
+ }
+}

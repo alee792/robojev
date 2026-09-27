@@ -1,0 +1,398 @@
+$ uv run python e13_branches.py --dry-run --llm-price-in 2 --llm-price-out 12
+dry run: 28 tasks, 140 corrections
+planned calls: LLM 28 plans (+ up to 28 validation retries) + 140 escalations (+ retries); Jev 140
+Jev: 140 requests, ~114k input tokens ≈ $0.0048
+LLM: ~230k input tokens, ~28k output tokens before reasoning tokens (reasoning models add hidden output tokens; multiply output by ~2-5)
+LLM cost at $2.0/M in, $12.0/M out (x3 output for reasoning): ≈ $1.47
+samples in /Users/anthonylee/code/robojev/.claude/worktrees/widowx-doom-loop-fc1569/experiments/results/e13_samples
+
+$ uv run --extra llm python e13_branches.py --llm openai --jev jev --tasks 7 --max-llm-calls 50
+E13: 7 tasks, 35 corrections; LLM=openai Jev=jev gate=0.7
+planned calls: LLM 7 plans (+ up to 7 validation retries) + 35 escalations (+ retries); Jev 35; LLM calls capped at 50
+  5/7 tasks, LLM calls 30
+
+==================== E13: planner (step 1) ====================
+family         tasks  valid 1st valid +retry  default ok  coverable w/ branch params branches
+---------------------------------------------------------------------------------------------
+sort_number        1          1            1           1             0/2 (0%)    0.0      1.0
+sort_size          1          1            1           0             0/2 (0%)    0.0      1.0
+group_colour       1          1            1           1             0/2 (0%)    0.0      1.0
+colour_to_bin      1          1            1           1             0/2 (0%)    0.0      1.0
+all_except         1          1            1           1             0/2 (0%)    0.0      1.0
+alternate          1          1            1           1           2/2 (100%)    1.0      2.0
+parity_bins        1          1            1           1             0/2 (0%)    0.0      1.0
+all                7          7            7           6           2/14 (14%)    0.1      1.1
+latency ms p50/p95: 2015/7185; tokens in/out per plan (mean): 1038/199
+
+==================== E13: Jev router (step 2) ====================
+route accuracy vs truth for this plan (continue / adjust / new_plan_needed / pause), by correction category
+  coverable       13/14 (93%)   answered: new_plan_needed 11, adjust 3
+  uncoverable    14/14 (100%)   answered: new_plan_needed 14
+  chatter          6/6 (100%)   answered: continue 6
+  pause            1/1 (100%)   answered: pause 1
+  all             34/35 (97%)   answered: new_plan_needed 25, continue 6, adjust 3, pause 1
+branch pick, ungated, where a prepared branch is the answer (n=2): right branch 2
+decisions at gate 0.7: route_new_plan 25, continue 6, adjust 2, low_confidence 1, pause 1
+
+gate sweep (offline, same answers): Jev keeps (its accuracy) / escalates / its mistakes caught / end-to-end accuracy / latency p50/p95 ms
+  >=0.3: keeps  26% ( 89% right)  escalates  74%  caught 0/1  e2e 94%              latency 3708/7227
+  >=0.4: keeps  26% ( 89% right)  escalates  74%  caught 0/1  e2e 94%              latency 3708/7227
+  >=0.5: keeps  26% ( 89% right)  escalates  74%  caught 0/1  e2e 94%              latency 3708/7227
+  >=0.6: keeps  26% ( 89% right)  escalates  74%  caught 0/1  e2e 94%              latency 3708/7227
+  >=0.7: keeps  26% ( 89% right)  escalates  74%  caught 0/1  e2e 94%              latency 3708/7227
+  >=0.8: keeps  26% ( 89% right)  escalates  74%  caught 0/1  e2e 94%              latency 3708/7227
+  >=0.9: keeps  26% ( 89% right)  escalates  74%  caught 0/1  e2e 94%              latency 3708/7227
+Jev latency ms p50/p95: 87/183; errors 0/35
+
+==================== E13: end to end per correction, gate 0.7 ====================
+category        n   system right jev ok jev bad esc ok esc bad   p50/p95 ms   always-LLM right   p50/p95 ms
+-----------------------------------------------------------------------------------------------------------
+coverable      14    13/14 (93%)      2       0     11       1    4081/6943        13/14 (93%)    4344/6846
+uncoverable    14   14/14 (100%)      0       0     14       0    3243/7445       14/14 (100%)    3125/7326
+chatter         6      5/6 (83%)      5       1      0       0       86/264          5/6 (83%)    2118/4621
+pause           1     1/1 (100%)      1       0      0       0        77/77         1/1 (100%)    1866/1866
+all            35    33/35 (94%)      8       1     25       1    3708/7227        33/35 (94%)    3889/7121
+escalation calls: 35; valid 1st try 35, valid after retry 35, correct 33; tokens in/out mean 1315/283
+only tasks whose default branch was right: system 30/30 (100%)
+system accuracy by task family: sort_number 5/5, sort_size 3/5, group_colour 5/5, colour_to_bin 5/5, all_except 5/5, alternate 5/5, parity_bins 5/5
+
+LLM calls 42; Jev input tokens 28303 ≈ $0.0012; log /Users/anthonylee/code/robojev/.claude/worktrees/widowx-doom-loop-fc1569/experiments/results/e13_branches.jsonl
+
+$ uv run --extra llm python e13_branches.py --llm openai --jev jev --llm-model gpt-5.6-terra --llm-price-in 2 --llm-price-out 12
+E13: 28 tasks, 140 corrections; LLM=openai Jev=jev gate=0.7
+planned calls: LLM 28 plans (+ up to 28 validation retries) + 140 escalations (+ retries); Jev 140
+  5/28 tasks, LLM calls 30
+  10/28 tasks, LLM calls 60
+  15/28 tasks, LLM calls 90
+  20/28 tasks, LLM calls 120
+  25/28 tasks, LLM calls 151
+
+==================== E13: planner (step 1) ====================
+family         tasks  valid 1st valid +retry  default ok  coverable w/ branch params branches
+---------------------------------------------------------------------------------------------
+sort_number        4          4            4           4             0/8 (0%)    0.0      1.0
+sort_size          4          4            4           4             0/8 (0%)    0.0      1.0
+group_colour       4          4            4           4             0/8 (0%)    0.0      1.0
+colour_to_bin      4          4            4           4            2/8 (25%)    0.2      1.2
+all_except         4          4            4           4             0/8 (0%)    0.0      1.0
+alternate          4          4            4           4             0/8 (0%)    0.5      1.8
+parity_bins        4          4            4           4             0/8 (0%)    0.0      1.0
+all               28         28           28          28            2/56 (4%)    0.1      1.1
+latency ms p50/p95: 2336/7102; tokens in/out per plan (mean): 999/186
+
+==================== E13: Jev router (step 2) ====================
+route accuracy vs truth for this plan (continue / adjust / new_plan_needed / pause), by correction category
+  coverable      56/56 (100%)   answered: new_plan_needed 54, adjust 2
+  uncoverable    56/56 (100%)   answered: new_plan_needed 56
+  restate          1/1 (100%)   answered: continue 1
+  chatter         18/20 (90%)   answered: continue 18, new_plan_needed 2
+  pause            7/7 (100%)   answered: pause 7
+  all           138/140 (99%)   answered: new_plan_needed 112, continue 19, pause 7, adjust 2
+branch pick, ungated, where a prepared branch is the answer (n=2): right branch 2
+decisions at gate 0.7: route_new_plan 112, continue 19, pause 7, adjust 2
+
+gate sweep (offline, same answers): Jev keeps (its accuracy) / escalates / its mistakes caught / end-to-end accuracy / latency p50/p95 ms
+  >=0.3: keeps  20% (100% right)  escalates  80%  caught 0/0  e2e 98%              latency 3973/7079
+  >=0.4: keeps  20% (100% right)  escalates  80%  caught 0/0  e2e 98%              latency 3973/7079
+  >=0.5: keeps  20% (100% right)  escalates  80%  caught 0/0  e2e 98%              latency 3973/7079
+  >=0.6: keeps  20% (100% right)  escalates  80%  caught 0/0  e2e 98%              latency 3973/7079
+  >=0.7: keeps  20% (100% right)  escalates  80%  caught 0/0  e2e 98%              latency 3973/7079
+  >=0.8: keeps  20% (100% right)  escalates  80%  caught 0/0  e2e 98%              latency 3973/7079
+  >=0.9: keeps  20% (100% right)  escalates  80%  caught 0/0  e2e 98%              latency 3973/7079
+Jev latency ms p50/p95: 99/176; errors 0/140
+
+==================== E13: end to end per correction, gate 0.7 ====================
+category        n   system right jev ok jev bad esc ok esc bad   p50/p95 ms   always-LLM right   p50/p95 ms
+-----------------------------------------------------------------------------------------------------------
+coverable      56    55/56 (98%)      2       0     53       1    4195/6921        55/56 (98%)    4100/6760
+uncoverable    56    54/56 (96%)      0       0     54       2    4992/8556        54/56 (96%)    4883/8454
+restate         1     1/1 (100%)      1       0      0       0        94/94         1/1 (100%)    2369/2369
+chatter        20   20/20 (100%)     18       0      2       0     124/2108       20/20 (100%)    2131/4404
+pause           7     7/7 (100%)      7       0      0       0      128/154         7/7 (100%)    2072/2786
+all           140  137/140 (98%)     28       0    109       3    3973/7079      137/140 (98%)    4056/7000
+escalation calls: 140; valid 1st try 139, valid after retry 140, correct 137; tokens in/out mean 1277/297
+system accuracy by task family: sort_number 20/20, sort_size 19/20, group_colour 19/20, colour_to_bin 20/20, all_except 20/20, alternate 20/20, parity_bins 19/20
+
+LLM calls 169; Jev input tokens 111933 ≈ $0.0047; log /Users/anthonylee/code/robojev/.claude/worktrees/widowx-doom-loop-fc1569/experiments/results/e13_branches.jsonl
+
+$ uv run --extra llm python e13_branches.py --llm openai --jev jev --llm-model gpt-6-luna --llm-price-in 0.10 --llm-price-out 0.50
+E13: 28 tasks, 140 corrections; LLM=openai Jev=jev gate=0.7
+planned calls: LLM 28 plans (+ up to 28 validation retries) + 140 escalations (+ retries); Jev 140
+  5/28 tasks, LLM calls 30
+  10/28 tasks, LLM calls 60
+  15/28 tasks, LLM calls 90
+  20/28 tasks, LLM calls 120
+  25/28 tasks, LLM calls 150
+
+==================== E13: planner (step 1) ====================
+family         tasks  valid 1st valid +retry  default ok  coverable w/ branch params branches
+---------------------------------------------------------------------------------------------
+sort_number        4          4            4           4             0/8 (0%)    0.0      1.0
+sort_size          4          4            4           4             0/8 (0%)    0.0      1.0
+group_colour       4          4            4           4             0/8 (0%)    0.0      1.0
+colour_to_bin      4          4            4           4             0/8 (0%)    0.0      1.0
+all_except         4          4            4           4             0/8 (0%)    0.0      1.0
+alternate          4          4            4           4             0/8 (0%)    1.2      2.5
+parity_bins        4          4            4           4            4/8 (50%)    0.5      1.5
+all               28         28           28          28            4/56 (7%)    0.2      1.3
+latency ms p50/p95: 2994/8576; tokens in/out per plan (mean): 999/324
+
+==================== E13: Jev router (step 2) ====================
+route accuracy vs truth for this plan (continue / adjust / new_plan_needed / pause), by correction category
+  coverable       54/56 (96%)   answered: new_plan_needed 50, adjust 6
+  uncoverable     55/56 (98%)   answered: new_plan_needed 56
+  restate          1/1 (100%)   answered: continue 1
+  chatter         18/20 (90%)   answered: continue 18, new_plan_needed 2
+  pause            7/7 (100%)   answered: pause 7
+  all           135/140 (96%)   answered: new_plan_needed 108, continue 19, pause 7, adjust 6
+branch pick, ungated, where a prepared branch is the answer (n=4): right branch 4
+decisions at gate 0.7: route_new_plan 108, continue 19, pause 7, adjust 4, low_confidence 2
+
+gate sweep (offline, same answers): Jev keeps (its accuracy) / escalates / its mistakes caught / end-to-end accuracy / latency p50/p95 ms
+  >=0.3: keeps  21% (100% right)  escalates  79%  caught 0/0  e2e 98%              latency 2599/6325
+  >=0.4: keeps  21% (100% right)  escalates  79%  caught 0/0  e2e 98%              latency 2599/6325
+  >=0.5: keeps  21% (100% right)  escalates  79%  caught 0/0  e2e 98%              latency 2599/6325
+  >=0.6: keeps  21% (100% right)  escalates  79%  caught 0/0  e2e 98%              latency 2599/6325
+  >=0.7: keeps  21% (100% right)  escalates  79%  caught 0/0  e2e 98%              latency 2599/6325
+  >=0.8: keeps  21% (100% right)  escalates  79%  caught 0/0  e2e 98%              latency 2612/6325
+  >=0.9: keeps  21% (100% right)  escalates  79%  caught 0/0  e2e 98%              latency 2612/6325
+Jev latency ms p50/p95: 97/164; errors 0/140
+
+==================== E13: end to end per correction, gate 0.7 ====================
+category        n   system right jev ok jev bad esc ok esc bad   p50/p95 ms   always-LLM right   p50/p95 ms
+-----------------------------------------------------------------------------------------------------------
+coverable      56    54/56 (96%)      4       0     50       2    2712/8759        54/56 (96%)    2766/8623
+uncoverable    56    55/56 (98%)      0       0     55       1    2778/4934        55/56 (98%)    2684/4858
+restate         1     1/1 (100%)      1       0      0       0        73/73         1/1 (100%)    2563/2563
+chatter        20   20/20 (100%)     18       0      2       0      95/2243       20/20 (100%)    2214/4909
+pause           7     7/7 (100%)      7       0      0       0      100/112         7/7 (100%)    2502/3468
+all           140  137/140 (98%)     30       0    107       3    2599/6325      137/140 (98%)    2679/6250
+escalation calls: 140; valid 1st try 140, valid after retry 140, correct 137; tokens in/out mean 1279/260
+system accuracy by task family: sort_number 20/20, sort_size 20/20, group_colour 20/20, colour_to_bin 20/20, all_except 20/20, alternate 19/20, parity_bins 18/20
+
+LLM calls 168; Jev input tokens 117993 ≈ $0.0050; log /Users/anthonylee/code/robojev/.claude/worktrees/widowx-doom-loop-fc1569/experiments/results/e13_branches.jsonl
+
+$ uv run --extra llm python e13_branches.py --llm openai --jev jev --llm-model gpt-6-sol --llm-price-in 2 --llm-price-out 10
+# (gpt-6-sol run stopped by hand at 8/28 tasks; its partial log stays in e13_branches.jsonl as run 20260924-154511)
+
+$ uv run python e13_branches.py --replay results/e13_branches.jsonl --run-id 20260924-152359 --gate 0.5
+
+==================== replay e13_branches.jsonl run 20260924-152359: planner (step 1) ====================
+family         tasks  valid 1st valid +retry  default ok  coverable w/ branch params branches
+---------------------------------------------------------------------------------------------
+sort_number        4          4            4           4             0/8 (0%)    0.0      1.0
+sort_size          4          4            4           4             0/8 (0%)    0.0      1.0
+group_colour       4          4            4           4             0/8 (0%)    0.0      1.0
+colour_to_bin      4          4            4           4            2/8 (25%)    0.2      1.2
+all_except         4          4            4           4             0/8 (0%)    0.0      1.0
+alternate          4          4            4           4             0/8 (0%)    0.5      1.8
+parity_bins        4          4            4           4             0/8 (0%)    0.0      1.0
+all               28         28           28          28            2/56 (4%)    0.1      1.1
+latency ms p50/p95: 2336/7102; tokens in/out per plan (mean): 999/186
+
+==================== replay e13_branches.jsonl run 20260924-152359: Jev router (step 2) ====================
+route accuracy vs truth for this plan (continue / adjust / new_plan_needed / pause), by correction category
+  coverable      56/56 (100%)   answered: new_plan_needed 54, adjust 2
+  uncoverable    56/56 (100%)   answered: new_plan_needed 56
+  restate          1/1 (100%)   answered: continue 1
+  chatter         18/20 (90%)   answered: continue 18, new_plan_needed 2
+  pause            7/7 (100%)   answered: pause 7
+  all           138/140 (99%)   answered: new_plan_needed 112, continue 19, pause 7, adjust 2
+branch pick, ungated, where a prepared branch is the answer (n=2): right branch 2
+decisions at gate 0.5: route_new_plan 112, continue 19, pause 7, adjust 2
+
+gate sweep (offline, same answers): Jev keeps (its accuracy) / escalates / its mistakes caught / end-to-end accuracy / latency p50/p95 ms
+  >=0.3: keeps  20% (100% right)  escalates  80%  caught 0/0  e2e 98%              latency 3973/7079
+  >=0.4: keeps  20% (100% right)  escalates  80%  caught 0/0  e2e 98%              latency 3973/7079
+  >=0.5: keeps  20% (100% right)  escalates  80%  caught 0/0  e2e 98%              latency 3973/7079
+  >=0.6: keeps  20% (100% right)  escalates  80%  caught 0/0  e2e 98%              latency 3973/7079
+  >=0.7: keeps  20% (100% right)  escalates  80%  caught 0/0  e2e 98%              latency 3973/7079
+  >=0.8: keeps  20% (100% right)  escalates  80%  caught 0/0  e2e 98%              latency 3973/7079
+  >=0.9: keeps  20% (100% right)  escalates  80%  caught 0/0  e2e 98%              latency 3973/7079
+Jev latency ms p50/p95: 99/176; errors 0/140
+
+==================== replay e13_branches.jsonl run 20260924-152359: end to end per correction, gate 0.5 ====================
+category        n   system right jev ok jev bad esc ok esc bad   p50/p95 ms   always-LLM right   p50/p95 ms
+-----------------------------------------------------------------------------------------------------------
+coverable      56    55/56 (98%)      2       0     53       1    4195/6921        55/56 (98%)    4100/6760
+uncoverable    56    54/56 (96%)      0       0     54       2    4992/8556        54/56 (96%)    4883/8454
+restate         1     1/1 (100%)      1       0      0       0        94/94         1/1 (100%)    2369/2369
+chatter        20   20/20 (100%)     18       0      2       0     124/2108       20/20 (100%)    2131/4404
+pause           7     7/7 (100%)      7       0      0       0      128/154         7/7 (100%)    2072/2786
+all           140  137/140 (98%)     28       0    109       3    3973/7079      137/140 (98%)    4056/7000
+escalation calls: 140; valid 1st try 139, valid after retry 140, correct 137; tokens in/out mean 1277/297
+system accuracy by task family: sort_number 20/20, sort_size 19/20, group_colour 19/20, colour_to_bin 20/20, all_except 20/20, alternate 20/20, parity_bins 19/20
+
+$ uv run python e13_branches.py --replay results/e13_branches.jsonl --run-id 20260924-152359 --gate 0.7
+
+==================== replay e13_branches.jsonl run 20260924-152359: planner (step 1) ====================
+family         tasks  valid 1st valid +retry  default ok  coverable w/ branch params branches
+---------------------------------------------------------------------------------------------
+sort_number        4          4            4           4             0/8 (0%)    0.0      1.0
+sort_size          4          4            4           4             0/8 (0%)    0.0      1.0
+group_colour       4          4            4           4             0/8 (0%)    0.0      1.0
+colour_to_bin      4          4            4           4            2/8 (25%)    0.2      1.2
+all_except         4          4            4           4             0/8 (0%)    0.0      1.0
+alternate          4          4            4           4             0/8 (0%)    0.5      1.8
+parity_bins        4          4            4           4             0/8 (0%)    0.0      1.0
+all               28         28           28          28            2/56 (4%)    0.1      1.1
+latency ms p50/p95: 2336/7102; tokens in/out per plan (mean): 999/186
+
+==================== replay e13_branches.jsonl run 20260924-152359: Jev router (step 2) ====================
+route accuracy vs truth for this plan (continue / adjust / new_plan_needed / pause), by correction category
+  coverable      56/56 (100%)   answered: new_plan_needed 54, adjust 2
+  uncoverable    56/56 (100%)   answered: new_plan_needed 56
+  restate          1/1 (100%)   answered: continue 1
+  chatter         18/20 (90%)   answered: continue 18, new_plan_needed 2
+  pause            7/7 (100%)   answered: pause 7
+  all           138/140 (99%)   answered: new_plan_needed 112, continue 19, pause 7, adjust 2
+branch pick, ungated, where a prepared branch is the answer (n=2): right branch 2
+decisions at gate 0.7: route_new_plan 112, continue 19, pause 7, adjust 2
+
+gate sweep (offline, same answers): Jev keeps (its accuracy) / escalates / its mistakes caught / end-to-end accuracy / latency p50/p95 ms
+  >=0.3: keeps  20% (100% right)  escalates  80%  caught 0/0  e2e 98%              latency 3973/7079
+  >=0.4: keeps  20% (100% right)  escalates  80%  caught 0/0  e2e 98%              latency 3973/7079
+  >=0.5: keeps  20% (100% right)  escalates  80%  caught 0/0  e2e 98%              latency 3973/7079
+  >=0.6: keeps  20% (100% right)  escalates  80%  caught 0/0  e2e 98%              latency 3973/7079
+  >=0.7: keeps  20% (100% right)  escalates  80%  caught 0/0  e2e 98%              latency 3973/7079
+  >=0.8: keeps  20% (100% right)  escalates  80%  caught 0/0  e2e 98%              latency 3973/7079
+  >=0.9: keeps  20% (100% right)  escalates  80%  caught 0/0  e2e 98%              latency 3973/7079
+Jev latency ms p50/p95: 99/176; errors 0/140
+
+==================== replay e13_branches.jsonl run 20260924-152359: end to end per correction, gate 0.7 ====================
+category        n   system right jev ok jev bad esc ok esc bad   p50/p95 ms   always-LLM right   p50/p95 ms
+-----------------------------------------------------------------------------------------------------------
+coverable      56    55/56 (98%)      2       0     53       1    4195/6921        55/56 (98%)    4100/6760
+uncoverable    56    54/56 (96%)      0       0     54       2    4992/8556        54/56 (96%)    4883/8454
+restate         1     1/1 (100%)      1       0      0       0        94/94         1/1 (100%)    2369/2369
+chatter        20   20/20 (100%)     18       0      2       0     124/2108       20/20 (100%)    2131/4404
+pause           7     7/7 (100%)      7       0      0       0      128/154         7/7 (100%)    2072/2786
+all           140  137/140 (98%)     28       0    109       3    3973/7079      137/140 (98%)    4056/7000
+escalation calls: 140; valid 1st try 139, valid after retry 140, correct 137; tokens in/out mean 1277/297
+system accuracy by task family: sort_number 20/20, sort_size 19/20, group_colour 19/20, colour_to_bin 20/20, all_except 20/20, alternate 20/20, parity_bins 19/20
+
+$ uv run python e13_branches.py --replay results/e13_branches.jsonl --run-id 20260924-153515 --gate 0.5
+
+==================== replay e13_branches.jsonl run 20260924-153515: planner (step 1) ====================
+family         tasks  valid 1st valid +retry  default ok  coverable w/ branch params branches
+---------------------------------------------------------------------------------------------
+sort_number        4          4            4           4             0/8 (0%)    0.0      1.0
+sort_size          4          4            4           4             0/8 (0%)    0.0      1.0
+group_colour       4          4            4           4             0/8 (0%)    0.0      1.0
+colour_to_bin      4          4            4           4             0/8 (0%)    0.0      1.0
+all_except         4          4            4           4             0/8 (0%)    0.0      1.0
+alternate          4          4            4           4             0/8 (0%)    1.2      2.5
+parity_bins        4          4            4           4            4/8 (50%)    0.5      1.5
+all               28         28           28          28            4/56 (7%)    0.2      1.3
+latency ms p50/p95: 2994/8576; tokens in/out per plan (mean): 999/324
+
+==================== replay e13_branches.jsonl run 20260924-153515: Jev router (step 2) ====================
+route accuracy vs truth for this plan (continue / adjust / new_plan_needed / pause), by correction category
+  coverable       54/56 (96%)   answered: new_plan_needed 50, adjust 6
+  uncoverable     55/56 (98%)   answered: new_plan_needed 56
+  restate          1/1 (100%)   answered: continue 1
+  chatter         18/20 (90%)   answered: continue 18, new_plan_needed 2
+  pause            7/7 (100%)   answered: pause 7
+  all           135/140 (96%)   answered: new_plan_needed 108, continue 19, pause 7, adjust 6
+branch pick, ungated, where a prepared branch is the answer (n=4): right branch 4
+decisions at gate 0.5: route_new_plan 108, continue 19, pause 7, adjust 4, low_confidence 2
+
+gate sweep (offline, same answers): Jev keeps (its accuracy) / escalates / its mistakes caught / end-to-end accuracy / latency p50/p95 ms
+  >=0.3: keeps  21% (100% right)  escalates  79%  caught 0/0  e2e 98%              latency 2599/6325
+  >=0.4: keeps  21% (100% right)  escalates  79%  caught 0/0  e2e 98%              latency 2599/6325
+  >=0.5: keeps  21% (100% right)  escalates  79%  caught 0/0  e2e 98%              latency 2599/6325
+  >=0.6: keeps  21% (100% right)  escalates  79%  caught 0/0  e2e 98%              latency 2599/6325
+  >=0.7: keeps  21% (100% right)  escalates  79%  caught 0/0  e2e 98%              latency 2599/6325
+  >=0.8: keeps  21% (100% right)  escalates  79%  caught 0/0  e2e 98%              latency 2612/6325
+  >=0.9: keeps  21% (100% right)  escalates  79%  caught 0/0  e2e 98%              latency 2612/6325
+Jev latency ms p50/p95: 97/164; errors 0/140
+
+==================== replay e13_branches.jsonl run 20260924-153515: end to end per correction, gate 0.5 ====================
+category        n   system right jev ok jev bad esc ok esc bad   p50/p95 ms   always-LLM right   p50/p95 ms
+-----------------------------------------------------------------------------------------------------------
+coverable      56    54/56 (96%)      4       0     50       2    2712/8759        54/56 (96%)    2766/8623
+uncoverable    56    55/56 (98%)      0       0     55       1    2778/4934        55/56 (98%)    2684/4858
+restate         1     1/1 (100%)      1       0      0       0        73/73         1/1 (100%)    2563/2563
+chatter        20   20/20 (100%)     18       0      2       0      95/2243       20/20 (100%)    2214/4909
+pause           7     7/7 (100%)      7       0      0       0      100/112         7/7 (100%)    2502/3468
+all           140  137/140 (98%)     30       0    107       3    2599/6325      137/140 (98%)    2679/6250
+escalation calls: 140; valid 1st try 140, valid after retry 140, correct 137; tokens in/out mean 1279/260
+system accuracy by task family: sort_number 20/20, sort_size 20/20, group_colour 20/20, colour_to_bin 20/20, all_except 20/20, alternate 19/20, parity_bins 18/20
+
+$ uv run python e13_branches.py --replay results/e13_branches.jsonl --run-id 20260924-153515 --gate 0.7
+
+==================== replay e13_branches.jsonl run 20260924-153515: planner (step 1) ====================
+family         tasks  valid 1st valid +retry  default ok  coverable w/ branch params branches
+---------------------------------------------------------------------------------------------
+sort_number        4          4            4           4             0/8 (0%)    0.0      1.0
+sort_size          4          4            4           4             0/8 (0%)    0.0      1.0
+group_colour       4          4            4           4             0/8 (0%)    0.0      1.0
+colour_to_bin      4          4            4           4             0/8 (0%)    0.0      1.0
+all_except         4          4            4           4             0/8 (0%)    0.0      1.0
+alternate          4          4            4           4             0/8 (0%)    1.2      2.5
+parity_bins        4          4            4           4            4/8 (50%)    0.5      1.5
+all               28         28           28          28            4/56 (7%)    0.2      1.3
+latency ms p50/p95: 2994/8576; tokens in/out per plan (mean): 999/324
+
+==================== replay e13_branches.jsonl run 20260924-153515: Jev router (step 2) ====================
+route accuracy vs truth for this plan (continue / adjust / new_plan_needed / pause), by correction category
+  coverable       54/56 (96%)   answered: new_plan_needed 50, adjust 6
+  uncoverable     55/56 (98%)   answered: new_plan_needed 56
+  restate          1/1 (100%)   answered: continue 1
+  chatter         18/20 (90%)   answered: continue 18, new_plan_needed 2
+  pause            7/7 (100%)   answered: pause 7
+  all           135/140 (96%)   answered: new_plan_needed 108, continue 19, pause 7, adjust 6
+branch pick, ungated, where a prepared branch is the answer (n=4): right branch 4
+decisions at gate 0.7: route_new_plan 108, continue 19, pause 7, adjust 4, low_confidence 2
+
+gate sweep (offline, same answers): Jev keeps (its accuracy) / escalates / its mistakes caught / end-to-end accuracy / latency p50/p95 ms
+  >=0.3: keeps  21% (100% right)  escalates  79%  caught 0/0  e2e 98%              latency 2599/6325
+  >=0.4: keeps  21% (100% right)  escalates  79%  caught 0/0  e2e 98%              latency 2599/6325
+  >=0.5: keeps  21% (100% right)  escalates  79%  caught 0/0  e2e 98%              latency 2599/6325
+  >=0.6: keeps  21% (100% right)  escalates  79%  caught 0/0  e2e 98%              latency 2599/6325
+  >=0.7: keeps  21% (100% right)  escalates  79%  caught 0/0  e2e 98%              latency 2599/6325
+  >=0.8: keeps  21% (100% right)  escalates  79%  caught 0/0  e2e 98%              latency 2612/6325
+  >=0.9: keeps  21% (100% right)  escalates  79%  caught 0/0  e2e 98%              latency 2612/6325
+Jev latency ms p50/p95: 97/164; errors 0/140
+
+==================== replay e13_branches.jsonl run 20260924-153515: end to end per correction, gate 0.7 ====================
+category        n   system right jev ok jev bad esc ok esc bad   p50/p95 ms   always-LLM right   p50/p95 ms
+-----------------------------------------------------------------------------------------------------------
+coverable      56    54/56 (96%)      4       0     50       2    2712/8759        54/56 (96%)    2766/8623
+uncoverable    56    55/56 (98%)      0       0     55       1    2778/4934        55/56 (98%)    2684/4858
+restate         1     1/1 (100%)      1       0      0       0        73/73         1/1 (100%)    2563/2563
+chatter        20   20/20 (100%)     18       0      2       0      95/2243       20/20 (100%)    2214/4909
+pause           7     7/7 (100%)      7       0      0       0      100/112         7/7 (100%)    2502/3468
+all           140  137/140 (98%)     30       0    107       3    2599/6325      137/140 (98%)    2679/6250
+escalation calls: 140; valid 1st try 140, valid after retry 140, correct 137; tokens in/out mean 1279/260
+system accuracy by task family: sort_number 20/20, sort_size 20/20, group_colour 20/20, colour_to_bin 20/20, all_except 20/20, alternate 19/20, parity_bins 18/20
+
+$ uv run python e13_events.py results/e13_branches.jsonl
+run 20260924-151759  model gpt-5.6-terra  gate 0.7  tasks 7  corrections 35
+  latency ms p50/p95/max:  Jev 87 / 183 / 300 | LLM plan 2015 / 7185 / 8497 | LLM per correction 3889 / 7121 / 8174 | system per correction 3708 / 7227 / 8352
+  LLM tokens per plan: in 1038 (cached 0), out 199 (reasoning 0);  per correction: in 1315, out 283 (reasoning 0)
+  Jev tokens per request: in 809
+  cost: LLM $0.000 (plans $0.000, corrections $0.000) + Jev $0.0012
+  correct: system 33/35, always-LLM 33/35;  Jev handled 9 (8 right) at p50 93 ms 
+
+run 20260924-152359  model gpt-5.6-terra  gate 0.7  tasks 28  corrections 140
+  latency ms p50/p95/max:  Jev 99 / 176 / 380 | LLM plan 2336 / 7102 / 7769 | LLM per correction 4056 / 7000 / 11123 | system per correction 3973 / 7079 / 11192
+  LLM tokens per plan: in 999 (cached 117), out 186 (reasoning 38);  per correction: in 1277, out 297 (reasoning 43)
+  Jev tokens per request: in 800
+  cost: LLM $0.975 (plans $0.119, corrections $0.857) + Jev $0.0047
+  correct: system 137/140, always-LLM 137/140;  Jev handled 28 (28 right) at p50 107 ms 
+
+run 20260924-153515  model gpt-6-luna  gate 0.7  tasks 28  corrections 140
+  latency ms p50/p95/max:  Jev 96 / 164 / 223 | LLM plan 2994 / 8575 / 12133 | LLM per correction 2678 / 6250 / 25174 | system per correction 2600 / 6326 / 25268
+  LLM tokens per plan: in 999 (cached 0), out 324 (reasoning 138);  per correction: in 1279, out 260 (reasoning 85)
+  Jev tokens per request: in 843
+  cost: LLM $0.043 (plans $0.007, corrections $0.036) + Jev $0.0050
+  correct: system 137/140, always-LLM 137/140;  Jev handled 30 (30 right) at p50 95 ms 
+
+run 20260924-154511  model gpt-6-sol  gate 0.7  tasks 9  corrections 42
+  latency ms p50/p95/max:  Jev 149 / 202 / 224 | LLM plan 6677 / 15516 / 16841 | LLM per correction 5410 / 11060 / 30006 | system per correction 2780 / 11202 / 30173
+  LLM tokens per plan: in 1037 (cached 0), out 533 (reasoning 115);  per correction: in 1379, out 414 (reasoning 85)
+  Jev tokens per request: in 1054
+  cost: LLM $0.356 (plans $0.067, corrections $0.290) + Jev $0.0019
+  correct: system 41/42, always-LLM 41/42;  Jev handled 20 (20 right) at p50 154 ms 
+

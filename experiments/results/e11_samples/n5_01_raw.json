@@ -1,0 +1,114 @@
+{
+ "request": {
+  "state": {
+   "task_before": "Arrange the numbered blocks on the table in descending order.",
+   "order_definitions": {
+    "slots": "Slots are numbered left to right as seen from the robot: slot 1 is the robot's left end, the highest slot number its right end.",
+    "ascending": "smallest number in slot 1 (robot's left), numbers increasing toward the right",
+    "descending": "largest number in slot 1 (robot's left), numbers decreasing toward the right"
+   },
+   "row": [
+    {
+     "slot": 1,
+     "block": "block 13"
+    },
+    {
+     "slot": 2,
+     "block": "block 10"
+    },
+    {
+     "slot": 3,
+     "block": "block 3"
+    },
+    {
+     "slot": 4,
+     "block": "block 1"
+    },
+    {
+     "slot": 5,
+     "block": "block 8"
+    }
+   ],
+   "arm": {
+    "holding": "nothing"
+   },
+   "user_just_said": "actually, reverse it"
+  },
+  "model": "jev-1.13.0",
+  "questions": {
+   "intent": {
+    "type": "choice",
+    "instructions": {
+     "question": "What is the user's latest message (`user_just_said`) asking the robot to do?",
+     "context": "The robot is partway through `task_before`."
+    },
+    "criteria": {
+     "stop": "Stop right now, halt all motion (e.g. 'stop!', 'freeze')",
+     "pause": "Wait a moment, then carry on with the same task (e.g. 'hold on', 'one sec')",
+     "adjust_order": "Keep sorting the same blocks but end in a different order (e.g. 'reverse it', 'biggest first')",
+     "continue": "Carry on exactly as before; confirms the current plan (e.g. 'keep going', 'looks good')",
+     "adjust_pace": "Same task, different speed (e.g. 'slower', 'faster')",
+     "new_task": "Drop the blocks task and do something else",
+     "not_for_me": "The message is addressed to someone else, or is not an instruction for the robot"
+    }
+   },
+   "new_order": {
+    "type": "choice",
+    "instructions": {
+     "question": "After the user's latest message (`user_just_said`), in which order should the blocks end up?",
+     "definitions": {
+      "slots": "Slots are numbered left to right as seen from the robot: slot 1 is the robot's left end, the highest slot number its right end.",
+      "ascending": "smallest number in slot 1 (robot's left), numbers increasing toward the right",
+      "descending": "largest number in slot 1 (robot's left), numbers decreasing toward the right"
+     }
+    },
+    "criteria": {
+     "ascending": "smallest number in slot 1 (robot's left), numbers increasing toward the right",
+     "descending": "largest number in slot 1 (robot's left), numbers decreasing toward the right",
+     "unchanged": "The message does not change the order; keep the order from `task_before`"
+    }
+   },
+   "escalate": {
+    "type": "choice",
+    "instructions": {
+     "question": "Can the robot's next move be decided confidently from this state alone, by direct lookup, without careful multi-step reasoning?",
+     "next_move_means": "which way to carry the held block, or which block to pick up next, in the order the user now wants"
+    },
+    "criteria": {
+     "decide_now": "The user's wish is clear and the next move can be read directly off facts listed in the state",
+     "ask_a_smarter_model": "The message is ambiguous, or the next move needs ranking, counting or several reasoning steps not already done in the state"
+    }
+   },
+   "next_pick": {
+    "type": "choice",
+    "instructions": {
+     "question": "The arm's hand is empty. Given the order the user now wants, which block should it pick up next?",
+     "rule": "Find the leftmost slot (lowest slot number) whose block is not the one that belongs there in the wanted order; the answer is the block that belongs in that slot.",
+     "notes": [
+      "Slots are numbered left to right as seen from the robot: slot 1 is the robot's left end, the highest slot number its right end.",
+      "If `user_just_said` does not change the order, the wanted order is the one in `task_before`."
+     ]
+    },
+    "criteria": {
+     "block 1": "block 1, now in slot 4",
+     "block 3": "block 3, now in slot 3",
+     "block 8": "block 8, now in slot 5",
+     "block 10": "block 10, now in slot 2",
+     "block 13": "block 13, now in slot 1",
+     "nothing, the row is already in order": "Every slot already holds the block that belongs there in the wanted order"
+    }
+   }
+  }
+ },
+ "truth": {
+  "intent": [
+   "adjust_order"
+  ],
+  "new_order": [
+   "ascending"
+  ],
+  "next_pick": [
+   "block 1"
+  ]
+ }
+}

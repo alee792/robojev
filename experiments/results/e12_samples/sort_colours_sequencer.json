@@ -1,0 +1,144 @@
+{
+ "scenario": "sort_colours",
+ "variant": "solved",
+ "tick": 37,
+ "reason": "arm idle",
+ "telling": true,
+ "request": {
+  "state": {
+   "orders": [
+    {
+     "order": "While a person's hand is within 40 cm of the gripper, keep at least 15 cm from it and never move toward it.",
+     "status": "off (applies only while a person's hand is within 40 cm of the gripper)"
+    }
+   ],
+   "task": "Put each block into the bin of its own colour.",
+   "status": {
+    "holding": "red block A",
+    "gripper": "at (15, 28) cm, up at travel height",
+    "current_skill": "none (waiting for the next skill)",
+    "last_result": "pick(red block A): done: holding red block A"
+   },
+   "knobs": {
+    "pace": "normal"
+   },
+   "scene": {
+    "blocks": [
+     {
+      "name": "red block A",
+      "colour": "red",
+      "where": "in the gripper"
+     },
+     {
+      "name": "red block B",
+      "colour": "red",
+      "where": "on the table at (63, 14) cm"
+     },
+     {
+      "name": "blue block A",
+      "colour": "blue",
+      "where": "on the table at (51, 28) cm"
+     },
+     {
+      "name": "blue block B",
+      "colour": "blue",
+      "where": "on the table at (27, 28) cm"
+     },
+     {
+      "name": "green block A",
+      "colour": "green",
+      "where": "on the table at (75, 14) cm"
+     },
+     {
+      "name": "green block B",
+      "colour": "green",
+      "where": "on the table at (39, 14) cm"
+     }
+    ],
+    "bins": [
+     "red bin",
+     "blue bin",
+     "green bin"
+    ]
+   },
+   "facts": {
+    "gripper_is_above": "nothing in particular",
+    "with_the_current_knobs": {
+     "goal_of_each_block": {
+      "red block A": "the red bin",
+      "red block B": "the red bin",
+      "blue block A": "the blue bin",
+      "blue block B": "the blue bin",
+      "green block A": "the green bin",
+      "green block B": "the green bin"
+     },
+     "blocks_not_at_their_goal": [
+      "red block B",
+      "blue block A",
+      "blue block B",
+      "green block A",
+      "green block B"
+     ],
+     "held_block_goes_to": "the red bin",
+     "next_step": "carry_to(the red bin)",
+     "task_complete": false
+    }
+   }
+  },
+  "model": "jev-1.13.0",
+  "questions": {
+   "next_skill": {
+    "type": "choice",
+    "instructions": {
+     "question": "Which skill should the arm run next to make progress on `task`, within `orders`?",
+     "rules": [
+      "Only skills whose preconditions hold right now are listed.",
+      "Each block goes: move above it, pick it, carry it to its goal, place, release, retreat.",
+      "Where `facts` already answers something (where a block belongs, which step is next), use it rather than re-deriving it.",
+      "If `status.last_result` is a failure, choose the skill that recovers (look again, move above the block where it is now, or retreat).",
+      "If a block's goal is taken by another block, carry the held block to a free spot on the table and come back to it later.",
+      "If everything is already where it belongs, choose to stay still."
+     ]
+    },
+    "criteria": {
+     "carry_to:bin:red": "carry red block A to above the red bin",
+     "carry_to:bin:blue": "carry red block A to above the blue bin",
+     "carry_to:bin:green": "carry red block A to above the green bin",
+     "carry_to:park": "carry red block A to a free spot on the table, to set it aside for now",
+     "hold": "stay still for a second"
+    }
+   },
+   "task_status": {
+    "type": "choice",
+    "instructions": {
+     "question": "Is `task` complete?"
+    },
+    "criteria": {
+     "complete": "every block in `task` is at its goal for the current knob values, the gripper holds nothing and is up",
+     "not_complete": "some block is not at its goal yet, or the arm still holds a block or is low"
+    }
+   },
+   "escalate": {
+    "type": "choice",
+    "instructions": {
+     "question": "Can the arm's next step be decided confidently from this state by direct lookup, without careful multi-step reasoning?"
+    },
+    "criteria": {
+     "decide_now": "yes: the answer can be read directly off the state and the options offered",
+     "ask_a_smarter_model": "no: it is unclear, contradictory, refers to something not in the state, or needs several reasoning steps not already done in the state"
+    }
+   }
+  }
+ },
+ "truth": {
+  "next_skill": [
+   "carry_to:bin:red"
+  ],
+  "task_status": [
+   "not_complete"
+  ],
+  "escalate": [
+   "decide_now"
+  ]
+ }
+}
