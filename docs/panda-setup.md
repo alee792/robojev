@@ -27,6 +27,11 @@ core the 1 kHz loop runs on. The control box needs two network links: the dedica
 robot, and Wi-Fi or a second port for the internet. The skill server keeps its network interface, so
 the harness can still run on the MacBook during development (sim or real arm).
 
+The harness and the skill server stay separate processes, joined by a thin local socket (the skills,
+plus pause, resume, stop and a heartbeat). The skill server can then run at real-time priority, keep
+the arm safe if the harness crashes (it holds when the heartbeat stops), and keep the safety filter
+out of the harness's reach. The same interface fronts the sim, the Panda, a YAM or a learned policy.
+
 ## How it fits together
 
 ### The machines and the wires
@@ -148,6 +153,7 @@ minutes and accept only when it reports almost no lost packets. **check**
 
 ## Order of work
 
+0. The discovery spikes below.
 1. Sim: the e12v2 core on MuJoCo Panda on the MacBook, with the same skill interface the server will
    expose.
 2. Control box: `communication_test` passes; franky moves the arm between two poses.
@@ -155,6 +161,30 @@ minutes and accept only when it reports almost no lost packets. **check**
 4. Camera on the Pi; perception events into the harness.
 5. Move the harness onto the control box; run the whole demo from there.
 6. Rehearse the headline correction; keep the physical stop button in hand.
+
+## Discovery spikes
+
+Run these before building. Each one is small, and each answers a question that could change the plan.
+Most need the robot; S5 and S8 don't.
+
+| # | Question | How | Pass when | Blocks |
+|---|---|---|---|---|
+| S1 | Which libfranka does this Panda need, and is FCI on? | Read the system version in Desk; check the compatibility table; activate FCI | Version pinned, FCI active | Everything on the arm |
+| S2 | Does an x86 control box hold 1 kHz? | RT kernel, libfranka 0.9.x, `communication_test` for 10 min, then again with the harness and a CPU load running | Almost no lost packets, no aborts | Option A |
+| S3 | Can the Pi 5 hold 1 kHz instead? | Same as S2 on the Pi with a PREEMPT_RT kernel, one core isolated | Same bar as S2 | Option B |
+| S4 | Does franky (or panda-py) work against 0.9.x, and can it stop a motion mid-way and hold? | Install the matching build; move between two poses 50 times; interrupt a motion and hold; open and close the gripper | All 50 moves clean; hold within ~100 ms, grip kept | The skill server |
+| S5 | Does the e12v2 core run unchanged against a MuJoCo Panda? | Menagerie `franka_emika_panda` behind the skill interface on the MacBook | Sorting episode completes in sim | The skill interface |
+| S6 | Does the skill server's watchdog hold the arm when the harness goes quiet? | Kill the harness mid-motion | Arm holds within the timeout | Demo safety |
+| S7 | Can the Franka Hand reliably pick and place the demo blocks? | 20 picks and places at fixed positions | 19 of 20 or better | Choice of blocks |
+| S8 | Does the camera work on the Pi, and can it see what we need? | Camera driver on the Pi (ARM64); frame rate; depth on small blocks; read block numbers locally or with OpenAI vision | Positions within ~1 cm, numbers read right, under ~300 ms per update | Perception |
+| S9 | Is camera-to-robot calibration good enough to grasp from? | Hand-eye or a fixed marker; touch the gripper to 10 known points | Error under ~1 cm | Picks from vision |
+| S10 | Can perception see a hand reaching in fast enough to pause? | Hand detection on the camera feed, timed from entry to pause | Pause decision within ~500 ms of the hand entering | The walk demo |
+| S11 | What do the arm's own collision reflexes do, and how do we recover? | Bump the arm gently; press the stop button; recover in software | Recovery without a reboot | Demo flow |
+| S12 | How does the new decisions API fit the decision interface? | Once its docs arrive: map the three question groups; measure latency; find a confidence signal for the gate | Same answers and gate as Jev, latency similar | Swapping out Jev |
+| S13 | Is the venue's network good enough? | OpenAI and decision-API latency from the venue, or a hotspot; plan for no internet | Planner p95 under ~8 s, decision p95 under ~400 ms | The live demo |
+
+Order: S1, then S2 and S4 (with S3 if the Pi has to drive), S5 and S8 in parallel off the robot, then
+the rest.
 
 ## Open questions
 
