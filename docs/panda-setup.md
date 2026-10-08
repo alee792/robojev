@@ -1,6 +1,6 @@
 # Panda setup: control box + Raspberry Pi 5
 
-How to run robojev on a Franka Emika Panda for the showcase. Check the parts marked **check** against
+How to run robojev on a Franka Emika Panda for the showcase (the demo itself: `docs/showcase-demo.md`). Check the parts marked **check** against
 the robot before relying on them.
 
 ## The constraint that shapes everything
@@ -182,6 +182,7 @@ Most need the robot; S5 and S8 don't.
 | S11 | What do the arm's own collision reflexes do, and how do we recover? | Bump the arm gently; press the stop button; recover in software | Recovery without a reboot | Demo flow |
 | S12 | Can OpenAI's Decisions API replace Jev, and can it look at camera frames itself? | Put it behind the decision interface; replay the e12v2 scenarios and compare answers, confidence and latency with Jev; then add a camera frame to scene-change decisions | Matches Jev's answers and the 0.8 gate works on its confidence; latency with an image fits the event loop | Swapping out Jev; may shrink S8 and S10 |
 | S13 | Is the venue's network good enough? | OpenAI and decision-API latency from the venue, or a hotspot; plan for no internet | Planner p95 under ~8 s, decision p95 under ~400 ms | The live demo |
+| S14 | Can speech to text keep corrections fast? | OpenAI transcription on a room mic; time from end of speech to text; noisy-room test | Text within ~1 s of the speaker finishing, right in a noisy room | Spoken corrections |
 
 Order: S1, then S2 and S4 (with S3 if the Pi has to drive), S5 and S8 in parallel off the robot, then
 the rest.
