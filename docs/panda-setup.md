@@ -180,7 +180,7 @@ Most need the robot; S5 and S8 don't.
 | S9 | Is camera-to-robot calibration good enough to grasp from? | Hand-eye or a fixed marker; touch the gripper to 10 known points | Error under ~1 cm | Picks from vision |
 | S10 | Can perception see a hand reaching in fast enough to pause? | Hand detection on the camera feed, timed from entry to pause | Pause decision within ~500 ms of the hand entering | The walk demo |
 | S11 | What do the arm's own collision reflexes do, and how do we recover? | Bump the arm gently; press the stop button; recover in software | Recovery without a reboot | Demo flow |
-| S12 | How does the new decisions API fit the decision interface? | Once its docs arrive: map the three question groups; measure latency; find a confidence signal for the gate | Same answers and gate as Jev, latency similar | Swapping out Jev |
+| S12 | Can OpenAI's Decisions API replace Jev, and can it look at camera frames itself? | Put it behind the decision interface; replay the e12v2 scenarios and compare answers, confidence and latency with Jev; then add a camera frame to scene-change decisions | Matches Jev's answers and the 0.8 gate works on its confidence; latency with an image fits the event loop | Swapping out Jev; may shrink S8 and S10 |
 | S13 | Is the venue's network good enough? | OpenAI and decision-API latency from the venue, or a hotspot; plan for no internet | Planner p95 under ~8 s, decision p95 under ~400 ms | The live demo |
 
 Order: S1, then S2 and S4 (with S3 if the Pi has to drive), S5 and S8 in parallel off the robot, then
@@ -191,7 +191,10 @@ the rest.
 - Panda system version (sets the libfranka version).
 - Is there an x86 Ubuntu machine for the control box, or must the Pi do it?
 - What is "Astra": the Orbbec Astra depth camera (a natural fit for the Pi) or something else?
-- Docs for the new decisions API, to put behind the same decision interface as Jev.
+- OpenAI's Decisions API (`POST /v1/decisions`, launched October 2026, in limited preview): what
+  secondhand sources say so far is choice, noul and score questions like Jev, per-option probabilities
+  plus a separate confidence field, and up to 128 inline base64 images per request. Unverified: we
+  haven't read the official docs or got access yet. **check**
 - YAM arm: kept in mind; the skill server interface should cover it too.
 
 ## Sources
