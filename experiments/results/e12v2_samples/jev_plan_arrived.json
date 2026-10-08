@@ -1,0 +1,190 @@
+{
+ "arm": "jev",
+ "event": "the first plan arrived: Line the numbered blocks up in the tray, lowest number on the left.",
+ "request": {
+  "state": {
+   "event": {
+    "kind": "plan arrived",
+    "what_happened": "the first plan arrived: Line the numbered blocks up in the tray, lowest number on the left."
+   },
+   "task": "Line the numbered blocks up in the tray, lowest number on the left.",
+   "robot": {
+    "mode": "running the plan",
+    "holding": "nothing",
+    "new_plan_being_worked_out": "no"
+   },
+   "plan_position": {
+    "current_step": "move_object(block 1 \u2192 tray slot 1 (the leftmost slot))",
+    "arm_in_step": "moving the empty gripper toward block 1 at travel height, 36 cm away; nothing grasped yet",
+    "steps_done": 0,
+    "next_steps": [
+     "move_object(block 3 \u2192 tray slot 2)",
+     "move_object(block 5 \u2192 tray slot 3)"
+    ],
+    "steps_left_after_current": 5
+   },
+   "plan": {
+    "reading": "Line the numbered blocks up in the tray, lowest number on the left.",
+    "steps_to_run": [
+     "move_object(block 1 \u2192 tray slot 1 (the leftmost slot))",
+     "move_object(block 3 \u2192 tray slot 2)",
+     "move_object(block 5 \u2192 tray slot 3)",
+     "move_object(block 7 \u2192 tray slot 4)",
+     "move_object(block 11 \u2192 tray slot 5)",
+     "move_object(block 12 \u2192 tray slot 6 (the rightmost slot))"
+    ],
+    "done_when": [
+     "block_1 is in tray_slot_1",
+     "block_3 is in tray_slot_2",
+     "block_5 is in tray_slot_3",
+     "block_7 is in tray_slot_4",
+     "block_11 is in tray_slot_5",
+     "block_12 is in tray_slot_6"
+    ],
+    "objects_the_plan_never_mentions": []
+   },
+   "hand": "no person's hand in view",
+   "nearby_objects": [
+    {
+     "name": "block 1",
+     "where": "on the table",
+     "distance_from_gripper": "mid-range",
+     "in_the_arms_path": "yes",
+     "its_step": "move_object(block 1 \u2192 tray slot 1 (the leftmost slot)): running",
+     "is_the_current_steps_object": "yes"
+    },
+    {
+     "name": "block 12",
+     "where": "on the table",
+     "distance_from_gripper": "very close",
+     "in_the_arms_path": "yes",
+     "its_step": "move_object(block 12 \u2192 tray slot 6 (the rightmost slot)): pending",
+     "is_the_current_steps_object": "no"
+    },
+    {
+     "name": "block 7",
+     "where": "on the table",
+     "distance_from_gripper": "mid-range",
+     "in_the_arms_path": "yes",
+     "its_step": "move_object(block 7 \u2192 tray slot 4): pending",
+     "is_the_current_steps_object": "no"
+    },
+    {
+     "name": "block 3",
+     "where": "on the table",
+     "distance_from_gripper": "near",
+     "in_the_arms_path": "no",
+     "its_step": "move_object(block 3 \u2192 tray slot 2): pending",
+     "is_the_current_steps_object": "no"
+    },
+    {
+     "name": "block 5",
+     "where": "on the table",
+     "distance_from_gripper": "near",
+     "in_the_arms_path": "no",
+     "its_step": "move_object(block 5 \u2192 tray slot 3): pending",
+     "is_the_current_steps_object": "no"
+    }
+   ]
+  },
+  "model": "jev-1.13.0",
+  "questions": {
+   "right_now": {
+    "type": "choice",
+    "instructions": {
+     "question": "Given `event`, what should the arm do right now?",
+     "context": "`plan_position.arm_in_step` says literally where the arm is in its current step; `robot.mode` says whether it is moving, paused or holding. The code's own stop distance for hands applies regardless of this answer."
+    },
+    "criteria": {
+     "carry_on": {
+      "what": "No change: the arm keeps doing what it is doing now (moving on with the current step, or staying paused or holding if it already is).",
+      "not_for": "a person's hand coming toward the gripper or into the arm's path while the arm moves; the user asking the robot to wait; a change that makes the move in progress wrong"
+     },
+     "hold": {
+      "what": "Stop at a safe point, keeping anything in the gripper, because the move in progress may be wrong now: the task or the plan is about to change.",
+      "not_for": "a person's hand nearby (use pause or back_off); the user asking the robot to wait (use pause); an object moved that the plan still handles as written"
+     },
+     "pause": {
+      "what": "Stop where it is and stay stopped until told to go on: a person's hand is coming toward the gripper or is in the arm's path, or the user asks the robot to wait.",
+      "not_for": "a hand that is already very close to the gripper (use back_off); a hand held out, still, to take an object the robot is handing over"
+     },
+     "re_target": {
+      "what": "The object the current step is going for has been moved and is not in the gripper yet: aim at where it is now and carry on.",
+      "not_for": "an object other than the current step's; an object already in the gripper"
+     }
+    }
+   },
+   "in_plan_fix": {
+    "type": "choice",
+    "instructions": {
+     "question": "Can `event` be absorbed within the current plan with one of these fixes, without writing new steps or changing the task?"
+    },
+    "criteria": {
+     "none": {
+      "what": "No fix within the plan: nothing needs fixing (a step finished normally, a remark, a pause, a hand), or no fix below fits.",
+      "not_for": "a failed step that trying again would fix; an object the plan already moved that was put back where it started"
+     },
+     "skip": {
+      "what": "Drop the current step: it is no longer needed (e.g. its object is already where the step would put it).",
+      "not_for": "a step that is still needed"
+     }
+    }
+   },
+   "route": {
+    "type": "choice",
+    "instructions": {
+     "question": "Who should handle `event`: the robot on its own with the current plan, or a planner that writes a new plan, or the user?",
+     "ask_about": "whether the end result or the steps must change, not what the event is about"
+    },
+    "criteria": {
+     "stay_local": {
+      "what": "The plan still holds as written, with at most the fix above: steps finishing, objects moved that their own steps will still handle, a placed object to be put back, hands, waits, remarks, temporary failures.",
+      "not_for": "the user asking for a different end result; an object the plan now has to deal with but has no step for; a plan that would break a constraint or leaves out an object the task asks about"
+     },
+     "fast_llm": {
+      "what": "The plan must change: the user asks for a different end result, or the world changed so the plan needs new or different steps. Most replans.",
+      "not_for": "anything the plan already covers; requests that could mean two different things"
+     },
+     "capable_llm": {
+      "what": "The plan must change and working out how is hard: several constraints conflict, the same step keeps failing, or the request needs careful multi-step reasoning.",
+      "not_for": "an ordinary correction or a single new step (use fast_llm)"
+     },
+     "ask_user": {
+      "what": "The user's words could reasonably mean two different end results, and guessing wrong would undo work.",
+      "not_for": "a clear request, however big the change; remarks that ask for nothing"
+     }
+    }
+   }
+  }
+ },
+ "mock_answers": {
+  "right_now": {
+   "choice": "carry_on",
+   "probabilities": {
+    "carry_on": 0.958,
+    "hold": 0.014,
+    "pause": 0.014,
+    "re_target": 0.014
+   },
+   "confidence": 0.944
+  },
+  "in_plan_fix": {
+   "choice": "skip",
+   "probabilities": {
+    "none": 0.463,
+    "skip": 0.537
+   },
+   "confidence": 0.074
+  },
+  "route": {
+   "choice": "stay_local",
+   "probabilities": {
+    "stay_local": 0.98,
+    "fast_llm": 0.007,
+    "capable_llm": 0.007,
+    "ask_user": 0.007
+   },
+   "confidence": 0.973
+  }
+ }
+}

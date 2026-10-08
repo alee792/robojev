@@ -1,0 +1,94 @@
+{
+ "request": {
+  "state": {
+   "task": "Put all the blocks in the tray biggest first, starting from the left.",
+   "user_just_said": "other way round please",
+   "plan": {
+    "robot_is_doing": "Put all the blocks in the tray biggest first, starting from the left.",
+    "parameters": [
+     {
+      "name": "line_direction",
+      "controls": "which end of the tray the line starts from",
+      "current_value": "biggest_on_left",
+      "values": {
+       "biggest_on_left": "biggest in the leftmost slot",
+       "smallest_on_left": "smallest in the leftmost slot"
+      }
+     }
+    ]
+   }
+  },
+  "model": "jev-1.13.0",
+  "questions": {
+   "route": {
+    "type": "choice",
+    "instructions": {
+     "question": "What does the user's latest message (`user_just_said`) need from the robot, which is partway through `task` following `plan`?",
+     "note": "`plan.parameters` lists every setting the robot can change on its own, with the values it has prepared."
+    },
+    "criteria": {
+     "continue": {
+      "what": "Carry on with the plan exactly as it is: the message is praise, chatter, a remark to someone else, or confirms what the robot is already doing.",
+      "not_for": "any request to change where blocks end up, however small",
+      "examples": [
+       "great",
+       "perfect, thanks"
+      ]
+     },
+     "adjust": {
+      "what": "The user wants a different end result that setting one or more of `plan.parameters` to one of its listed values fully expresses.",
+      "not_for": "a change the listed values cannot express, even partly (use new_plan_needed)",
+      "examples": [
+       "asking for another listed value of a setting"
+      ]
+     },
+     "new_plan_needed": {
+      "what": "The user wants a different end result that no combination of the listed parameter values expresses: e.g. leaving some blocks out, a different container for some blocks, a different rule, or a new task.",
+      "not_for": "a change fully covered by the listed parameter values (use adjust)",
+      "examples": [
+       "a request about blocks or places that no parameter mentions"
+      ]
+     },
+     "pause": {
+      "what": "The user asks the robot to wait or hold on for a moment before carrying on.",
+      "not_for": "a request to change the task",
+      "examples": [
+       "one moment"
+      ]
+     }
+    }
+   },
+   "p0.value": {
+    "type": "choice",
+    "instructions": {
+     "question": "After the user's latest message (`user_just_said`), which value should the setting `plan.parameters[0]` (which end of the tray the line starts from) have?",
+     "if_not_mentioned": "keep its current value, `plan.parameters[0].current_value`"
+    },
+    "criteria": {
+     "biggest_on_left": "biggest in the leftmost slot",
+     "smallest_on_left": "smallest in the leftmost slot"
+    }
+   },
+   "p0.stated": {
+    "type": "noul",
+    "instructions": "Does the user's latest message (`user_just_said`) ask for, or state, a particular value of `plan.parameters[0]`: which end of the tray the line starts from?",
+    "criteria": {
+     "true": "The message names or clearly implies a value for this setting, including asking for the opposite, the other one, or a switch.",
+     "false": "The message says nothing about this setting."
+    }
+   }
+  }
+ },
+ "truth": {
+  "route": [
+   "adjust"
+  ],
+  "branch_ok": {
+   "line_direction=biggest_on_left": false,
+   "line_direction=smallest_on_left": true
+  },
+  "target_key": "line_direction=smallest_on_left"
+ },
+ "category": "coverable",
+ "note": "plan made by the mock LLM"
+}

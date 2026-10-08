@@ -1,0 +1,94 @@
+$ uv run python e11_reorder.py --n-scenes 60
+  25/720
+  50/720
+  75/720
+  100/720
+  125/720
+  150/720
+  175/720
+  200/720
+  225/720
+  250/720
+  275/720
+  300/720
+  325/720
+  350/720
+  375/720
+  400/720
+  425/720
+  450/720
+  475/720
+  500/720
+  525/720
+  550/720
+  575/720
+  600/720
+  625/720
+  650/720
+  675/720
+  700/720
+
+==================== Jev ====================
+accuracy (correct/total) by question, state variant, row size N
+
+intent
+  raw     N=3:  60/60  N=5:  60/60  N=7:  60/60  N=9:  60/60  N=all: 240/240
+  facts   N=3:  59/60  N=5:  60/60  N=7:  60/60  N=9:  60/60  N=all: 239/240
+  solved  N=3:  60/60  N=5:  60/60  N=7:  60/60  N=9:  60/60  N=all: 240/240
+
+new_order
+  raw     N=3:  60/60  N=5:  60/60  N=7:  60/60  N=9:  60/60  N=all: 240/240
+  facts   N=3:  60/60  N=5:  60/60  N=7:  60/60  N=9:  60/60  N=all: 240/240
+  solved  N=3:  60/60  N=5:  60/60  N=7:  60/60  N=9:  60/60  N=all: 240/240
+
+direction
+  raw     N=3:  18/23  N=5:  18/28  N=7:  21/26  N=9:  19/26  N=all: 76/103
+  facts   N=3:  18/23  N=5:  21/28  N=7:  20/26  N=9:  18/26  N=all: 77/103
+  solved  N=3:  23/23  N=5:  28/28  N=7:  26/26  N=9:  26/26  N=all: 103/103
+
+target_slot
+  raw     N=3:  20/23  N=5:  23/28  N=7:  20/26  N=9:  16/26  N=all: 79/103
+  facts   N=3:  22/23  N=5:  23/28  N=7:  22/26  N=9:  17/26  N=all: 84/103
+  solved  N=3:  23/23  N=5:  28/28  N=7:  26/26  N=9:  26/26  N=all: 103/103
+
+next_pick
+  raw     N=3:  20/30  N=5:  11/21  N=7:  19/24  N=9:  15/22  N=all:  65/97
+  facts   N=3:  21/30  N=5:  19/21  N=7:  20/24  N=9:  15/22  N=all:  75/97
+  solved  N=3:  30/30  N=5:  20/21  N=7:  23/24  N=9:  22/22  N=all:  95/97
+
+dense (numbers 1..N) vs sparse numbers — the rank questions
+  target_slot  raw     dense= 53/55  sparse= 26/48
+  target_slot  facts   dense= 48/55  sparse= 36/48
+  target_slot  solved  dense= 55/55  sparse= 48/48
+  next_pick    raw     dense= 37/53  sparse= 28/44
+  next_pick    facts   dense= 42/53  sparse= 33/44
+  next_pick    solved  dense= 53/53  sparse= 42/44
+
+latency per request (ms)
+  raw     n=240 p50=172 p90=448 p95=588 p99=1144 max=1864ms
+  facts   n=240 p50=166 p90=501 p95=706 p99=1175 max=1447ms
+  solved  n=240 p50=180 p90=623 p95=884 p99=1840 max=3847ms
+
+escalate as a router: does it ask for a smarter model more when this request had a wrong answer?
+  raw     all-right n=168 asks  52% mean P(ask)=0.53   any-wrong n=72  asks  49% mean P(ask)=0.48
+  facts   all-right n=179 asks  29% mean P(ask)=0.27   any-wrong n=61  asks  59% mean P(ask)=0.53
+  solved  all-right n=238 asks  11% mean P(ask)=0.20   any-wrong n=2   asks   0% mean P(ask)=0.09
+
+confidence gate: accuracy of answers at or above a threshold / coverage (share of answers that clear it)
+  intent       raw     >=0.3: acc 100% cov 100% | >=0.5: acc 100% cov 99% | >=0.7: acc 100% cov 92% | >=0.9: acc 100% cov 78%
+  intent       facts   >=0.3: acc 100% cov 100% | >=0.5: acc 100% cov 98% | >=0.7: acc 100% cov 90% | >=0.9: acc 100% cov 80%
+  intent       solved  >=0.3: acc 100% cov 100% | >=0.5: acc 100% cov 98% | >=0.7: acc 100% cov 88% | >=0.9: acc 100% cov 72%
+  new_order    raw     >=0.3: acc 100% cov 93% | >=0.5: acc 100% cov 75% | >=0.7: acc 100% cov 70% | >=0.9: acc 100% cov 58%
+  new_order    facts   >=0.3: acc 100% cov 96% | >=0.5: acc 100% cov 83% | >=0.7: acc 100% cov 73% | >=0.9: acc 100% cov 60%
+  new_order    solved  >=0.3: acc 100% cov 98% | >=0.5: acc 100% cov 83% | >=0.7: acc 100% cov 70% | >=0.9: acc 100% cov 66%
+  direction    raw     >=0.3: acc  77% cov 73% | >=0.5: acc  84% cov 48% | >=0.7: acc 100% cov 30% | >=0.9: acc 100% cov 13%
+  direction    facts   >=0.3: acc  79% cov 93% | >=0.5: acc  80% cov 87% | >=0.7: acc  91% cov 73% | >=0.9: acc  95% cov 53%
+  direction    solved  >=0.3: acc 100% cov 99% | >=0.5: acc 100% cov 97% | >=0.7: acc 100% cov 93% | >=0.9: acc 100% cov 83%
+  target_slot  raw     >=0.3: acc  83% cov 86% | >=0.5: acc  91% cov 65% | >=0.7: acc  96% cov 54% | >=0.9: acc 100% cov 37%
+  target_slot  facts   >=0.3: acc  83% cov 92% | >=0.5: acc  90% cov 76% | >=0.7: acc  99% cov 65% | >=0.9: acc 100% cov 51%
+  target_slot  solved  >=0.3: acc 100% cov 100% | >=0.5: acc 100% cov 100% | >=0.7: acc 100% cov 97% | >=0.9: acc 100% cov 80%
+  next_pick    raw     >=0.3: acc  73% cov 89% | >=0.5: acc  87% cov 64% | >=0.7: acc  97% cov 39% | >=0.9: acc 100% cov 14%
+  next_pick    facts   >=0.3: acc  79% cov 93% | >=0.5: acc  85% cov 75% | >=0.7: acc  93% cov 61% | >=0.9: acc 100% cov 46%
+  next_pick    solved  >=0.3: acc  99% cov 99% | >=0.5: acc 100% cov 98% | >=0.7: acc 100% cov 94% | >=0.9: acc 100% cov 82%
+
+Jev input tokens: 1309813 ≈ $0.0550

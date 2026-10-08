@@ -1,0 +1,183 @@
+{
+ "scenario": "moved_target",
+ "variant": "solved",
+ "tick": 96,
+ "reason": "arm idle",
+ "telling": true,
+ "request": {
+  "state": {
+   "orders": [
+    {
+     "order": "While a person's hand is within 40 cm of the gripper, keep at least 15 cm from it and never move toward it.",
+     "status": "off (applies only while a person's hand is within 40 cm of the gripper)"
+    }
+   ],
+   "task": "Put the numbered blocks into the tray, one per slot, sorted by number. Order: ascending, i.e. smallest number in slot 1 (the robot's left end of the tray), numbers increasing to the right.",
+   "status": {
+    "holding": "nothing",
+    "gripper": "at (75, 14) cm, up at travel height",
+    "current_skill": "none (waiting for the next skill)",
+    "last_result": "move_above(block 2): failed: block 2 moved during the approach"
+   },
+   "knobs": {
+    "order": "ascending",
+    "pace": "normal"
+   },
+   "scene": {
+    "blocks": [
+     {
+      "name": "block 3",
+      "colour": "orange",
+      "where": "on the table at (15, 28) cm"
+     },
+     {
+      "name": "block 5",
+      "colour": "yellow",
+      "where": "on the table at (63, 14) cm"
+     },
+     {
+      "name": "block 1",
+      "colour": "white",
+      "where": "in tray slot 1"
+     },
+     {
+      "name": "block 4",
+      "colour": "orange",
+      "where": "on the table at (27, 28) cm"
+     },
+     {
+      "name": "block 2",
+      "colour": "white",
+      "where": "on the table at (90, 14) cm"
+     }
+    ],
+    "tray": {
+     "layout": "slot 1 is the robot's left end; slot numbers increase to the right",
+     "slots": [
+      {
+       "slot": 1,
+       "has": "block 1"
+      },
+      {
+       "slot": 2,
+       "has": "empty"
+      },
+      {
+       "slot": 3,
+       "has": "empty"
+      },
+      {
+       "slot": 4,
+       "has": "empty"
+      },
+      {
+       "slot": 5,
+       "has": "empty"
+      }
+     ]
+    }
+   },
+   "facts": {
+    "gripper_is_above": "nothing in particular",
+    "empty_slots": [
+     2,
+     3,
+     4,
+     5
+    ],
+    "if order is ascending (current)": {
+     "goal_of_each_block": {
+      "block 1": "tray slot 1",
+      "block 2": "tray slot 2",
+      "block 3": "tray slot 3",
+      "block 4": "tray slot 4",
+      "block 5": "tray slot 5"
+     },
+     "blocks_not_at_their_goal": [
+      "block 2",
+      "block 3",
+      "block 4",
+      "block 5"
+     ],
+     "next_step": "move_above(block 2)",
+     "task_complete": false
+    },
+    "if order is descending": {
+     "goal_of_each_block": {
+      "block 5": "tray slot 1",
+      "block 4": "tray slot 2",
+      "block 3": "tray slot 3",
+      "block 2": "tray slot 4",
+      "block 1": "tray slot 5"
+     },
+     "blocks_not_at_their_goal": [
+      "block 5",
+      "block 4",
+      "block 3",
+      "block 2",
+      "block 1"
+     ],
+     "next_step": "move_above(block 4)",
+     "task_complete": false
+    }
+   }
+  },
+  "model": "jev-1.13.0",
+  "questions": {
+   "next_skill": {
+    "type": "choice",
+    "instructions": {
+     "question": "Which skill should the arm run next to make progress on `task`, within `orders`?",
+     "rules": [
+      "Only skills whose preconditions hold right now are listed.",
+      "Each block goes: move above it, pick it, carry it to its goal, place, release, retreat.",
+      "Where `facts` already answers something (where a block belongs, which step is next), use it rather than re-deriving it.",
+      "If `status.last_result` is a failure, choose the skill that recovers (look again, move above the block where it is now, or retreat).",
+      "If a block's goal is taken by another block, carry the held block to a free spot on the table and come back to it later.",
+      "If everything is already where it belongs, choose to stay still."
+     ]
+    },
+    "criteria": {
+     "survey": "look over the table again (after a failure, or if something seems off)",
+     "move_above:b1": "move the empty gripper above block 1 (in tray slot 1)",
+     "move_above:b2": "move the empty gripper above block 2 (on the table at (90, 14) cm)",
+     "move_above:b3": "move the empty gripper above block 3 (on the table at (15, 28) cm)",
+     "move_above:b4": "move the empty gripper above block 4 (on the table at (27, 28) cm)",
+     "move_above:b5": "move the empty gripper above block 5 (on the table at (63, 14) cm)",
+     "hold": "stay still for a second"
+    }
+   },
+   "task_status": {
+    "type": "choice",
+    "instructions": {
+     "question": "Is `task` complete?"
+    },
+    "criteria": {
+     "complete": "every block in `task` is at its goal for the current knob values, the gripper holds nothing and is up",
+     "not_complete": "some block is not at its goal yet, or the arm still holds a block or is low"
+    }
+   },
+   "escalate": {
+    "type": "choice",
+    "instructions": {
+     "question": "Can the arm's next step be decided confidently from this state by direct lookup, without careful multi-step reasoning?"
+    },
+    "criteria": {
+     "decide_now": "yes: the answer can be read directly off the state and the options offered",
+     "ask_a_smarter_model": "no: it is unclear, contradictory, refers to something not in the state, or needs several reasoning steps not already done in the state"
+    }
+   }
+  }
+ },
+ "truth": {
+  "next_skill": [
+   "move_above:b2"
+  ],
+  "task_status": [
+   "not_complete"
+  ],
+  "escalate": [
+   "decide_now"
+  ]
+ }
+}
