@@ -362,7 +362,7 @@ inventoried and ready for both, and measure what decides between them. Don't tou
    throttling (`vcgencmd measure_temp`, `vcgencmd get_throttled`), whether a cooler is fitted, Ethernet
    link speed (`ethtool eth0`: must be 1000 Mb/s full duplex for Option B), and USB devices (`lsusb`).
 5. **Baseline.** `sudo apt update && sudo apt upgrade -y`; install git, build-essential, cmake,
-   python3-venv, rt-tests, ethtool; install `uv`; clone the repo on `claude/franka`.
+   python3-venv, rt-tests, stress-ng, ethtool; install `uv`; clone the repo on `claude/franka`.
 6. **Timing jitter on the stock kernel (cheap S3 preview).** `sudo cyclictest -m -S -p 90 -i 1000 -D 5m`
    idle, then again under load (`stress-ng --cpu 4 --io 2 -t 5m` alongside). Record max latency per
    core. No kernel changes: if a PREEMPT_RT kernel looks worth trying, say how you'd install it and
