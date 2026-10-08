@@ -24,6 +24,95 @@ exact version to the robot's system image using Franka's compatibility table. **
 The MacBook and the robot never need low latency between them: skills are seconds long, and the
 decision loop is event-driven at ~150 ms. Only the control box ↔ robot link is hard real-time.
 
+## How it fits together
+
+### The machines and the wires
+
+Option A: the Pi hosts the camera, and an x86 box drives the arm. Thick lines are wired. Only the link
+from the control box to the controller is real-time.
+
+```mermaid
+flowchart LR
+    subgraph cloud [Cloud, HTTPS]
+        jev[Decision API<br/>Jev today, ~150 ms]
+        llm[OpenAI planner<br/>~3 s]
+    end
+    subgraph mac [MacBook: the brain]
+        harness[Harness<br/>plan, events, decisions]
+        dash[Dashboard + chat]
+    end
+    subgraph pi [Raspberry Pi 5]
+        cam[Depth camera] --> percep[Perception<br/>object positions]
+    end
+    subgraph ctrl [Control box: Ubuntu x86, real-time kernel]
+        skills[Skill server<br/>move_object, hold, pause]
+        safety[Safety filter]
+        lf[franky + libfranka<br/>1 kHz loop]
+    end
+    subgraph robot [Panda]
+        fc[Controller + Desk]
+        arm([Arm + gripper])
+    end
+    user([You]) --> dash
+    dash --- harness
+    harness <-. "HTTPS" .-> jev
+    harness <-. "HTTPS" .-> llm
+    percep -- "world state<br/>over LAN" --> harness
+    harness -- "skill calls<br/>over LAN" --> skills
+    skills -- "done, failed" --> harness
+    skills --> safety --> lf
+    lf == "FCI, 1 kHz<br/>direct gigabit" ==> fc
+    fc ==> arm
+    stop([Stop button]) == "wired to controller" ==> fc
+```
+
+### Three loops, three speeds
+
+Each loop only talks to the one next to it. A slow answer above never stalls the loop below: the arm
+carries on or holds while the planner thinks.
+
+```mermaid
+flowchart TB
+    subgraph slow [Seconds: planner, OpenAI]
+        p[Writes and fixes the plan]
+    end
+    subgraph mid [~150 ms per event: harness + decision API]
+        d[Every event gets one decision:<br/>right now, in-plan fix, who handles it]
+    end
+    subgraph fast [1 ms: control box]
+        c[Skill runs as a motion,<br/>libfranka sends a command every ms]
+    end
+    p -- "plan" --> d
+    d -- "needs a new plan" --> p
+    d -- "start, hold, pause, resume" --> c
+    c -- "step done or failed" --> d
+```
+
+### A correction, end to end
+
+```mermaid
+sequenceDiagram
+    actor U as You
+    participant M as MacBook (harness)
+    participant J as Decision API
+    participant O as OpenAI
+    participant S as Control box
+    participant R as Panda
+
+    Note over S,R: Carrying block 5 to slot 3, 1 kHz loop running
+    U->>M: "actually, highest on the left"
+    M->>J: user text + plan position
+    J-->>M: right now: hold, route: fast LLM (~150 ms)
+    M->>S: hold
+    S->>R: stop at a safe point, keep the grip
+    M->>O: task + correction + world state + plan
+    O-->>M: new plan (~3 s)
+    M->>S: move_object(block 5, slot 4)
+    S->>R: motion, commands every 1 ms
+    R-->>S: reached
+    S-->>M: step done
+```
+
 ## Where the Pi 5 fits
 
 **Option A (recommended): Pi = camera host, x86 mini-PC = control box.** The Pi streams depth/RGB and
