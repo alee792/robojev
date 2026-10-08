@@ -1,4 +1,4 @@
-# Panda setup: MacBook + Raspberry Pi 5
+# Panda setup: control box + Raspberry Pi 5
 
 How to run robojev on a Franka Emika Panda for the showcase. Check the parts marked **check** against
 the robot before relying on them.
@@ -16,20 +16,23 @@ exact version to the robot's system image using Franka's compatibility table. **
 
 | Machine | Runs |
 |---|---|
-| MacBook | The brain: harness (`experiments/e12v2/core`), LLM and decision calls, dashboard, MuJoCo sim of the Panda |
-| Control box | libfranka + a Python binding + a small **skill server**: takes `move_object(...)` etc. over the network, runs it at 1 kHz, reports done/failed |
+| Control box | Everything on demo day, as separate processes: the harness (`experiments/e12v2/core`) with its LLM and decision calls, the dashboard, and a small **skill server** on libfranka + a Python binding that runs skills at 1 kHz and reports done/failed |
+| MacBook | Development and the MuJoCo sim of the Panda; on demo day, just a browser on the dashboard |
 | Robot | Panda arm + controller; Desk web UI |
 | Pi 5 | See below: the control box itself (risky) or the camera host (recommended) |
 
-The MacBook and the robot never need low latency between them: skills are seconds long, and the
-decision loop is event-driven at ~150 ms. Only the control box ↔ robot link is hard real-time.
+The harness is light: it waits on events and HTTPS calls. On the control box it talks to the skill
+server over localhost, so there's one less machine and no Wi-Fi hop on demo day. It must stay off the
+core the 1 kHz loop runs on. The control box needs two network links: the dedicated cable to the
+robot, and Wi-Fi or a second port for the internet. The skill server keeps its network interface, so
+the harness can still run on the MacBook during development (sim or real arm).
 
 ## How it fits together
 
 ### The machines and the wires
 
-Option A: the Pi hosts the camera, and an x86 box drives the arm. Thick lines are wired. Only the link
-from the control box to the controller is real-time.
+Option A on demo day: the Pi hosts the camera, and an x86 box runs the harness and drives the arm.
+Thick lines are wired. Only the link from the control box to the controller is real-time.
 
 ```mermaid
 flowchart LR
@@ -37,14 +40,12 @@ flowchart LR
         jev[Decision API<br/>Jev today, ~150 ms]
         llm[OpenAI planner<br/>~3 s]
     end
-    subgraph mac [MacBook: the brain]
-        harness[Harness<br/>plan, events, decisions]
-        dash[Dashboard + chat]
-    end
     subgraph pi [Raspberry Pi 5]
         cam[Depth camera] --> percep[Perception<br/>object positions]
     end
     subgraph ctrl [Control box: Ubuntu x86, real-time kernel]
+        harness[Harness<br/>plan, events, decisions]
+        dash[Dashboard + chat]
         skills[Skill server<br/>move_object, hold, pause]
         safety[Safety filter]
         lf[franky + libfranka<br/>1 kHz loop]
@@ -53,12 +54,12 @@ flowchart LR
         fc[Controller + Desk]
         arm([Arm + gripper])
     end
-    user([You]) --> dash
+    user([You, any browser]) --> dash
     dash --- harness
     harness <-. "HTTPS" .-> jev
     harness <-. "HTTPS" .-> llm
     percep -- "world state<br/>over LAN" --> harness
-    harness -- "skill calls<br/>over LAN" --> skills
+    harness -- "skill calls<br/>localhost" --> skills
     skills -- "done, failed" --> harness
     skills --> safety --> lf
     lf == "FCI, 1 kHz<br/>direct gigabit" ==> fc
@@ -93,10 +94,10 @@ flowchart TB
 ```mermaid
 sequenceDiagram
     actor U as You
-    participant M as MacBook (harness)
+    participant M as Harness
     participant J as Decision API
     participant O as OpenAI
-    participant S as Control box
+    participant S as Skill server
     participant R as Panda
 
     Note over S,R: Carrying block 5 to slot 3, 1 kHz loop running
@@ -116,7 +117,7 @@ sequenceDiagram
 ## Where the Pi 5 fits
 
 **Option A (recommended): Pi = camera host, x86 mini-PC = control box.** The Pi streams depth/RGB and
-object positions to the MacBook; any Ubuntu amd64 machine with gigabit Ethernet runs libfranka. This is
+object positions to the harness on the control box; any Ubuntu amd64 machine with gigabit Ethernet runs libfranka. This is
 the supported path and the safest bet for a live demo.
 
 **Option B: Pi = control box.** Ubuntu 24.04 for Pi + a PREEMPT_RT kernel + libfranka 0.9.x built from
@@ -129,8 +130,8 @@ minutes and accept only when it reports almost no lost packets. **check**
 1. **Robot.** Power on, then open Desk in a browser at the robot's IP. Note the system version
    (Settings → Dashboard). Unlock the joints. On system 4.2.0 or later, activate FCI in Desk.
 2. **Network.** Plug the control box straight into the controller's **control** Ethernet port (not the
-   arm base), gigabit, and give it a static IP on the robot's subnet. Put the MacBook and Pi on a
-   second network (Wi-Fi or a switch) to the control box.
+   arm base), gigabit, and give it a static IP on the robot's subnet. Connect the control box, Pi
+   and MacBook on a second network (Wi-Fi or a switch) that also reaches the internet.
 3. **Control box.** Ubuntu 22.04 amd64 + PREEMPT_RT kernel. Build libfranka at the version from the
    table (0.9.x), set real-time limits for your user, then run `communication_test <robot-ip>`.
 4. **Binding.** Install **franky** or **panda-py** built against that libfranka version. Both publish
@@ -139,8 +140,9 @@ minutes and accept only when it reports almost no lost packets. **check**
 5. **Skill server.** A small service on the control box that exposes the v2 skills (`move_object`,
    `hand_over`, `stack_on`, `push`, `survey`, `hold`) plus `pause`, `resume` and `stop`, built on franky
    motions with Cartesian impedance and force limits. The safety filter runs here, next to the arm.
-6. **MacBook.** Run the harness against the MuJoCo Panda first (`franka_emika_panda` from MuJoCo
-   Menagerie, native on macOS), then point it at the skill server.
+6. **Harness.** Develop on the MacBook against the MuJoCo Panda (`franka_emika_panda` from MuJoCo
+   Menagerie, native on macOS), then point it at the skill server. For the demo, run it on the control
+   box in its own process, off the control-loop core.
 7. **Camera.** Mount and calibrate the camera to the robot base (hand-eye or a fixed marker), so world
    state is in robot coordinates.
 
@@ -151,7 +153,8 @@ minutes and accept only when it reports almost no lost packets. **check**
 2. Control box: `communication_test` passes; franky moves the arm between two poses.
 3. Skill server: the same skill calls drive the real arm with no camera (fixed block positions).
 4. Camera on the Pi; perception events into the harness.
-5. Rehearse the headline correction; keep the physical stop button in hand.
+5. Move the harness onto the control box; run the whole demo from there.
+6. Rehearse the headline correction; keep the physical stop button in hand.
 
 ## Open questions
 
