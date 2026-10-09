@@ -333,3 +333,55 @@ commits and say so.
 rerun" section in `context/08-experiment-results.md`; an update to the e12v2 lines of
 `docs/spike-outcomes.md`; a plain-language comment on PR #1 answering 1-4 and ending with a
 recommendation: move to MuJoCo or not.
+
+# Handoff 5: set up the Raspberry Pi 5
+
+Paste the block below into a Claude Code session on the MacBook. The Pi is wired to the Mac (the Pi's
+Ethernet port into a USB-C Ethernet adapter on the Mac).
+
+---
+
+You are setting up a Raspberry Pi 5 for robojev's Panda showcase. Its role isn't settled: camera host
+(the recommended Option A) or the arm's control box (Option B, if it holds 1 kHz). Get it reachable,
+inventoried and ready for both, and measure what decides between them. Don't touch the robot.
+
+**Read first:** `git fetch origin claude/franka && git checkout claude/franka`, then
+`docs/panda-setup.md` (roles, Options A and B, spikes S3, S8, S12, S13) and `docs/showcase-demo.md`.
+
+**Steps** (stop and report at any step that fails):
+1. **Find the Pi.** Identify the Mac's USB-C Ethernet interface (`networksetup -listallhardwareports`,
+   `ifconfig`). Try `ping raspberrypi.local` (or the hostname I set), `arp -a`, and link-local
+   169.254.x.x. If the Pi has no OS or SSH isn't enabled, stop and tell me: I'll flash it with Raspberry
+   Pi Imager (Raspberry Pi OS Lite 64-bit, SSH on, user and hostname set). Don't flash anything
+   yourself.
+2. **SSH.** Key-based login from the Mac; add a `Host pi` entry to `~/.ssh/config`.
+3. **Internet for the Pi.** Ask me which: Mac Internet Sharing over the USB-C adapter, or the Pi on
+   Wi-Fi (`nmcli`). Prefer Wi-Fi: under Option B the Pi's Ethernet port belongs to the robot. Don't
+   change Mac network settings without asking.
+4. **Inventory**, recorded: OS and kernel (`/etc/os-release`, `uname -a`), RAM, disk, temperature and
+   throttling (`vcgencmd measure_temp`, `vcgencmd get_throttled`), whether a cooler is fitted, Ethernet
+   link speed (`ethtool eth0`: must be 1000 Mb/s full duplex for Option B), and USB devices (`lsusb`).
+5. **Baseline.** `sudo apt update && sudo apt upgrade -y`; install git, build-essential, cmake,
+   python3-venv, rt-tests, stress-ng, ethtool; install `uv`; clone the repo on `claude/franka`.
+6. **Timing jitter on the stock kernel (cheap S3 preview).** `sudo cyclictest -m -S -p 90 -i 1000 -D 5m`
+   idle, then again under load (`stress-ng --cpu 4 --io 2 -t 5m` alongside). Record max latency per
+   core. No kernel changes: if a PREEMPT_RT kernel looks worth trying, say how you'd install it and
+   ask first.
+7. **Camera (S8 preview).** If a camera is plugged in, identify it from `lsusb` (Orbbec Astra or
+   another), find its ARM64 driver or SDK, and save one colour frame and one depth frame; record the
+   frame rate at the default resolution. Stop at "frames saved"; no perception code yet.
+8. **Cloud latency from the Pi (S13 preview).** Copy `OPENAI_API_KEY` from the Mac's environment to
+   `~/.config/robojev/env` on the Pi (mode 600) without printing it. Time 20 minimal Responses calls
+   with `gpt-6-luna` at low effort, and 20 Decisions API calls (`POST /v1/decisions`, one choice
+   question) if the key has access. Read OpenAI's Decisions docs first. Report p50 and p95, over
+   Wi-Fi and over Ethernet if both are available.
+
+**Rules:** never print API keys. Ask before flashing, kernel or bootloader changes, or Mac network
+changes. Reboots are fine. Don't connect to the robot.
+
+**Deliverables**, pushed to `claude/franka` (PR #2):
+- `docs/pi-setup-log.md`: what you did, the commands, the inventory, the cyclictest table, camera
+  results and latency numbers.
+- A short plain-language comment on PR #2: is the Pi a candidate for the control box (jitter numbers
+  against a 1 ms loop), does the camera work on it, how fast are OpenAI calls from it, and what you
+  need from me next.
