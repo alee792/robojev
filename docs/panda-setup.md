@@ -171,7 +171,7 @@ Most need the robot; S5 and S8 don't.
 |---|---|---|---|---|
 | S1 | Which libfranka does this Panda need, and is FCI on? | Read the system version in Desk; check the compatibility table; activate FCI | Version pinned, FCI active | Everything on the arm |
 | S2 | Does an x86 control box hold 1 kHz? | RT kernel, libfranka 0.9.x, `communication_test` for 10 min, then again with the harness and a CPU load running | Almost no lost packets, no aborts | Option A |
-| S3 | Can the Pi 5 hold 1 kHz instead? | Same as S2 on the Pi with a PREEMPT_RT kernel, one core isolated | Same bar as S2 | Option B |
+| S3 | Can the Pi 5 hold 1 kHz instead? | Same as S2 on the Pi with a PREEMPT_RT kernel, headless, one core isolated. Preview on the stock kernel: worst wake-up 97 µs under load headless, one 782 µs spike with the desktop up | Same bar as S2 | Option B |
 | S4 | Does franky (or panda-py) work against 0.9.x, and can it stop a motion mid-way and hold? | Install the matching build; move between two poses 50 times; interrupt a motion and hold; open and close the gripper | All 50 moves clean; hold within ~100 ms, grip kept | The skill server |
 | S5 | Does the e12v2 core run unchanged against a MuJoCo Panda? | Menagerie `franka_emika_panda` behind the skill interface on the MacBook | Sorting episode completes in sim | The skill interface |
 | S6 | Does the skill server's watchdog hold the arm when the harness goes quiet? | Kill the harness mid-motion | Arm holds within the timeout | Demo safety |
@@ -192,10 +192,10 @@ the rest.
 - Panda system version (sets the libfranka version).
 - Is there an x86 Ubuntu machine for the control box, or must the Pi do it?
 - What is "Astra": the Orbbec Astra depth camera (a natural fit for the Pi) or something else?
-- OpenAI's Decisions API (`POST /v1/decisions`, launched October 2026, in limited preview): what
-  secondhand sources say so far is choice, noul and score questions like Jev, per-option probabilities
-  plus a separate confidence field, and up to 128 inline base64 images per request. Unverified: we
-  haven't read the official docs or got access yet. **check**
+- OpenAI's Decisions API (`POST /v1/decisions`, public beta, `gpt-6-luna` only). Confirmed from the
+  official docs and our key (`docs/pi-setup-log.md` §8): choice questions return the choice,
+  per-option probabilities and a confidence; images go inline as base64. About 117 ms p50 / 138 ms p95
+  from the office Mac. Still open: how its confidence behaves against the 0.8 gate (S12).
 - YAM arm: kept in mind; the skill server interface should cover it too.
 
 ## Sources
