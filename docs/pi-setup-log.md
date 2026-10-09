@@ -6,7 +6,7 @@ robot was not touched.
 **Summary**
 - Reachable as `ssh pi` (`dots@codex`), key-only, passwordless sudo. Existing OS kept, not reflashed.
 - Inventory: Pi 5, 4 GB RAM, stock `PREEMPT` (not RT) kernel, gigabit full-duplex Ethernet, fan
-  connected, no throttling.
+  confirmed spinning under load, no throttling.
 - Timing (S3 preview): stock kernel, headless, worst wake-up latency **97 µs under load** against a
   1000 µs period. With the desktop running, one **782 µs** spike at idle.
 - Camera (S8): **not done**, no camera plugged in.
@@ -112,7 +112,7 @@ Remove when the Pi has its own internet: `sudo rm /etc/apt/apt.conf.d/90robojev-
 | Kernel | `6.18.50+rpt-rpi-2712 #1 SMP PREEMPT` (stock, not PREEMPT_RT); no RT kernel package in the Pi repos |
 | Bootloader | 2026-01-21 |
 | Temperature | 45 °C idle, 60–63 °C after 5 min of `stress-ng`; `throttled=0x0` throughout |
-| Cooler | `pwmfan` hwmon present, so a fan is connected (Active Cooler or case fan); 0 rpm at idle |
+| Cooler | Fan fitted and spinning: 0 rpm at 45 °C (below the 50 °C turn-on), **3574 rpm** (PWM 125/255) at 64 °C under `stress-ng` |
 | `eth0` | 1000 Mb/s, full duplex, link detected (meets Option B's bar) |
 | `wlan0` | BCM4345/6, see §3 |
 | USB | Root hubs only: **no camera plugged in** |
