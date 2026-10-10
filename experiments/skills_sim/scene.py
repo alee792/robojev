@@ -56,8 +56,11 @@ def build(spec: SceneSpec):
     s.option.impratio = 10.0           # stiffer friction: blocks don't creep out of the grip
     w = s.worldbody
     w.add_light(pos=[0.3, 0, 1.2], dir=[0, 0, -1], type=mujoco.mjtLightType.mjLIGHT_DIRECTIONAL)
+    # block-table friction 0.5 (wood on wood): a pushed cube slides. MuJoCo takes the larger of a pair's
+    # frictions, so at the old 1.0 the pads' push, 2.9 cm up a 4 cm cube, rolled it over (K4 probe);
+    # the grip is unaffected, the pads' 1.5 still wins there.
     w.add_geom(name="table", type=mujoco.mjtGeom.mjGEOM_BOX, size=[0.6, 0.6, 0.01], pos=[0.3, 0, TABLE_Z - 0.01],
-               rgba=[0.75, 0.6, 0.4, 1], friction=[0.8, 0.01, 0.001])
+               rgba=[0.75, 0.6, 0.4, 1], friction=[0.5, 0.01, 0.001])
     if spec.tray:
         t = spec.tray
         for i in range(t.n):
@@ -70,7 +73,7 @@ def build(spec: SceneSpec):
                           quat=[np.cos(b.yaw / 2), 0, 0, np.sin(b.yaw / 2)])
         body.add_freejoint(name=b.name + "_free")
         body.add_geom(name=b.name + "_g", type=mujoco.mjtGeom.mjGEOM_BOX, size=[h, h, h], mass=b.mass,
-                      rgba=list(b.rgba), friction=[1.0, 0.01, 0.001], condim=4)
+                      rgba=list(b.rgba), friction=[0.5, 0.01, 0.001], condim=4)
     # finger pads: high friction, torsional resistance, so a held block doesn't spin or slip
     for g in s.geoms:
         if g.parent.name in ("left_carriage_link", "right_carriage_link") or "carriage" in (g.parent.name or ""):

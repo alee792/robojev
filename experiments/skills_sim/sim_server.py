@@ -27,6 +27,10 @@ Choices the protocol leaves open, made here (report, do not settle):
     reads status() and calls resume(). A fresh heartbeat does not resume anything.
   - STOP fails every skill with the catalog code "stopped", parks each arm at its home pose at
     crawl speed keeping its grip, and refuses every later start().
+  - "on:<id>" means resting on that block's top with the centres within ON_TOL_XY (1.5 cm); a block
+    overhanging further, falling or tipped on an edge reads "table". stack_on is judged by it.
+  - The scene has no hands. world().hands is whatever set_hands() (a test-only hook) was last given,
+    so hand_over's release is exercised by injecting a HandObs; perception fills it at L2.
 """
 from __future__ import annotations
 
@@ -43,7 +47,7 @@ from robojev.arm import Mover
 from robojev.config import Workspace
 
 from . import catalog, scene, skills
-from .protocol import (ArmObs, ArmSpec, GripperSpec, Manifest, ObjectObs, PlaceObs, Recorder, RobotEvent,
+from .protocol import (ArmObs, ArmSpec, GripperSpec, HandObs, Manifest, ObjectObs, PlaceObs, Recorder, RobotEvent,
                        SkillStatus, WorldState)
 
 ARM_ID = "arm_0"
@@ -56,6 +60,8 @@ GRIPPER_Q_MAX = 0.044             # m of travel per carriage; the fingertips mee
 MAX_WIDTH = 2 * GRIPPER_Q_MAX
 HELD_TOL = 0.0025                 # |width - object size| within this, with both fingers touching = held
                                   # (an 8 mm squeeze reads 1.3 mm of penetration on a 4 cm cube)
+ON_TOL_XY = 0.015                 # a block whose centre is within this of another's, resting on its top, is "on:" it
+ON_TOL_Z = 0.006
 
 
 @dataclass(frozen=True)
@@ -102,11 +108,13 @@ class _Body:
 
 
 class SimWorld:
-    """Ground truth out of MjData for the blocks and the tray of a scene.SceneSpec."""
+    """Ground truth out of MjData for the blocks and the tray of a scene.SceneSpec. `hands` is the
+    one thing not read from physics: the scene has no hands, so tests inject them (set_hands)."""
 
     def __init__(self, mujoco, model, data, spec: scene.SceneSpec):
         self.mujoco, self.model, self.data = mujoco, model, data
         self.table_z = scene.TABLE_Z
+        self.hands: list[HandObs] = []
         self.blocks: dict[str, _Body] = {}
         for b in spec.blocks:
             bid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, b.name)
@@ -148,7 +156,9 @@ class SimWorld:
         return abs(z - (self.table_z + h.size / 2)) < 0.005 and float(np.linalg.norm(v)) < 0.02
 
     def where(self, oid: str, held_by: dict[str, str]) -> str:
-        """place id | "table" | "on:<object id>" | "gripper:<arm id>", from geometry."""
+        """place id | "table" | "on:<object id>" | "gripper:<arm id>", from geometry. "on:" means
+        resting on the other block's top, centred within ON_TOL_XY; anything else off the table
+        (falling, tipped on an edge) reads "table"."""
         if oid in held_by:
             return f"gripper:{held_by[oid]}"
         p = self.pose(oid)
@@ -161,7 +171,8 @@ class SimWorld:
             if other == oid:
                 continue
             q = self.pose(other)
-            if math.hypot(p.x - q.x, p.y - q.y) < h.size and 0 < p.z - q.z < h.size + 0.01:
+            if (math.hypot(p.x - q.x, p.y - q.y) <= ON_TOL_XY
+                    and abs(p.z - q.z - (h.size + p.size) / 2) <= ON_TOL_Z):
                 return f"on:{other}"
         return "table"
 
@@ -186,11 +197,12 @@ class SimWorld:
     def occupant(self, pid: str, held_by: dict[str, str]) -> str | None:
         return next((oid for oid in self.blocks if self.where(oid, held_by) == pid), None)
 
-    def move(self, oid: str, x: float, y: float, yaw: float | None = None) -> None:
-        """Teleport a block onto the table (a scripted person; tests). Not part of the protocol."""
+    def move(self, oid: str, x: float, y: float, yaw: float | None = None, z: float | None = None) -> None:
+        """Teleport a block onto the table, or to centre height `z` (onto another block). A scripted
+        person; tests. Not part of the protocol."""
         h = self.blocks[oid]
         q = self.data.qpos
-        q[h.qadr:h.qadr + 3] = (x, y, self.table_z + h.size / 2)
+        q[h.qadr:h.qadr + 3] = (x, y, self.table_z + h.size / 2 if z is None else z)
         if yaw is not None:
             q[h.qadr + 3:h.qadr + 7] = (math.cos(yaw / 2), 0, 0, math.sin(yaw / 2))
         self.data.qvel[h.dadr:h.dadr + 6] = 0
@@ -296,9 +308,20 @@ class SimArm:
     def obj(self, oid: str) -> skills.ObjPose | None:
         return self.world.pose(oid)
 
+    def objects(self) -> dict[str, skills.ObjPose]:
+        return {oid: self.world.pose(oid) for oid in self.world.blocks}
+
+    def where(self, oid: str) -> str:
+        return self.world.where(oid, self._held_by())
+
     def place(self, pid: str) -> tuple[float, float] | None:
-        held = {h: self.id for h in [self.held()] if h}
-        return self.world.place_xy(pid, held)
+        return self.world.place_xy(pid, self._held_by())
+
+    def hands(self) -> list[HandObs]:
+        return list(self.world.hands)
+
+    def _held_by(self) -> dict[str, str]:
+        return {h: self.id for h in [self.held()] if h}
 
     def held(self) -> str | None:
         """The block both finger sides touch while the width matches its size. Contacts come from
@@ -502,7 +525,14 @@ class SimRobotServer:
             for a in self.arms.values():
                 x, y, z = a.ee()
                 arms[a.id] = ArmObs(a.id, x, y, z, a.held(), a.width(), a.mode(), skill=a.skill.id if a.active else None)
-            return WorldState(self.t, self.sim_world.objects(held), dict(self.sim_world.places), [], arms)
+            return WorldState(self.t, self.sim_world.objects(held), dict(self.sim_world.places),
+                              list(self.sim_world.hands), arms)
+
+    def set_hands(self, hands: list[HandObs]) -> None:
+        """Test-only hook, not protocol: what world().hands and the skills' ArmIO.hands() report
+        from now on. The scene has no hands; hand_over is exercised by injecting one here."""
+        with self._lock:
+            self.sim_world.hands = list(hands)
 
     def status(self, skill_id: str) -> SkillStatus:
         with self._lock:
@@ -529,6 +559,9 @@ class SimRobotServer:
             a.unfreeze()
             a.skill = skills.SKILLS[skill](sid, arm, args, self.params)
             self._runs[sid] = a.skill
+            note = getattr(self.recorder, "note", None)       # outside protocol.Recorder; the JSONL recorder has it
+            if note is not None:
+                note(kind="skill_start", skill_id=sid, arm=arm, skill=skill, args=dict(args))
             return sid
 
     def hold(self, arm: str) -> None:
@@ -620,28 +653,21 @@ class SimRobotServer:
         if extra:
             return f"precondition: {skill} takes no argument {', '.join(extra)}"
         for k, v in args.items():
-            kind = schema["properties"][k].get("type")
+            prop = schema["properties"][k]
+            kind = prop.get("type")
             if kind == "string" and not isinstance(v, str) or kind == "number" and not isinstance(v, (int, float)):
                 return f"precondition: {k} must be a {kind}"
-        if skill == "hold":
-            s = args.get("seconds", 1.0)
-            if not 0.5 <= s <= 10:
-                return "precondition: hold takes 0.5 to 10 seconds"
+            if "enum" in prop and v not in prop["enum"]:
+                return f"precondition: {k} must be one of {', '.join(prop['enum'])}, not {v!r}"
+            if kind == "number" and not prop.get("minimum", -math.inf) <= v <= prop.get("maximum", math.inf):
+                return f"precondition: {k} must be between {prop.get('minimum')} and {prop.get('maximum')}"
+        held = self._held_by()
+        if skill in ("pick_and_place", "stack_on", "hand_over"):
+            why = self._grasp_why_not(a, args["object"], held)
+            if why:
+                return why
         if skill == "pick_and_place":
-            held = self._held_by()
             oid, pid = args["object"], args["place"]
-            o = self.sim_world.pose(oid)
-            if o is None:
-                return f"not_in_view: there is no object {oid} in the world"
-            if o.size + 0.004 > MAX_WIDTH:
-                return f"precondition: {oid} is {o.size * 100:.1f} cm wide; the fingers open to {MAX_WIDTH * 100:.1f} cm"
-            mine = a.held()
-            if mine and mine != oid:
-                return f"precondition: the gripper is holding {mine}"
-            if held.get(oid, a.id) != a.id:
-                return f"precondition: {oid} is held by {held[oid]}"
-            if not a.reachable((o.x, o.y, TRAVEL_Z)):
-                return f"unreachable: {oid} at ({o.x:.2f}, {o.y:.2f}) is outside the arm's workspace"
             pl = self.sim_world.places.get(pid)
             if pl is None:
                 return f"precondition: there is no place {pid} in the world"
@@ -653,6 +679,59 @@ class SimRobotServer:
                 return f"blocked: {pl.name} has no free slot"
             if not a.reachable((xy[0], xy[1], TRAVEL_Z)):
                 return f"unreachable: {pid} at ({xy[0]:.2f}, {xy[1]:.2f}) is outside the arm's workspace"
+        if skill == "stack_on":
+            oid, onto = args["object"], args["onto"]
+            b = self.sim_world.pose(onto)
+            if b is None:
+                return f"not_in_view: there is no object {onto} in the world"
+            if onto == oid:
+                return f"precondition: {oid} cannot be stacked on itself"
+            if onto in held:
+                return f"precondition: {onto} is held by {held[onto]}"
+            if not a.reachable((b.x, b.y, TRAVEL_Z)):
+                return f"unreachable: {onto} at ({b.x:.2f}, {b.y:.2f}) is outside the arm's workspace"
+            top = next((o for o in self.sim_world.blocks if o != oid and self.sim_world.where(o, held) == f"on:{onto}"), None)
+            if top:
+                return f"blocked: {onto} already has {top} on it"
+            o = self.sim_world.pose(oid)
+            if b.z + b.size / 2 + o.size + self.params.tip_height > TRAVEL_Z:      # the carried block would hit it
+                return f"unreachable: the top of {onto} is {b.z + b.size / 2 - scene.TABLE_Z:.3f} m above the table, too high to stack on"
+        if skill == "push":
+            oid = args["object"]
+            o = self.sim_world.pose(oid)
+            if o is None:
+                return f"not_in_view: there is no object {oid} in the world"
+            if oid in held:
+                return f"precondition: {oid} is held by {held[oid]}"
+            if a.held():
+                return f"precondition: the gripper is holding {a.held()}"
+            start, limit = skills.push_path(o, args["direction"], args["distance"], self.params)
+            push_z = scene.TABLE_Z + self.params.tip_height
+            for xy, what in ((start, "starts"), (limit, "ends")):
+                if not a.reachable((xy[0], xy[1], push_z)):
+                    return (f"unreachable: pushing {oid} {args['distance'] * 100:.0f} cm {args['direction']} {what} at "
+                            f"({xy[0]:.2f}, {xy[1]:.2f}), outside the arm's workspace")
+        if skill == "hand_over":
+            ox, oy = self.params.offer_xy
+            if not a.reachable((ox, oy, self.params.offer_z)):
+                return f"unreachable: the hand-over point ({ox:.2f}, {oy:.2f}) is outside the arm's workspace"
+        return None
+
+    def _grasp_why_not(self, a: SimArm, oid: str, held: dict[str, str]) -> str | None:
+        """What stops this arm picking `oid` up: unknown, too wide, in another gripper, this gripper
+        full of something else, out of reach. Already in this gripper is fine (the skill starts at lift)."""
+        o = self.sim_world.pose(oid)
+        if o is None:
+            return f"not_in_view: there is no object {oid} in the world"
+        if o.size + 0.004 > MAX_WIDTH:
+            return f"precondition: {oid} is {o.size * 100:.1f} cm wide; the fingers open to {MAX_WIDTH * 100:.1f} cm"
+        mine = a.held()
+        if mine and mine != oid:
+            return f"precondition: the gripper is holding {mine}"
+        if held.get(oid, a.id) != a.id:
+            return f"precondition: {oid} is held by {held[oid]}"
+        if not a.reachable((o.x, o.y, TRAVEL_Z)):
+            return f"unreachable: {oid} at ({o.x:.2f}, {o.y:.2f}) is outside the arm's workspace"
         return None
 
     def _ev(self, kind: str, text: str, **kw) -> RobotEvent:
