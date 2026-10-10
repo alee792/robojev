@@ -96,15 +96,23 @@ a port of its tick loop.
 
 ## Findings so far
 
-- **Grasp geometry (K1 probe, 2026-10-10).** The finger pads' gripping surfaces span 0.7-4.1 cm
-  behind the EE point (the fingertips). At v1's 75° pitch, pads on a 4 cm cube's middle put the
-  fingertips in the table. v1 never saw this: its sim snapped objects to the gripper instead of
-  using physics, and its 75°/0.44 m tuning was for side-grasping an 11 cm cup. Fix: grasp straight
-  down (90°), which the reachability map supports out to x ≈ 0.42 — beyond everything we grasp.
-  Tips commanded to ~0.5 cm above the table put the pads at 1.2-4.6 cm: straddling a 4 cm cube.
-  D1 must confirm the real arm streams a 90° pitch (v1 verified 75° only).
+- **Grasp geometry (K1 probe, corrected by K2, 2026-10-10).** At v1's 75° pitch a 4 cm cube can't
+  be gripped without the fingertips in the table; v1 never saw this because its sim snapped objects
+  to the gripper and its tuning was for side-grasping an 11 cm cup. Fix: grasp straight down (90°),
+  fingertips 0.5 cm above the table. K2 then found the finger collision boxes are tapered (~7°), so
+  a 4 cm cube is held by a fingertip pinch on its lower 1.5 cm, not by the pads; it holds through a
+  0.15 m/s carry. Straight-down reach is better than v1's note: position error 0 out to x = 0.46 at
+  grasp height, 0.42 at z = 0.10, 0.38 at z = 0.14. D1 must confirm the real arm streams a 90° pitch
+  (v1 verified 75° only) and loosen the vertical tolerances: every sim body has gravity
+  compensation, so steady-state error is ~0 here and will not be on the real arm.
 - **Gripper mapping.** v1's sim "closed" setting leaves a 4.8 cm gap — built for the fake grasp.
   K2 commands the joint's true 0-0.044 range.
+- **K2 result (2026-10-10).** `pick_and_place` 80/80 over seeds 0-3 (`trials.py`), 7.3 s sim per
+  pick. Parameters: open to width + 3 cm, close to width − 8 mm (4 N per side), yaw = block yaw mod
+  90° nearest the wrist's zero-roll direction, 0.15 m/s travel / 0.10 vertical / 0.05 for the last
+  2 cm, travel_z 0.10. Grasp detected from both finger sides touching the same block with the width
+  within 2.5 mm of its size. Hold / pause / resume / retarget work from every phase; a lag trip,
+  a missed heartbeat and every failure code are exercised by `tests/test_skills_sim.py`.
 - **Sim grasp numbers are logic-checks only.** The sim actuator allows 400 N against a real grip of
   tens of N, and pad friction here is hand-tuned. K2's 19/20 proves phases and geometry; real grasp
   reliability is D1's bar, with the same script pointed at the real backend.

@@ -64,7 +64,8 @@ CONTROL_TOOLS = ("hold", "pause", "resume", "retarget", "stop", "heartbeat")
 RESOURCES = ("manifest", "world", "status")
 
 # Standard failure codes. A SkillStatus.reason is "<code>: <literal text>".
-REASONS = ("unreachable", "grasp_failed", "dropped", "blocked", "stalled", "timeout", "not_in_view", "precondition")
+REASONS = ("unreachable", "grasp_failed", "dropped", "blocked", "stalled", "timeout", "not_in_view", "precondition",
+           "cancelled", "stopped")
 
 
 def is_standard(name: str) -> bool:

@@ -105,7 +105,7 @@ class ArmObs:
     z: float
     holding: str | None                 # object id between closed fingers
     gripper_width: float
-    mode: str                           # idle | running | holding | paused | stopped | tripped
+    mode: str                           # idle | running | holding | paused | stopped | tripped | failed
 
 
 @dataclass
@@ -130,8 +130,9 @@ class SkillStatus:
     id: str
     arm: str
     name: str
-    state: str                          # running | holding | paused | done | failed
+    state: str                          # running | holding | paused | done | failed | cancelled
     phase_text: str                     # literal: "lowered at tray slot 3 holding block 5, not yet released"
+    phase: str = ""                     # machine name of the phase ("descend"), for recorders and conformance tests
     reason: str | None = None           # why it failed
     heading: tuple[float, float] | None = None   # (x, y) the arm is moving toward, for "in the arm's path"
     args: dict = field(default_factory=dict)
@@ -188,7 +189,12 @@ class RobotServer(Protocol):
         """tool: None if the skill could start now on this arm, else why not (literal)."""
 
     def start(self, arm: str, skill: str, args: dict) -> str:
-        """tool: begin a skill; returns its id at once. Done/failed arrive as events."""
+        """tool: begin a skill; returns its id at once. Done/failed arrive as events.
+
+        Refusal (unknown skill or arm, bad or missing args, a precondition that fails, STOP pressed)
+        raises ValueError(reason) with the literal reason and emits no event: the MCP tool-error
+        path. Starting on a busy arm cancels its running skill (state "cancelled", reason
+        "cancelled: replaced by <id>", no event) and begins the new one."""
 
     def hold(self, arm: str) -> None:
         """tool: stop moving at a safe point, keep the grip and the skill's state; resume() continues."""
