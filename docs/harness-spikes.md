@@ -71,10 +71,36 @@ sim.
 | D3 | If there's a second arm: is it a follower or a leader, and can it grasp? | W1 and W7 from `docs/widowx-pair.md` as scripts | Arm |
 | D4 | First real closed-loop run | A checklist: teleop off, workspace box set, STOP tested, one sorting episode | Arm |
 
-## Order
+## Order (revised after review, 2026-10-10)
 
-1. Here, now: K1 → K2 → K3, with H1 and H2 alongside. These are the riskiest unknowns that need no
-   hardware.
-2. L1 with mock decisions, here; then live on the Mac with H3.
-3. Mac: P1-P3, H4, H5, then L2.
-4. Last: K4-K6 and H6, then write D1-D4 so day one is scripted.
+Build a thin end-to-end slice first, then widen — interface mismatches between harness and skills
+should surface in days, not after the skill library is "done".
+
+1. **The slice:** K1, a basic `move_object`, H1, and H6's recorder from the first version of the
+   skill server (every tuning run is training data; retrofitting recording gets skipped).
+2. **L1 on one scenario** (sort three blocks, one correction), mock decisions here, then live on the
+   Mac with H3.
+3. **Widen:** K2's 20-trial bar, K3's interrupts from every phase, more scenarios, H2, H4, H5.
+4. **Mac:** P1-P3 before L2 — ground truth hides block identity and occlusion, the hardest real
+   perception problems; don't let these slip to the end.
+5. **Last:** K4-K6, then D1-D4 so day one is scripted.
+
+During the spikes all three "processes" run in one process with the interfaces enforced; the socket
+arrives at K6. Code lives in `experiments/skills_sim/` and is promoted into `src/robojev` only after
+L1 passes. H1 is a small new asyncio loop around e12v2's pure functions (combine, gates, plan), not
+a port of its tick loop.
+
+## Findings so far
+
+- **Grasp geometry (K1 probe, 2026-10-10).** The finger pads' gripping surfaces span 0.7-4.1 cm
+  behind the EE point (the fingertips). At v1's 75° pitch, pads on a 4 cm cube's middle put the
+  fingertips in the table. v1 never saw this: its sim snapped objects to the gripper instead of
+  using physics, and its 75°/0.44 m tuning was for side-grasping an 11 cm cup. Fix: grasp straight
+  down (90°), which the reachability map supports out to x ≈ 0.42 — beyond everything we grasp.
+  Tips commanded to ~0.5 cm above the table put the pads at 1.2-4.6 cm: straddling a 4 cm cube.
+  D1 must confirm the real arm streams a 90° pitch (v1 verified 75° only).
+- **Gripper mapping.** v1's sim "closed" setting leaves a 4.8 cm gap — built for the fake grasp.
+  K2 commands the joint's true 0-0.044 range.
+- **Sim grasp numbers are logic-checks only.** The sim actuator allows 400 N against a real grip of
+  tens of N, and pad friction here is hand-tuned. K2's 19/20 proves phases and geometry; real grasp
+  reliability is D1's bar, with the same script pointed at the real backend.
