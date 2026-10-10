@@ -44,8 +44,8 @@ not added for show.
 
 ### Crawl: one brain, two arms
 
-- One harness, one planner. Each plan step names its arm: `move_object(arm=follower, block 5,
-  shared_zone)`, then `move_object(arm=leader, block 5, slot 2)`.
+- One harness, one planner. Each plan step names its arm: `pick_and_place(arm=follower, block 5,
+  shared_zone)`, then `pick_and_place(arm=leader, block 5, slot 2)`.
 - Code enforces the shared-zone lock and runs both arms' steps in parallel when they don't conflict.
 - Every event gets one decision per arm. The right-now group treats the other arm as one more
   moving thing in the scene. Hand-in-the-way and corrections work as in e12v2.

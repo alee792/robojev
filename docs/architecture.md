@@ -18,7 +18,7 @@ flowchart TB
             rec[(Recorder)]
         end
         subgraph motor [Skill server process: the body]
-            skills[Skills: move_object, stack_on,<br/>push, hand_over, survey, hold]
+            skills[Skills: pick_and_place, stack_on,<br/>push, hand_over, survey, hold]
             safety[Safety filter: workspace box, speed cap,<br/>effort trip, shared-zone lock, heartbeat]
             be[Backend: MuJoCo sim or trossen_arm]
         end
@@ -53,7 +53,7 @@ Everything runs on one Mac; the WidowX needs no real-time box.
    in-plan fix, who handles it). Code combines the answers, gates on confidence and applies the rules
    (STOP, models can only pause, replan-loop limit). An OpenAI model writes and fixes the plan
    asynchronously; a plan is skill calls plus done conditions. A recorder logs everything.
-3. **Robot server process (the body).** Motor skills: `move_object`, `stack_on`, `push`,
+3. **Robot server process (the body).** Motor skills: `pick_and_place`, `stack_on`, `push`,
    `hand_over`, `survey`, `hold`. Under them a safety filter (workspace box, speed cap, effort trip,
    shared-zone lock, heartbeat), and under that a backend: MuJoCo sim or the real `trossen_arm`
    driver.
@@ -74,7 +74,7 @@ a YAM) runs its own **robot server** speaking one protocol, shaped like MCP:
 - **Notifications:** skill done or failed, safety trip, scene change, heartbeat lost.
 
 On top of the protocol sits a **catalog** (`experiments/skills_sim/catalog.py`): fixed names and
-argument shapes for the standard skills (`move_object`, `stack_on`, `push`, `hand_over`, `survey`,
+argument shapes for the standard skills (`pick_and_place`, `stack_on`, `push`, `hand_over`, `survey`,
 `hold`), standard failure codes, and the control tools and resources every server must have. A
 robot advertises the standard skills it can do, unchanged, and anything else under a prefix
 (`widowx.wiggle_free`). Shared names are what let planner prompts, evaluations and recorded
@@ -147,7 +147,7 @@ A **policy** maps what the robot senses now to its next action, run in a loop. I
 (inverse kinematics toward a target) or learned (a network trained from demonstrations or trial and
 error; a VLA is a learned policy that reads images and an instruction).
 
-A **skill** is a named, limited action with a contract: inputs (`move_object(block 5, slot 2)`),
+A **skill** is a named, limited action with a contract: inputs (`pick_and_place(block 5, slot 2)`),
 preconditions, done or failed with a reason, and safe interrupt points (hold, pause, resume,
 re-target). Inside each skill is a policy; ours start hand-written and read positions from the world
 state each tick. The planner chooses which skills run in what order; the decision loop adapts that

@@ -2,7 +2,7 @@
 
 MCP gives discovery; it says nothing about what tools are called. Shared names are what make
 planner prompts, the decision loop's expectations, evaluations and, above all, recorded training
-data transfer between robots: a `move_object` on a WidowX, a Panda and a YAM is one dataset.
+data transfer between robots: a `pick_and_place` on a WidowX, a Panda and a YAM is one dataset.
 
 - Mandatory on every server: the control tools (hold, pause, resume, stop, heartbeat) and the
   resources (manifest, world, status). That is the safety contract.
@@ -25,8 +25,8 @@ def _obj(desc="object id from the world state"):
     return {"type": "string", "description": desc}
 
 
-MOVE_OBJECT = SkillSpec(
-    "move_object", "Pick up an object and put it down at a place (a slot, a bin, a free spot on the table).",
+PICK_AND_PLACE = SkillSpec(
+    "pick_and_place", "Pick up an object and put it down at a place (a slot, a bin, a free spot on the table).",
     {"type": "object", "properties": {"object": _obj(), "place": {"type": "string", "description": "place id"}},
      "required": ["object", "place"], "additionalProperties": False})
 
@@ -56,7 +56,7 @@ HOLD = SkillSpec(
     {"type": "object", "properties": {"seconds": {"type": "number", "minimum": 0.5, "maximum": 10, "default": 1.0}},
      "additionalProperties": False})
 
-STANDARD = (MOVE_OBJECT, STACK_ON, PUSH, HAND_OVER, SURVEY, HOLD)
+STANDARD = (PICK_AND_PLACE, STACK_ON, PUSH, HAND_OVER, SURVEY, HOLD)
 BY_NAME = {s.name: s for s in STANDARD}
 
 # Mandatory on every server, whatever skills it offers.

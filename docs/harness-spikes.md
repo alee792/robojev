@@ -42,8 +42,8 @@ sim.
 | # | Question | Pass when | Runs |
 |---|---|---|---|
 | K1 | A MuJoCo WidowX scene with blocks and a tray, behind one skill interface (`start`, `status`, `hold`, `pause`, `resume`, `stop`, heartbeat) | Scene loads; the interface has one sim and one real implementation stubbed | Here |
-| K2 | `move_object` as real motion: approach, grasp, lift, carry, place, release | 19 of 20 sim picks and places at random positions within reach | Here |
-| K3 | Interrupting mid-motion: hold at a safe point keeping the grip, pause, resume, re-target to a moved block | Each works from every phase of `move_object` | Here |
+| K2 | `pick_and_place` as real motion: approach, grasp, lift, carry, place, release | 19 of 20 sim picks and places at random positions within reach | Here |
+| K3 | Interrupting mid-motion: hold at a safe point keeping the grip, pause, resume, re-target to a moved block | Each works from every phase of `pick_and_place` | Here |
 | K4 | `stack_on`, `push`, `hand_over` (to a hand position), `survey` | Each 9 of 10 in sim | Here |
 | K5 | Two arms in one scene (two WidowX models) with the shared-zone lock | 10 runs of moves in parallel with no arm-arm contact | Here |
 | K6 | The robot server as a real MCP server (stdio or HTTP) with the heartbeat watchdog | The brain runs over the transport unchanged; killing it holds the arm within the timeout, in sim | Here |
@@ -79,7 +79,7 @@ sim.
 Build a thin end-to-end slice first, then widen — interface mismatches between harness and skills
 should surface in days, not after the skill library is "done".
 
-1. **The slice:** the robot protocol (`protocol.py`, MCP-shaped), K1, a basic `move_object`, H1,
+1. **The slice:** the robot protocol (`protocol.py`, MCP-shaped), K1, a basic `pick_and_place`, H1,
    and H6's recorder from the first version of the
    skill server (every tuning run is training data; retrofitting recording gets skipped).
 2. **L1 on one scenario** (sort three blocks, one correction), mock decisions here, then live on the

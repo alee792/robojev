@@ -51,7 +51,7 @@ flowchart LR
     subgraph ctrl [Control box: Ubuntu x86, real-time kernel]
         harness[Harness<br/>plan, events, decisions]
         dash[Dashboard + chat]
-        skills[Skill server<br/>move_object, hold, pause]
+        skills[Skill server<br/>pick_and_place, hold, pause]
         safety[Safety filter]
         lf[franky + libfranka<br/>1 kHz loop]
     end
@@ -113,7 +113,7 @@ sequenceDiagram
     S->>R: stop at a safe point, keep the grip
     M->>O: task + correction + world state + plan
     O-->>M: new plan (~3 s)
-    M->>S: move_object(block 5, slot 4)
+    M->>S: pick_and_place(block 5, slot 4)
     S->>R: motion, commands every 1 ms
     R-->>S: reached
     S-->>M: step done
@@ -142,7 +142,7 @@ minutes and accept only when it reports almost no lost packets. **check**
 4. **Binding.** Install **franky** or **panda-py** built against that libfranka version. Both publish
    builds for older libfranka versions on their GitHub releases; the default PyPI wheel targets a newer
    libfranka. **check**
-5. **Skill server.** A small service on the control box that exposes the v2 skills (`move_object`,
+5. **Skill server.** A small service on the control box that exposes the v2 skills (`pick_and_place`,
    `hand_over`, `stack_on`, `push`, `survey`, `hold`) plus `pause`, `resume` and `stop`, built on franky
    motions with Cartesian impedance and force limits. The safety filter runs here, next to the arm.
 6. **Harness.** Develop on the MacBook against the MuJoCo Panda (`franka_emika_panda` from MuJoCo
