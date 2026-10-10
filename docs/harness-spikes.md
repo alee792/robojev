@@ -29,21 +29,21 @@ sim.
 
 | # | Question | Pass when | Runs |
 |---|---|---|---|
-| H1 | Can e12v2's core run on wall-clock time with real async events instead of simulated ticks? | e12v2 scenarios pass with a real clock and an injected-latency mock | Here |
+| H1 ✔ | Can e12v2's core run on wall-clock time with real async events instead of simulated ticks? | Done 2026-10-10: a new asyncio loop around e12v2's pure functions (`experiments/skills_sim/brain/`), 34 tests with ~150 ms mock latency | Here |
 | H2 | Can the harness treat "the arm" as a list of one or two arms with no other change? | One-arm and two-arm toy runs pass; the step schema carries `arm` | Here |
 | H3 | Does the OpenAI Decisions API work as a decision backend, and does the 0.8 gate still work on its confidence? | Replay of e12v2 scenarios: answers within a few points of Jev's, gate catches the same share of wrong answers, p95 under ~400 ms | Mac |
 | H4 | Can the plan check stop sending good plans back (39% today)? | Under 10% of good plans rejected, with planted bad plans still caught | Mac |
 | H5 | Can a transient "wait" stop leaking into the restated task? | No restated task contains a transient command across the scenarios | Mac |
-| H6 | Can the harness record episodes in a LeRobot-style format? | One sim episode saved and replayed frame-accurately | Here |
-| M1 | Is the brain hardware-agnostic? | The same brain, unchanged, runs against two manifests (the sim WidowX and a stub push-only arm), with the planner schema generated from each | Here |
+| H6 ◐ | Can the harness record episodes in a LeRobot-style format? | First half done: the server records every policy tick and event as JSONL (`recorder.py`); the LeRobot conversion and replay remain | Here |
+| M1 ✔ | Is the brain hardware-agnostic? | Done: the same brain runs on the stub's WidowX-like and push-only manifests and on the physics sim; the planner schema and robot description are generated from each, a non-conforming manifest is refused | Here |
 
 ### Skill library (sim)
 
 | # | Question | Pass when | Runs |
 |---|---|---|---|
-| K1 | A MuJoCo WidowX scene with blocks and a tray, behind one skill interface (`start`, `status`, `hold`, `pause`, `resume`, `stop`, heartbeat) | Scene loads; the interface has one sim and one real implementation stubbed | Here |
-| K2 | `pick_and_place` as real motion: approach, grasp, lift, carry, place, release | 19 of 20 sim picks and places at random positions within reach | Here |
-| K3 | Interrupting mid-motion: hold at a safe point keeping the grip, pause, resume, re-target to a moved block | Each works from every phase of `pick_and_place` | Here |
+| K1 ✔ | A MuJoCo WidowX scene with blocks and a tray, behind one skill interface (`start`, `status`, `hold`, `pause`, `resume`, `stop`, heartbeat) | Done: `scene.py`, `protocol.py`; the policies run off an `ArmIO` surface a real backend can implement | Here |
+| K2 ✔ | `pick_and_place` as real motion: approach, grasp, lift, carry, place, release | Done: 80/80 over seeds 0-3 (`trials.py`) | Here |
+| K3 ✔ | Interrupting mid-motion: hold at a safe point keeping the grip, pause, resume, re-target to a moved block | Done inside K2: hold / pause / resume / retarget from every phase, tested | Here |
 | K4 | `stack_on`, `push`, `hand_over` (to a hand position), `survey` | Each 9 of 10 in sim | Here |
 | K5 | Two arms in one scene (two WidowX models) with the shared-zone lock | 10 runs of moves in parallel with no arm-arm contact | Here |
 | K6 | The robot server as a real MCP server (stdio or HTTP) with the heartbeat watchdog | The brain runs over the transport unchanged; killing it holds the arm within the timeout, in sim | Here |
@@ -62,7 +62,7 @@ sim.
 
 | # | Question | Pass when | Runs |
 |---|---|---|---|
-| L1 | The e12v2 harness driving K2-K4 skills on the MuJoCo WidowX, with ground-truth positions | The e12v2 core scenarios pass in physics sim, not the toy world | Here (mock decisions), Mac (live) |
+| L1 ◐ | The e12v2 harness driving K2-K4 skills on the MuJoCo WidowX, with ground-truth positions | Two blocks sorted on physics in 14.8 s with mock decisions; the 3-block sort, a correction, a hand and STOP are running now | Here (mock decisions), Mac (live) |
 | L2 | The same with perception (P1-P3) instead of ground truth | Same bar, with noise from real rendering | Mac |
 
 ### Day-one hardware kit (prepare now, run on the arm)
@@ -113,6 +113,31 @@ a port of its tick loop.
   2 cm, travel_z 0.10. Grasp detected from both finger sides touching the same block with the width
   within 2.5 mm of its size. Hold / pause / resume / retarget work from every phase; a lag trip,
   a missed heartbeat and every failure code are exercised by `tests/test_skills_sim.py`.
+- **First brain-on-physics run (H1 × K2, 2026-10-10).** Placing block 2 jostled block 1 in the
+  next slot; its `where` flickered slot → table → slot for ~200 ms, e12v2's change detector called
+  that "moved by someone else", the decider re-queued it, and re-picking from the crowded tray
+  stalled. Two fixes: the brain holds an object change back until it has lasted 0.4 s (hands still
+  pass through at once), and the tray's slot pitch is 8 cm (the gripper opens to block + 3 cm; at
+  6 cm a finger landed on the neighbour). Result: 2 blocks in 14.8 s, no false scene events.
+  Follow-up for the skills: pre-grasp opening should shrink to the gap to the nearest neighbour,
+  so picking from a crowded tray works at any pitch.
 - **Sim grasp numbers are logic-checks only.** The sim actuator allows 400 N against a real grip of
   tens of N, and pad friction here is hand-tuned. K2's 19/20 proves phases and geometry; real grasp
   reliability is D1's bar, with the same script pointed at the real backend.
+
+## Follow-ups from the first slice
+
+Small, recorded so they aren't lost; none blocks the next spike.
+
+- `hold` is both a control tool and a standard skill; they collide in one MCP tool namespace at K6.
+  Likely rename the skill to `wait`.
+- Place ids aren't standardised (`slot_0..` in the sim, `tray_slot_1..` in the stub). Pick one in the
+  catalog.
+- The stub's `ArmObs.skill` is still `None`; the brain doesn't read the field yet. Wire both when
+  reconnect moves from inference to `status()`.
+- A shared `catalog.check_args(spec, args)` would replace the stub's and the brain's separate
+  argument checks.
+- Decision text inside e12v2 still says `move_object`; fixing it means editing e12v2, which we're
+  retiring, so it waits for promotion into `src/robojev`.
+- Extension skills are advertised but not plannable: e12v2's validator can't model their effects.
+- The pre-grasp opening should adapt to neighbours (above).
