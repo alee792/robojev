@@ -35,6 +35,7 @@ sim.
 | H4 | Can the plan check stop sending good plans back (39% today)? | Under 10% of good plans rejected, with planted bad plans still caught | Mac |
 | H5 | Can a transient "wait" stop leaking into the restated task? | No restated task contains a transient command across the scenarios | Mac |
 | H6 | Can the harness record episodes in a LeRobot-style format? | One sim episode saved and replayed frame-accurately | Here |
+| M1 | Is the brain hardware-agnostic? | The same brain, unchanged, runs against two manifests (the sim WidowX and a stub push-only arm), with the planner schema generated from each | Here |
 
 ### Skill library (sim)
 
@@ -45,7 +46,7 @@ sim.
 | K3 | Interrupting mid-motion: hold at a safe point keeping the grip, pause, resume, re-target to a moved block | Each works from every phase of `move_object` | Here |
 | K4 | `stack_on`, `push`, `hand_over` (to a hand position), `survey` | Each 9 of 10 in sim | Here |
 | K5 | Two arms in one scene (two WidowX models) with the shared-zone lock | 10 runs of moves in parallel with no arm-arm contact | Here |
-| K6 | The skill server over a local socket with the heartbeat watchdog | Killing the harness holds the arm within the timeout, in sim | Here |
+| K6 | The robot server as a real MCP server (stdio or HTTP) with the heartbeat watchdog | The brain runs over the transport unchanged; killing it holds the arm within the timeout, in sim | Here |
 
 ### Perception (sim and offline)
 
@@ -76,7 +77,8 @@ sim.
 Build a thin end-to-end slice first, then widen — interface mismatches between harness and skills
 should surface in days, not after the skill library is "done".
 
-1. **The slice:** K1, a basic `move_object`, H1, and H6's recorder from the first version of the
+1. **The slice:** the robot protocol (`protocol.py`, MCP-shaped), K1, a basic `move_object`, H1,
+   and H6's recorder from the first version of the
    skill server (every tuning run is training data; retrofitting recording gets skipped).
 2. **L1 on one scenario** (sort three blocks, one correction), mock decisions here, then live on the
    Mac with H3.

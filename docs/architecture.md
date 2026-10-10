@@ -53,18 +53,38 @@ Everything runs on one Mac; the WidowX needs no real-time box.
    in-plan fix, who handles it). Code combines the answers, gates on confidence and applies the rules
    (STOP, models can only pause, replan-loop limit). An OpenAI model writes and fixes the plan
    asynchronously; a plan is skill calls plus done conditions. A recorder logs everything.
-3. **Skill server process (the body).** Motor skills: `move_object`, `stack_on`, `push`,
+3. **Robot server process (the body).** Motor skills: `move_object`, `stack_on`, `push`,
    `hand_over`, `survey`, `hold`. Under them a safety filter (workspace box, speed cap, effort trip,
    shared-zone lock, heartbeat), and under that a backend: MuJoCo sim or the real `trossen_arm`
    driver.
 4. **Cloud.** The decision model (OpenAI's Decisions API or Jev, ~120-150 ms) and the planner (an
    OpenAI model, seconds).
 
+## Hardware-agnostic: a protocol, not a library
+
+The brain never knows which robot it drives. Each robot (sim WidowX, the bay's WidowX pair, a Panda,
+a YAM) runs its own **robot server** speaking one protocol, shaped like MCP:
+
+- **Manifest** (MCP `initialize` + `tools/list`): the arms with their workspace, gripper limits and
+  base frame; the skills offered, each with a JSON schema for its arguments. The planner's output
+  schema is generated from the manifest, so a robot that can't `hand_over` is never asked to.
+- **Tools:** `start(arm, skill, args)`, `hold`, `pause`, `resume`, `retarget`, `stop`, `heartbeat`.
+- **Resources:** the world state; each running skill's status with the literal phase text the
+  decision loop reads.
+- **Notifications:** skill done or failed, safety trip, scene change, heartbeat lost.
+
+Skill granularity is the protocol boundary. The policy inside a skill (10-100 Hz) and the motor loop
+(~1 kHz) never cross it. Units are metres and seconds; frames are declared in the manifest.
+
+The interface is `experiments/skills_sim/protocol.py` during the spikes (in-process Python, each
+method mapped to its MCP counterpart) and becomes an MCP server over stdio or HTTP at K6. The
+planner LLM does not call tools directly: it emits a plan the harness executes, so the decision loop
+and the safety rules always sit between the model and the robot.
+
 ## Seams
 
-- **Skill API:** `start(arm, skill, args)`, `status`, `hold`, `pause`, `resume`, `stop`,
-  `heartbeat`; reports done or failed with a reason. The same API fronts sim, the real arm, a second
-  arm and, later, a learned policy.
+- **Robot protocol** (above): the same surface fronts sim, the real arm, a second arm, another
+  make of arm and, later, a learned policy behind a skill.
 - **Arm backend:** end-effector goal (position, pitch, yaw), speed cap and gripper width in; a
   snapshot out. Sim and real implement it.
 - **World state:** objects with id, label, position, and who holds or has claimed them; hands; arm
