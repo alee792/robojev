@@ -55,6 +55,8 @@ sim.
 | P1 | Block positions from the rendered scene camera | Within ~1 cm of MuJoCo ground truth | Mac |
 | P2 | Reading block labels (numbers or letters) from a frame: local detector vs OpenAI vision vs the Decisions API with an image | Right on 95% of frames; latency per update recorded | Mac |
 | P3 | A hand entering the frame, fast enough to pause | Detected within ~300 ms of entering | Mac |
+| V1 | The Decisions API with a camera frame: latency, and accuracy on hand-near-gripper, grasp-succeeded and block-knocked-over, against text-only | Accuracy at least matches text-only on each; latency recorded (sets the visual loop's rate) | Mac |
+| V2 | The planner with an annotated frame (object ids drawn on): does it catch planted disagreements between the written state and the picture? | 9 of 10 planted disagreements caught, no false alarms on 10 clean frames | Mac |
 
 ### Closed loop
 

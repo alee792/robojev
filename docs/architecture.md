@@ -73,6 +73,20 @@ a YAM) runs its own **robot server** speaking one protocol, shaped like MCP:
   decision loop reads.
 - **Notifications:** skill done or failed, safety trip, scene change, heartbeat lost.
 
+On top of the protocol sits a **catalog** (`experiments/skills_sim/catalog.py`): fixed names and
+argument shapes for the standard skills (`move_object`, `stack_on`, `push`, `hand_over`, `survey`,
+`hold`), standard failure codes, and the control tools and resources every server must have. A
+robot advertises the standard skills it can do, unchanged, and anything else under a prefix
+(`widowx.wiggle_free`). Shared names are what let planner prompts, evaluations and recorded
+training data transfer between robots. A conformance suite (K2's trials, D1 on hardware) proves a
+server does the standard skills.
+
+**Images.** The planner gets the camera frame with object ids drawn on it, next to the written
+world state, so it can catch what a description misses and notice when the two disagree. The
+decision model gets a frame only for questions about the physical scene (a hand near the gripper,
+a grasp succeeded, the plan matches the table): a slower visual loop beside the ~120 ms text one.
+Models judge from images; perception still measures: positions in metres come from perception.
+
 Skill granularity is the protocol boundary. The policy inside a skill (10-100 Hz) and the motor loop
 (~1 kHz) never cross it. Units are metres and seconds; frames are declared in the manifest.
 
