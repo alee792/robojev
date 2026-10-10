@@ -44,9 +44,9 @@ sim.
 | K1 ✔ | A MuJoCo WidowX scene with blocks and a tray, behind one skill interface (`start`, `status`, `hold`, `pause`, `resume`, `stop`, heartbeat) | Done: `scene.py`, `protocol.py`; the policies run off an `ArmIO` surface a real backend can implement | Here |
 | K2 ✔ | `pick_and_place` as real motion: approach, grasp, lift, carry, place, release | Done: 80/80 over seeds 0-3 (`trials.py`) | Here |
 | K3 ✔ | Interrupting mid-motion: hold at a safe point keeping the grip, pause, resume, re-target to a moved block | Done inside K2: hold / pause / resume / retarget from every phase, tested | Here |
-| K4 | `stack_on`, `push`, `hand_over` (to a hand position), `survey` | Each 9 of 10 in sim | Here |
+| K4 ✔ | `stack_on`, `push`, `hand_over` (to a hand position), `survey` | Done 2026-10-10: stack_on 80/80, push 80/80 (seeds 0-3), hand_over tested with an injected hand; begin-from-held and hold/resume mid-skill for each | Here |
 | K5 | Two arms in one scene (two WidowX models) with the shared-zone lock | 10 runs of moves in parallel with no arm-arm contact | Here |
-| K6 | The robot server as a real MCP server (stdio or HTTP) with the heartbeat watchdog | The brain runs over the transport unchanged; killing it holds the arm within the timeout, in sim | Here |
+| K6 ✔ | The robot server as a real MCP server (stdio or HTTP) with the heartbeat watchdog | Done 2026-10-10 (`mcp_server.py`, `mcp_client.py`): the brain's 3-block sort passes over a stdio subprocess unchanged; event delivery 1.6 ms p50 / 2.5 ms p95, heartbeat 1.6 ms, world 2.1 ms | Here |
 
 ### Perception (sim and offline)
 
@@ -129,6 +129,19 @@ a port of its tick loop.
   skill by a new `start()` on a busy arm; it works because `pick_and_place` notices its object is
   already between the fingers and begins at "lift". That is a requirement on every grasping skill
   and should be stated in the catalog.
+- **Pushing (K4).** The closed gripper never pushes with its fingertips: the pad boxes stand proud
+  of the tips on every side, so contact lands ~1.9 cm up a 4 cm cube. At the scene's friction of
+  1.0 the cube rolled over; at 0.5 (wood on wood, the more honest number) it slides with 0.3° of
+  tilt. A blocked push doesn't stop the arm under position control (joints creep ~1.5 mm per
+  0.2 s), so `blocked` is detected from the gap to where the slide should be, not from progress.
+- **MCP as the transport (K6).** Viable with a wide margin (table above). What mcp 2.x made
+  awkward for a long-running, stateful, event-emitting server: no connection-opened hook (sessions
+  are per request, so pushing events means remembering the last request's session); a closed
+  notification vocabulary (events ride a custom `notifications/robot/event`, which the client must
+  know to bind); the in-process client drops server notifications (tests use memory streams); tool
+  errors carry text only (the `code: text` convention survives, a code field doesn't); the
+  high-level server derives schemas from Python signatures, so manifest-driven tools need the
+  low-level one. The transport cost is not the problem; the SDK's request/response shape is.
 - **Sim grasp numbers are logic-checks only.** The sim actuator allows 400 N against a real grip of
   tens of N, and pad friction here is hand-tuned. K2's 19/20 proves phases and geometry; real grasp
   reliability is D1's bar, with the same script pointed at the real backend.
@@ -161,3 +174,10 @@ Small, recorded so they aren't lost; none blocks the next spike.
   retiring, so it waits for promotion into `src/robojev`.
 - Extension skills are advertised but not plannable: e12v2's validator can't model their effects.
 - The pre-grasp opening should adapt to neighbours (above).
+- `hand_over` has no end state in the catalog: the sim's released block falls to the table
+  (`where` "table"), the stub reports "person". Decide what a successful hand-over's world looks
+  like and give the skill an optional `place` for where the person is.
+- No way to advertise a maximum stack height; the sim refuses a base that would put the carry above
+  travel height with `unreachable`.
+- Across processes, `RobotEvent.t` and `WorldState.t` sit on the server's private clock; expose
+  the epoch so a client can place events on its own clock without calibrating.

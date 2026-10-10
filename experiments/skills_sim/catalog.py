@@ -43,7 +43,7 @@ PUSH = SkillSpec(
     {"type": "object", "properties": {
         "object": _obj(),
         "direction": {"type": "string", "enum": ["left", "right", "toward_robot", "away_from_robot"]},
-        "distance": {"type": "number", "description": "metres", "minimum": 0.01, "maximum": 0.3}},
+        "distance": {"type": "number", "description": "metres", "minimum": 0.02, "maximum": 0.3}},   # 1 cm is under a real arm's repeatability
      "required": ["object", "direction", "distance"], "additionalProperties": False})
 
 HAND_OVER = SkillSpec(

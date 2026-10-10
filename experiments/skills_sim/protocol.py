@@ -238,4 +238,7 @@ class Recorder(Protocol):
 
     def event(self, ev: RobotEvent) -> None: ...
 
+    def note(self, **fields) -> None:
+        """Anything that isn't a frame or an event: skill_start (skill, args), trial setup, a verdict."""
+
     def close(self) -> Any: ...
