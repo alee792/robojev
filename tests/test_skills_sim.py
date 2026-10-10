@@ -301,7 +301,7 @@ def test_bad_start_is_refused_without_a_failed_event():
     assert srv.precondition(ARM_ID, "pick_and_place", {"object": "block_1", "place": "bin_7"}) == "precondition: there is no place bin_7 in the world"
     assert srv.precondition(ARM_ID, "push", {}) == "precondition: push needs object, direction, distance"
     assert srv.precondition(ARM_ID, "push", {**PUSH, "direction": "up"}).startswith("precondition: direction must be one of left, right")
-    assert srv.precondition(ARM_ID, "push", {**PUSH, "distance": 0.5}) == "precondition: distance must be between 0.01 and 0.3"
+    assert srv.precondition(ARM_ID, "push", {**PUSH, "distance": 0.5}) == "precondition: distance must be between 0.02 and 0.3"
     assert srv.precondition(ARM_ID, "wiggle", {}) == f"precondition: {ARM_ID} has no skill wiggle"
     assert srv.precondition("arm_1", "survey", {}) == "precondition: no arm arm_1"
     assert srv.precondition(ARM_ID, "hold", {"seconds": 30}) == "precondition: seconds must be between 0.5 and 10"
