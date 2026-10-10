@@ -9,7 +9,7 @@ alone, never from what the skill says about itself: the block rests inside the s
 is in the gripper, and the arm has retreated to travel height. D1 runs the same loop against the real
 backend; only `make_server` changes.
 
-Every policy tick of every trial goes to experiments/results/k2_trials.jsonl (JsonlRecorder) with the
+With --out, every policy tick of every trial goes to a JSONL (JsonlRecorder) with the
 trial index on each line, plus a note per trial with the setup and the verdict.
 """
 from __future__ import annotations
@@ -108,11 +108,12 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--n", type=int, default=20)
     ap.add_argument("--seed", type=int, default=0)
-    ap.add_argument("--out", type=Path, default=RESULTS, help="JSONL of every policy tick and event")
-    ap.add_argument("--no-record", action="store_true")
+    ap.add_argument("--out", type=Path, default=None,
+                    help="JSONL of every policy tick and event; default: none, so a check run can't overwrite "
+                         f"the committed seed-0 log at {RESULTS}")
     a = ap.parse_args(argv)
     rng = random.Random(a.seed)
-    rec = None if a.no_record else JsonlRecorder(a.out)
+    rec = None if a.out is None else JsonlRecorder(a.out)
     n_slots = scene.Tray().n
     verdicts = []
     for i in range(a.n):
