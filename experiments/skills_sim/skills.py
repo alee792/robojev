@@ -230,7 +230,8 @@ class Skill:
             text = "paused: " + text
         elif self.state == "failed":
             text = f"failed in phase '{self.phase}': {self.reason}"
-        return SkillStatus(self.id, self.arm, self.name, self.state, text, self.reason, self.heading, dict(self.args))
+        return SkillStatus(self.id, self.arm, self.name, self.state, text, self.reason, self.heading, dict(self.args),
+                           phase=self.phase)
 
 
 class PickAndPlace(Skill):

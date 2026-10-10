@@ -577,7 +577,7 @@ class SimRobotServer:
                 for a in self.arms.values():
                     if a.active:
                         s = a.skill
-                        s.fail(a, "stalled: STOP pressed; every arm is parking")
+                        s.fail(a, "stopped: STOP pressed; every arm is parking")
                         s.notified = True
                         evs.append(self._ev("skill_failed", s.reason, skill_id=s.id, arm=a.id, object=s.args.get("object")))
                     a.stopped = True

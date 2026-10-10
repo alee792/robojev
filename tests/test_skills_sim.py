@@ -159,7 +159,7 @@ def test_control_calls_are_idempotent():
     srv.stop()
     srv.stop()
     st = srv.status(sid)
-    assert st.state == "failed" and st.reason.startswith("stalled: STOP")
+    assert st.state == "failed" and st.reason.startswith("stopped: STOP")
     assert [e.kind for e in srv.events].count("skill_failed") == 1
     assert srv.world().arms[ARM_ID].mode == "stopped"
     with pytest.raises(ValueError, match="STOP"):

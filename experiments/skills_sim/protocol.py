@@ -132,10 +132,10 @@ class SkillStatus:
     name: str
     state: str                          # running | holding | paused | done | failed | cancelled
     phase_text: str                     # literal: "lowered at tray slot 3 holding block 5, not yet released"
-    phase: str = ""                     # machine name of the phase ("descend"), for recorders and conformance tests
     reason: str | None = None           # why it failed
     heading: tuple[float, float] | None = None   # (x, y) the arm is moving toward, for "in the arm's path"
     args: dict = field(default_factory=dict)
+    phase: str = ""                     # machine name of the phase ("descend"), for recorders and conformance tests
 
 
 # ------------------------------------------------------------------ notifications (MCP: notifications/*)
