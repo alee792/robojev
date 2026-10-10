@@ -62,7 +62,7 @@ sim.
 
 | # | Question | Pass when | Runs |
 |---|---|---|---|
-| L1 ◐ | The e12v2 harness driving K2-K4 skills on the MuJoCo WidowX, with ground-truth positions | Two blocks sorted on physics in 14.8 s with mock decisions; the 3-block sort, a correction, a hand and STOP are running now | Here (mock decisions), Mac (live) |
+| L1 ✔ (mock decisions) | The e12v2 harness driving K2-K4 skills on the MuJoCo WidowX, with ground-truth positions | Done 2026-10-10 (`tests/test_l1_slice.py`, `experiments/results/l1_slice.txt`): 3-block sort 22.9 s; correction mid-carry → hold in 0.10 s, order reversed, no drops; hand mid-carry → pause in 0.11 s, 12 cm clearance, resume 0.17 s after it leaves; STOP mid-carry → parked in 2.5 s, block held. Live decisions on the Mac remain | Here (mock decisions), Mac (live) |
 | L2 | The same with perception (P1-P3) instead of ground truth | Same bar, with noise from real rendering | Mac |
 
 ### Day-one hardware kit (prepare now, run on the arm)
@@ -121,6 +121,14 @@ a port of its tick loop.
   6 cm a finger landed on the neighbour). Result: 2 blocks in 14.8 s, no false scene events.
   Follow-up for the skills: pre-grasp opening should shrink to the gap to the nearest neighbour,
   so picking from a crowded tray works at any pitch.
+- **The slice passes end to end (L1, 2026-10-10).** Brain + physics server + mock decisions, all
+  four scenarios first time, no behavioural bug found. Two things it taught: (1) the 0.5 s
+  hand-to-pause bar holds only because perception *notifies* the brain (0.11 s); on the brain's
+  200 ms poll alone it is 0.3 s typical and ~0.5 s worst case, so the perception process must push
+  scene-change events, not just update the world resource. (2) A correction replaces the running
+  skill by a new `start()` on a busy arm; it works because `pick_and_place` notices its object is
+  already between the fingers and begins at "lift". That is a requirement on every grasping skill
+  and should be stated in the catalog.
 - **Sim grasp numbers are logic-checks only.** The sim actuator allows 400 N against a real grip of
   tens of N, and pad friction here is hand-tuned. K2's 19/20 proves phases and geometry; real grasp
   reliability is D1's bar, with the same script pointed at the real backend.

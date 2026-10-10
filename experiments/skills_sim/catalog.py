@@ -25,6 +25,9 @@ def _obj(desc="object id from the world state"):
     return {"type": "string", "description": desc}
 
 
+# Every grasping skill must begin from "already holding the object" as well as from the table: a
+# correction replaces a running skill by a new start() on a busy arm, with the object still in the
+# fingers, and the new skill carries on from there (L1 relies on this).
 PICK_AND_PLACE = SkillSpec(
     "pick_and_place", "Pick up an object and put it down at a place (a slot, a bin, a free spot on the table).",
     {"type": "object", "properties": {"object": _obj(), "place": {"type": "string", "description": "place id"}},

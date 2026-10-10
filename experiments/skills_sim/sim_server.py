@@ -25,8 +25,8 @@ Choices the protocol leaves open, made here (report, do not settle):
   - The heartbeat watchdog arms on the first heartbeat(): a brain that never connected has not gone
     missing, and the trials and tests run without one. After a loss every arm holds; the brain
     reads status() and calls resume(). A fresh heartbeat does not resume anything.
-  - STOP fails every skill with the code "stalled" (the catalog has no code for STOP), parks each
-    arm at its home pose at crawl speed keeping its grip, and refuses every later start().
+  - STOP fails every skill with the catalog code "stopped", parks each arm at its home pose at
+    crawl speed keeping its grip, and refuses every later start().
 """
 from __future__ import annotations
 
