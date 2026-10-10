@@ -242,9 +242,9 @@ def test_recorder_writes_frames_with_the_skill_id(tmp_path):
     assert srv.run_until(srv.finished(sid), 20)
     srv.run_for(0.2)                          # idle ticks are not frames
     summary = rec.close()
-    lines = [json.loads(l) for l in (tmp_path / "run.jsonl").read_text().splitlines()]
-    frames = [l for l in lines if l["type"] == "frame"]
-    events = [l for l in lines if l["type"] == "event"]
+    lines = [json.loads(line) for line in (tmp_path / "run.jsonl").read_text().splitlines()]
+    frames = [line for line in lines if line["type"] == "frame"]
+    events = [line for line in lines if line["type"] == "event"]
     assert summary["frames"] == len(frames) and 200 < len(frames) < 800
     assert all(f["skill_id"] == sid and f["arm"] == ARM_ID for f in frames)
     assert {f["phase"] for f in frames} == set(skills.PickAndPlace.PHASES) | {"done"}
