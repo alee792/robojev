@@ -162,8 +162,8 @@ a port of its tick loop.
 
 Small, recorded so they aren't lost; none blocks the next spike.
 
-- `hold` is both a control tool and a standard skill; they collide in one MCP tool namespace at K6.
-  Likely rename the skill to `wait`.
+- ~~`hold` is both a control tool and a standard skill~~: settled at K6 without a rename; the wire
+  names are `hold_arm`, `pause_arm`, `resume_arm`, `retarget_skill`, so skills keep catalog names.
 - Place ids aren't standardised (`slot_0..` in the sim, `tray_slot_1..` in the stub). Pick one in the
   catalog.
 - The stub's `ArmObs.skill` is still `None`; the brain doesn't read the field yet. Wire both when

@@ -96,8 +96,12 @@ skills: look, move, look again, correct. Verification is part of the skill contr
 Skill granularity is the protocol boundary. The policy inside a skill (10-100 Hz) and the motor loop
 (~1 kHz) never cross it. Units are metres and seconds; frames are declared in the manifest.
 
-The interface is `experiments/skills_sim/protocol.py` during the spikes (in-process Python, each
-method mapped to its MCP counterpart) and becomes an MCP server over stdio or HTTP at K6. The
+The interface is `protocol.py` (in-process Python, each method mapped to its MCP counterpart), and
+since K6 it is also a real MCP server: every manifest skill is an MCP tool with the catalog schema,
+the control tools are `hold_arm`, `pause_arm`, `resume_arm`, `retarget_skill`, `stop`, `heartbeat`
+and `precondition`, the world and skill statuses are resources, and events are a server-to-client
+notification. The brain's tests pass unchanged over a stdio subprocess; event delivery is 2.5 ms
+p95. The
 planner LLM does not call tools directly: it emits a plan the harness executes, so the decision loop
 and the safety rules always sit between the model and the robot.
 
