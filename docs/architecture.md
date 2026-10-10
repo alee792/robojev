@@ -114,6 +114,20 @@ We build the two layers MHS lacks and shape our arm backend like an MHS driver (
 `write(setpoint)`, `read(limits)`), so a vendor's or LeRobot's MHS driver can slot in underneath
 later. One line: standard skills and a reactive loop, on top of MHS, exposed through MCP.
 
+## Lessons from MCP friction, built in
+
+| Pain with MCP servers | Here |
+|---|---|
+| Tool bloat eats context and gets mis-called | Six skills, five control tools, three resources; the planner reads a ten-line description, never raw schemas |
+| Long-running calls: progress and cancel bolted on | Nothing blocks: `start` returns an id, status is a resource, completion is an event; hold / pause / stop have defined semantics |
+| Stateful servers, clients that assume otherwise, reconnects lose state | The server owns the state; a reconnecting brain reads world and status and carries on; control calls are idempotent |
+| "Bad args", "failed" and "world changed" all come back as text | `precondition` is separate from `start`; failures carry a catalog code plus literal text; events carry the skill id |
+| Tool descriptions as an injection surface | Manifest text is data; the brain renders its own planner description; code rules never read it |
+| Schema drift, no versioning | The manifest carries a catalog version; a non-conforming server is refused at connect |
+| Nested schemas the model mis-fills | Flat arguments, few fields, enums |
+| Untestable without a model | Conformance trials and the stub server run with no model |
+| No observability | The recorder logs every skill tick and event, keyed by skill id |
+
 ## Seams
 
 - **Robot protocol** (above): the same surface fronts sim, the real arm, a second arm, another

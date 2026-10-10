@@ -53,6 +53,7 @@ class Manifest:
     arms: tuple[ArmSpec, ...]
     skills: tuple[SkillSpec, ...]
     units: str = "m,s"
+    catalog: str = "0.1"                # catalog version the skill specs conform to; the brain refuses a mismatch
 
     def skill(self, name: str) -> SkillSpec | None:
         return next((s for s in self.skills if s.name == name), None)
@@ -160,7 +161,20 @@ class RobotServer(Protocol):
     """One robot (any number of arms) behind one interface. Thread-safe; every call returns fast.
 
     MCP mapping: manifest() = initialize/tools/list; world() and status() = resources; start/hold/
-    pause/resume/stop/retarget/heartbeat = tools; subscribe() = notifications."""
+    pause/resume/stop/retarget/heartbeat = tools; subscribe() = notifications.
+
+    Rules, learned from where MCP servers hurt:
+    - Nothing blocks. start() returns an id; progress is status(); completion is an event.
+    - The server owns the state. A brain that reconnects reads world() and status() and carries
+      on; the arm never depends on the client remembering anything.
+    - Control calls are idempotent: hold() on a held arm, resume() on a running one, stop() twice
+      are all no-ops, never errors.
+    - Every event about a skill carries the skill_id start() returned.
+    - Bad arguments are refused by precondition() or start() with a literal reason; a skill that
+      started and then failed reports "<code>: <text>" in status().reason and a skill_failed event.
+      The two are never confused.
+    - Manifest text is data. The brain writes its own description for the planner from it; code
+      rules never read it."""
 
     def manifest(self) -> Manifest: ...
 
