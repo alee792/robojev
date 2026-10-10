@@ -87,6 +87,12 @@ decision model gets a frame only for questions about the physical scene (a hand 
 a grasp succeeded, the plan matches the table): a slower visual loop beside the ~120 ms text one.
 Models judge from images; perception still measures: positions in metres come from perception.
 
+Skills can be as fine-grained as the work needs. A precision task gets skills with explicit
+tolerance arguments that verify their own result before reporting done (`insert` is done when the
+part is seated and the force says so, not when the arm reaches a pose). A low-precision arm (a
+hobby-grade WidowX: millimetre repeatability, backlash, a compliant gripper) needs closed-loop
+skills: look, move, look again, correct. Verification is part of the skill contract.
+
 Skill granularity is the protocol boundary. The policy inside a skill (10-100 Hz) and the motor loop
 (~1 kHz) never cross it. Units are metres and seconds; frames are declared in the manifest.
 
@@ -118,7 +124,7 @@ later. One line: standard skills and a reactive loop, on top of MHS, exposed thr
 
 | Pain with MCP servers | Here |
 |---|---|
-| Tool bloat eats context and gets mis-called | Six skills, five control tools, three resources; the planner reads a ten-line description, never raw schemas |
+| Tool bloat eats context and gets mis-called | The catalog grows as the work needs (fine-grained skills like `align`, `insert`, `nudge` belong in it); what stays small is what the planner sees per call: the manifest narrows it to this robot, the brain to this task, and the planner reads a short description, never raw schemas |
 | Long-running calls: progress and cancel bolted on | Nothing blocks: `start` returns an id, status is a resource, completion is an event; hold / pause / stop have defined semantics |
 | Stateful servers, clients that assume otherwise, reconnects lose state | The server owns the state; a reconnecting brain reads world and status and carries on; control calls are idempotent |
 | "Bad args", "failed" and "world changed" all come back as text | `precondition` is separate from `start`; failures carry a catalog code plus literal text; events carry the skill id |
