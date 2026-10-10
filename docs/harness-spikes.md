@@ -34,7 +34,7 @@ sim.
 | H3 | Does the OpenAI Decisions API work as a decision backend, and does the 0.8 gate still work on its confidence? | Replay of e12v2 scenarios: answers within a few points of Jev's, gate catches the same share of wrong answers, p95 under ~400 ms | Mac |
 | H4 | Can the plan check stop sending good plans back (39% today)? | Under 10% of good plans rejected, with planted bad plans still caught | Mac |
 | H5 | Can a transient "wait" stop leaking into the restated task? | No restated task contains a transient command across the scenarios | Mac |
-| H6 ◐ | Can the harness record episodes in a LeRobot-style format? | First half done: the server records every policy tick and event as JSONL (`recorder.py`); the LeRobot conversion and replay remain | Here |
+| H6 ✔ | Can the harness record episodes in a LeRobot-style format? | Done 2026-10-10: `recorder.py` (per-tick JSONL in the server) + `lerobot_export.py` (LeRobot v2.1 layout, npz columns until pyarrow is in the venv, per-episode tasks and events, frame-accurate replay check). The committed K2 recording exports to 20 episodes / 7014 frames / 1.1 MB, byte-identical on re-export | Here |
 | M1 ✔ | Is the brain hardware-agnostic? | Done: the same brain runs on the stub's WidowX-like and push-only manifests and on the physics sim; the planner schema and robot description are generated from each, a non-conforming manifest is refused | Here |
 
 ### Skill library (sim)
@@ -132,6 +132,18 @@ a port of its tick loop.
 - **Sim grasp numbers are logic-checks only.** The sim actuator allows 400 N against a real grip of
   tens of N, and pad friction here is hand-tuned. K2's 19/20 proves phases and geometry; real grasp
   reliability is D1's bar, with the same script pointed at the real backend.
+
+## Before the recorder runs on real hardware (from H6)
+
+- Record the exact snapshot the policy was given, with its capture time; today the observation
+  is re-read after the tick (identical in sim, newer than the policy saw on hardware).
+- Full-precision monotonic timestamps, both sensor capture and tick; today rounded to 0.1 ms.
+- A header line: manifest, catalog version, recorder schema version, fps, units, base frame, a
+  run id (skill ids like `sk1` are unique only per server). Record skill name and args at
+  `start()`, not inferred from the done event.
+- Joint states and joint commands, and camera frames, are not recorded yet; object poses carry
+  no source, timestamp or confidence. Flush frames as they're written, not at close.
+- The action a learned policy must output is 6 values: goal xyz, yaw, gripper, speed.
 
 ## Follow-ups from the first slice
 
