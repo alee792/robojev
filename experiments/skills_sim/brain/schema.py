@@ -1,8 +1,9 @@
 """The planner's side of the manifest: what the robot is and which steps it can be asked for.
 
-The step format stays e12v2's flat one ({id, skill, object, target, direction}), so its validator,
-diffs, decision text and mocks work unchanged; what changes is that every enum and description in the
-step schema comes from manifest().skills for the arm being driven. A skill the server does not
+The step format stays e12v2's flat one ({id, skill, object, target, direction}, plus one nullable field
+per other argument, e.g. push's distance), so its validator, diffs, decision text and mocks work
+unchanged; ROLE maps the catalog's argument names onto it (place and onto ride in `target`). Every enum
+and description in the step schema comes from manifest().skills for the arm being driven. A skill the server does not
 advertise is not in the `skill` enum, so a strict-output planner cannot write it; a planner that does
 anyway is rejected by `manifest_errors` and retried. A field no skill uses collapses to "none".
 
@@ -21,7 +22,11 @@ from e12v2.core.planner import INSTRUCTIONS, LLMRequest, PlannerClient, PlanResu
 from ..protocol import Manifest, SkillSpec
 from ..protocol import WorldState as PWorld
 
-STEP_FIELDS = ("object", "target", "direction")     # a skill's args must be a subset: the step format carries these
+STEP_FIELDS = ("object", "target", "direction")     # e12v2's step fields: its validator replays steps on these
+# A skill argument -> the step field that carries it. Arguments not named here (push's distance, hold's
+# seconds) get a step field of their own name, nullable; e12v2's validator ignores them.
+ROLE = {"object": "object", "place": "target", "onto": "target", "direction": "direction"}
+RESERVED = ("id", "skill") + STEP_FIELDS
 
 
 def arm_skills(m: Manifest, arm: str) -> list[SkillSpec]:
@@ -32,16 +37,35 @@ def skill_args(s: SkillSpec) -> list[str]:
     return list(s.args_schema.get("properties", {}))
 
 
+def field_of(arg: str) -> str:
+    return ROLE.get(arg, arg)
+
+
 def check_manifest(m: Manifest):
+    """The step format must be able to carry every argument: an argument not in ROLE whose own name is
+    a step field would collide with it."""
     for s in m.skills:
-        extra = [a for a in skill_args(s) if a not in STEP_FIELDS]
-        if extra:
-            raise ValueError(f"skill {s.name}: args {extra} have no field in the step format ({', '.join(STEP_FIELDS)})")
+        bad = [a for a in skill_args(s) if a not in ROLE and a in RESERVED]
+        if bad:
+            raise ValueError(f"skill {s.name}: args {bad} collide with step fields ({', '.join(RESERVED)})")
 
 
 def step_args(step: dict, s: SkillSpec) -> dict:
-    """A plan step -> the protocol's args for start(): only the fields the skill declares."""
-    return {k: step[k] for k in skill_args(s)}
+    """A plan step -> the protocol's args for start(): the skill's own argument names, filled from the
+    step's fields; an argument the step leaves empty takes the schema's default, or is left out."""
+    out = {}
+    for a, spec in s.args_schema.get("properties", {}).items():
+        v = step.get(field_of(a))
+        if v is None or v == P.NONE:
+            if "default" not in spec:
+                continue
+            v = spec["default"]
+        out[a] = v
+    return out
+
+
+def missing_args(step: dict, s: SkillSpec) -> list[str]:
+    return [a for a in s.args_schema.get("required", []) if a not in step_args(step, s)]
 
 
 def describe_robot(m: Manifest) -> str:
@@ -71,32 +95,45 @@ def instructions(m: Manifest) -> str:
             "the table, \"person\" for handing an object to the person, and a group such as \"tray\" meaning any of its slots, "
             "for conditions and constraints only). The skills are motor capabilities only; they do not know the task.\n\n")
     i = INSTRUCTIONS.index("A plan has:")
-    return head + INSTRUCTIONS[i:]
+    return head + _fields_text(m) + "\n\n" + INSTRUCTIONS[i:]
+
+
+def _fields_text(m: Manifest) -> str:
+    """How each skill's arguments sit in a step, generated from the manifest."""
+    used = sorted({a for s in m.skills for a in skill_args(s)})
+    by_field: dict = {}
+    for a in used:
+        by_field.setdefault(field_of(a), []).append(a)
+    bits = [f"`{f}` carries {' or '.join(args)}" for f, args in by_field.items()]
+    return ("A step is {id, skill, " + ", ".join(by_field) + "}: " + "; ".join(bits) +
+            ". A field the step's skill does not take is \"none\" (null for numbers).")
 
 
 def step_schema(m: Manifest, arm: str, ids: dict) -> dict:
     skills = arm_skills(m, arm)
 
     def users(f):
-        return [(s.name, s.args_schema["properties"][f]) for s in skills if f in skill_args(s)]
+        return [(s.name, a, s.args_schema["properties"][a]) for s in skills for a in skill_args(s) if field_of(a) == f]
 
-    def desc(f):
+    def desc(f, empty="none"):
         u = users(f)
-        return "; ".join(f"{n}: {p.get('description', f)}" for n, p in u) + ("; else none" if u else "no skill uses it: none")
+        return "; ".join(f"{n}: {a}" + (f" ({p['description']})" if p.get("description") else "") for n, a, p in u) + \
+            (f"; else {empty}" if u else f"no skill uses it: {empty}")
 
     target = ids["places"] + ids["objects"] if users("target") else []
-    dirs = sorted({d for _, p in users("direction") for d in p.get("enum", [])})
-    return {
-        "type": "object", "additionalProperties": False,
-        "required": ["id", "skill", *STEP_FIELDS],
-        "properties": {
-            "id": {"type": "string", "description": "short unique id, e.g. s1 (new ids in a replan: n1, n2, ...)"},
-            "skill": {"type": "string", "enum": [s.name for s in skills]},
-            "object": {"type": "string", "enum": (ids["objects"] if users("object") else []) + [P.NONE], "description": desc("object")},
-            "target": {"type": "string", "enum": target + [P.NONE], "description": desc("target")},
-            "direction": {"type": "string", "enum": dirs + [P.NONE], "description": desc("direction")},
-        },
+    dirs = sorted({d for _, _, p in users("direction") for d in p.get("enum", [])})
+    props = {
+        "id": {"type": "string", "description": "short unique id, e.g. s1 (new ids in a replan: n1, n2, ...)"},
+        "skill": {"type": "string", "enum": [s.name for s in skills]},
+        "object": {"type": "string", "enum": (ids["objects"] if users("object") else []) + [P.NONE], "description": desc("object")},
+        "target": {"type": "string", "enum": target + [P.NONE], "description": desc("target")},
+        "direction": {"type": "string", "enum": dirs + [P.NONE], "description": desc("direction")},
     }
+    for f in sorted({field_of(a) for s in skills for a in skill_args(s)} - set(STEP_FIELDS)):
+        spec = users(f)[0][2]
+        rng = "".join(f", {k} {spec[k]}" for k in ("minimum", "maximum") if k in spec)
+        props[f] = {"type": [spec.get("type", "string"), "null"], "description": desc(f, "null") + rng}
+    return {"type": "object", "additionalProperties": False, "required": list(props), "properties": props}
 
 
 def plan_schema(m: Manifest, arm: str, ids: dict) -> dict:
@@ -142,7 +179,7 @@ class ManifestPlanner(PlannerClient):
             if sk is None:
                 errs.append(f"step {s['id']}: {self.m.robot} has no skill {s['skill']}")
                 continue
-            errs += [f"step {s['id']}: {s['skill']} needs {a}" for a in sk.args_schema.get("required", []) if s.get(a, P.NONE) == P.NONE]
+            errs += [f"step {s['id']}: {s['skill']} needs {a}" for a in missing_args(s, sk)]
         return errs
 
     def _req(self, kind: str, body: dict, schema: dict) -> LLMRequest:

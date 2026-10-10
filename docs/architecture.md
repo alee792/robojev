@@ -95,12 +95,31 @@ method mapped to its MCP counterpart) and becomes an MCP server over stdio or HT
 planner LLM does not call tools directly: it emits a plan the harness executes, so the decision loop
 and the safety rules always sit between the model and the robot.
 
+## Where this sits: on top of the Model Hardware Standard
+
+Anthropic's Model Hardware Standard (MHS, research preview Aug 2026) is a standard *driver*:
+read/write primitives on a named device, discovery, a reference file (what it measures, what can be
+adjusted, the safety limits the driver enforces, plain-language notes), reachable over MCP, a CLI
+or code. For anything long-running the agent writes a script that chains driver commands. There
+are no skills in it and no fast reactive layer. So:
+
+| Layer | MHS | Here |
+|---|---|---|
+| Device: read a pose, write a setpoint, enforce limits | the driver | the arm backend |
+| Describing the device to an agent | reference file + tags | the manifest |
+| Skills with contracts | absent (agent-written scripts) | the catalog |
+| Reacting in ~150 ms to a person | absent | the decision loop |
+
+We build the two layers MHS lacks and shape our arm backend like an MHS driver (`read(pose)`,
+`write(setpoint)`, `read(limits)`), so a vendor's or LeRobot's MHS driver can slot in underneath
+later. One line: standard skills and a reactive loop, on top of MHS, exposed through MCP.
+
 ## Seams
 
 - **Robot protocol** (above): the same surface fronts sim, the real arm, a second arm, another
   make of arm and, later, a learned policy behind a skill.
-- **Arm backend:** end-effector goal (position, pitch, yaw), speed cap and gripper width in; a
-  snapshot out. Sim and real implement it.
+- **Arm backend (MHS-shaped):** write a setpoint (position, pitch, yaw, speed cap, gripper width);
+  read the pose, forces and limits. Sim and real implement it; an MHS driver could.
 - **World state:** objects with id, label, position, and who holds or has claimed them; hands; arm
   poses.
 - **Decision backend:** questions in, answers with confidence out. Jev or the Decisions API.

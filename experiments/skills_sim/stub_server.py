@@ -14,6 +14,8 @@ Choices the protocol leaves open, made here so the brain can be tested (docs: re
   - start() replaces whatever skill the arm has (running, holding or paused) without an event: the
     protocol has no cancel, so a new plan that drops the current step starts the next one instead.
   - A failed precondition at start() arrives as skill_failed on the next tick, as the protocol says.
+  - Skills and their argument schemas are catalog.py's, verbatim; failure reasons are
+    "<code>: <literal text>" with codes from catalog.REASONS. STOP has no code there: "stalled".
 
 Units: metres and seconds. Base frame: +x forward, +y left, +z up (as on the real arm).
 """
@@ -27,49 +29,28 @@ import time
 from dataclasses import dataclass, field
 from typing import Callable
 
-from .protocol import (ArmObs, ArmSpec, GripperSpec, HandObs, Manifest, ObjectObs, PlaceObs, RobotEvent, SkillSpec,
-                       SkillStatus, WorldState)
+from . import catalog
+from .protocol import ArmObs, ArmSpec, GripperSpec, HandObs, Manifest, ObjectObs, PlaceObs, RobotEvent, SkillStatus, WorldState
 
 # ------------------------------------------------------------------ manifests
 
 DIRECTIONS = ("left", "right", "toward_robot", "away_from_robot")
 _DIR_XY = {"left": (0.0, 1.0), "right": (0.0, -1.0), "toward_robot": (-1.0, 0.0), "away_from_robot": (1.0, 0.0)}
-PUSH_M = 0.06
 WORKSPACE = ((0.10, 0.50), (-0.30, 0.30), (-0.02, 0.35))
 HOME = (0.20, 0.0)
-
-_OBJ = {"type": "string", "description": "the object id"}
-
-
-def _args(**props) -> dict:
-    return {"type": "object", "additionalProperties": False, "required": list(props), "properties": props}
-
-
-MOVE_OBJECT = SkillSpec("move_object", "pick the object up, carry it and put it down in the place (a tray slot, a bin, or "
-                        "\"table\" for a free spot on the table)",
-                        _args(object=_OBJ, target={"type": "string", "description": "a place id: a slot, a bin or table"}))
-STACK_ON = SkillSpec("stack_on", "pick the object up and set it on top of the target object",
-                     _args(object=_OBJ, target={"type": "string", "description": "the id of the object to stack on"}))
-PUSH = SkillSpec("push", f"slide the object about {PUSH_M * 100:.0f} cm in a direction (the robot's point of view) with "
-                 "one fingertip, without picking it up",
-                 _args(object=_OBJ, direction={"type": "string", "enum": list(DIRECTIONS), "description": "which way"}))
-HAND_OVER = SkillSpec("hand_over", "pick the object up and hold it out to the person; done when the person has taken it",
-                      _args(object=_OBJ))
-SURVEY = SkillSpec("survey", "lift the gripper and look over the table again", _args())
-HOLD = SkillSpec("hold", "stay still for about a second", _args())
 GRASPING = ("move_object", "stack_on", "hand_over")
 
 
 def widowx_like(robot: str = "widowx-stub") -> Manifest:
     arm = ArmSpec("arm_0", "base", WORKSPACE, GripperSpec(max_width=0.044, can_grasp=True), travel_z=0.12,
                   description="one WidowX AI-like follower arm")
-    return Manifest(robot, (arm,), (MOVE_OBJECT, STACK_ON, PUSH, HAND_OVER, SURVEY, HOLD))
+    return Manifest(robot, (arm,), catalog.STANDARD)
 
 
 def push_only(robot: str = "pusher-stub") -> Manifest:
     arm = ArmSpec("arm_0", "base", WORKSPACE, GripperSpec(max_width=0.0, can_grasp=False), travel_z=0.12,
                   description="one arm with a fixed fingertip: it can touch and push, not grasp")
-    return Manifest(robot, (arm,), (PUSH, SURVEY, HOLD))
+    return Manifest(robot, (arm,), (catalog.PUSH, catalog.SURVEY, catalog.HOLD))
 
 
 def sort_scene(numbers=(1, 3, 5), n_slots: int | None = None) -> tuple[list[ObjectObs], list[PlaceObs]]:
@@ -233,10 +214,11 @@ class StubRobotServer:
             why = self._why_not(arm, skill, args)
             a = self._arms[arm]
             o = self._objs.get(args.get("object", ""))
-            r = _Run(sid, arm, skill, dict(args), self._dur.get(skill, 1.0), (a.x, a.y), (o.x, o.y) if o else None)
+            dur = float(args.get("seconds", self._dur["hold"])) if skill == "hold" else self._dur.get(skill, 1.0)
+            r = _Run(sid, arm, skill, dict(args), dur, (a.x, a.y), (o.x, o.y) if o else None)
             self._runs[sid] = r
             if why:
-                r.state, r.reason = "failed", f"could not start: {why}"
+                r.state, r.reason = "failed", why
             elif skill in GRASPING and a.holding == args["object"]:
                 r.elapsed, r.grasped = r.duration / 2, True     # already in the gripper: carry from here
             if not why:
@@ -266,7 +248,7 @@ class StubRobotServer:
             self.calls.append((self.now(), "stop", ()))
             for r in self._runs.values():
                 if r.state in ("running", "holding", "paused"):
-                    r.state, r.reason, r.reported = "failed", "STOP", True
+                    r.state, r.reason, r.reported = "failed", "stalled: STOP pressed; every arm parked", True
                     evs.append(self._ev("skill_failed", f"{r.name} stopped by STOP", skill_id=r.id, arm=r.arm))
             for a in self._arms.values():
                 if a.holding:                            # parking sets the held object down where the arm is
@@ -365,7 +347,7 @@ class StubRobotServer:
             if f < 0.5:
                 return []
             if o is None or o.where == "person" or math.hypot(o.x - r.aim[0], o.y - r.aim[1]) > 0.02:
-                return self._fail(r, f"nothing there: {o.name if o else oid} is no longer where the arm reached for it")
+                return self._fail(r, f"grasp_failed: {o.name if o else oid} is no longer where the arm reached for it")
             if r.name == "push":
                 r.grasped = True                          # in contact with the fingertip
             else:
@@ -380,14 +362,15 @@ class StubRobotServer:
     def _dest(self, r: _Run) -> tuple:
         if r.name == "push":
             d = _DIR_XY[r.args["direction"]]
-            return (r.aim[0] + PUSH_M * d[0], r.aim[1] + PUSH_M * d[1])
+            k = r.args["distance"]
+            return (r.aim[0] + k * d[0], r.aim[1] + k * d[1])
         if r.name == "hand_over":
             p = self._places.get("person")
             return (p.x, p.y) if p else (0.5, 0.0)
-        t = r.args["target"]
         if r.name == "stack_on":
-            b = self._objs[t]
+            b = self._objs[r.args["onto"]]
             return (b.x, b.y)
+        t = r.args["place"]
         if t == "table":                                  # a free spot: next to the table place's centre
             n = sum(1 for o in self._objs.values() if o.where == "table")
             p = self._places[t]
@@ -401,15 +384,15 @@ class StubRobotServer:
         if r.name in GRASPING:
             o = self._objs[oid]
             if r.name == "move_object":
-                t = r.args["target"]
+                t = r.args["place"]
                 p = self._places[t]
                 occ = next((x.name for x in self._objs.values() if x.where == t and x.id != oid), None)
                 if p.capacity == 1 and occ:
-                    return self._fail(r, f"{p.name} is occupied by {occ}")
+                    return self._fail(r, f"blocked: {p.name} is occupied by {occ}")
                 where = t
             elif r.name == "stack_on":
-                where = f"on:{r.args['target']}"
-                o.z = self._objs[r.args["target"]].z + (o.size or 0.04)
+                where = f"on:{r.args['onto']}"
+                o.z = self._objs[r.args["onto"]].z + (o.size or 0.04)
             else:
                 where = "person"
             x, y = self._dest(r)
@@ -427,42 +410,43 @@ class StubRobotServer:
         return [self._ev("skill_failed", why, skill_id=r.id, arm=r.arm, object=r.args.get("object"), data={"reason": why})]
 
     def _why_not(self, arm: str, skill: str, args: dict) -> str | None:
+        """None, or "<code>: <literal text>" with a catalog.REASONS code."""
         spec = self.manifest_.skill(skill)
         if arm not in self._arms or spec is None:
-            return f"{arm} has no skill {skill}"
+            return f"precondition: {arm} has no skill {skill}"
         if self._arms[arm].mode == "stopped":
-            return "the arm is stopped (STOP)"
+            return "precondition: the arm is stopped (STOP)"
         missing = [k for k in spec.args_schema.get("required", []) if k not in args]
         if missing:
-            return f"missing {', '.join(missing)}"
+            return f"precondition: missing {', '.join(missing)}"
         if not args.get("object"):
             return None
         oid, a = args["object"], self._arms[arm]
         o = self._objs.get(oid)
         if o is None:
-            return f"{oid} is not in view"
+            return f"not_in_view: {oid} is not in view"
         if o.where == "person":
-            return f"{o.name} is held by the person"
+            return f"precondition: {o.name} is held by the person"
         top = next((x.name for x in self._objs.values() if x.where == f"on:{oid}"), None)
         if skill in GRASPING:
             g = next(s.gripper for s in self.manifest_.arms if s.id == arm)
             if g is None or not g.can_grasp:
-                return "this arm cannot grasp"
+                return "precondition: this arm cannot grasp"
             if a.holding and a.holding != oid:
-                return f"the gripper is holding {self._objs[a.holding].name}"
+                return f"precondition: the gripper is holding {self._objs[a.holding].name}"
             if top:
-                return f"{o.name} has {top} on top of it"
+                return f"blocked: {o.name} has {top} on top of it"
         if skill == "move_object":
-            p = self._places.get(args["target"])
+            p = self._places.get(args["place"])
             if p is None or p.kind not in ("slot", "bin", "table"):
-                return f"{args['target']} is not a place to put things"
-        if skill == "stack_on" and (args["target"] not in self._objs or args["target"] == oid):
-            return f"{args['target']} is not another object"
+                return f"precondition: {args['place']} is not a place to put things"
+        if skill == "stack_on" and (args["onto"] not in self._objs or args["onto"] == oid):
+            return f"precondition: {args['onto']} is not another object"
         if skill == "push":
             if args.get("direction") not in DIRECTIONS:
-                return "push needs a direction"
+                return "precondition: push needs a direction"
             if o.where.startswith("gripper"):
-                return f"{o.name} is in the gripper"
+                return f"precondition: {o.name} is in the gripper"
         return None
 
     def _where_text(self, where: str) -> str:
@@ -477,8 +461,8 @@ class StubRobotServer:
         on = o.name if o else ""
         if r.name in ("survey", "hold"):
             return {"survey": "lifted, looking over the table", "hold": "holding still"}[r.name]
-        dest = (self._places[r.args["target"]].name if r.name == "move_object" else
-                self._objs[r.args["target"]].name if r.name == "stack_on" else
+        dest = (self._places[r.args["place"]].name if r.name == "move_object" else
+                self._objs[r.args["onto"]].name if r.name == "stack_on" else
                 "the person" if r.name == "hand_over" else r.args.get("direction", ""))
         if r.state == "done":
             return f"{on} put down at {dest}" if r.name != "push" else f"{on} pushed {dest}"
