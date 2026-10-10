@@ -21,7 +21,7 @@ Choices the protocol leaves open, made here (report, do not settle):
     No skill id, no event: a refusal is not a failure (the MCP tool-error path at K6).
   - start() on a busy arm replaces its skill: the protocol has no cancel, and a new plan that drops
     the current step must be able to start the next one. The replaced skill reads
-    "precondition: replaced by <id>" in status() and sends no event, since its caller did it.
+    "cancelled: replaced by <id>" in status() and sends no event, since its caller did it.
   - The heartbeat watchdog arms on the first heartbeat(): a brain that never connected has not gone
     missing, and the trials and tests run without one. After a loss every arm holds; the brain
     reads status() and calls resume(). A fresh heartbeat does not resume anything.
@@ -501,7 +501,7 @@ class SimRobotServer:
             arms = {}
             for a in self.arms.values():
                 x, y, z = a.ee()
-                arms[a.id] = ArmObs(a.id, x, y, z, a.held(), a.width(), a.mode())
+                arms[a.id] = ArmObs(a.id, x, y, z, a.held(), a.width(), a.mode(), skill=a.skill.id if a.active else None)
             return WorldState(self.t, self.sim_world.objects(held), dict(self.sim_world.places), [], arms)
 
     def status(self, skill_id: str) -> SkillStatus:
@@ -525,7 +525,7 @@ class SimRobotServer:
             sid = f"sk{next(self._ids)}"
             if a.active:
                 old = a.skill
-                old.state, old.reason, old.notified = "failed", f"precondition: replaced by {sid}", True
+                old.state, old.reason, old.notified = "cancelled", f"cancelled: replaced by {sid}", True
             a.unfreeze()
             a.skill = skills.SKILLS[skill](sid, arm, args, self.params)
             self._runs[sid] = a.skill
@@ -538,9 +538,6 @@ class SimRobotServer:
                 return
             if a.active:
                 a.skill.hold(a)
-            elif not a.mover.frozen:
-                a.freeze()
-                a.frozen_why = "hold"
 
     def pause(self, arm: str) -> None:
         with self._lock:
@@ -549,9 +546,6 @@ class SimRobotServer:
                 return
             if a.active:
                 a.skill.pause(a)
-            else:
-                a.freeze()
-                a.frozen_why = "pause"
 
     def resume(self, arm: str) -> None:
         with self._lock:
@@ -588,6 +582,11 @@ class SimRobotServer:
     def heartbeat(self) -> None:
         with self._lock:
             self._last_hb, self._hb_lost = self.t, False
+
+    def unsubscribe(self, callback: Callable[[RobotEvent], None]) -> None:
+        with self._lock:
+            if callback in self._subs:
+                self._subs.remove(callback)
 
     def subscribe(self, callback: Callable[[RobotEvent], None]) -> None:
         with self._lock:

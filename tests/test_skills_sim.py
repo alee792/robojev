@@ -291,7 +291,7 @@ def test_hold_and_survey_skills():
     sid2 = srv.start(ARM_ID, "pick_and_place", ARGS)
     assert srv.run_until(in_phase(srv, sid2, "close"), 10)
     sid3 = srv.start(ARM_ID, "survey", {})          # replaces the running skill
-    assert srv.status(sid2).state == "failed" and srv.status(sid2).reason == f"precondition: replaced by {sid3}"
+    assert srv.status(sid2).state == "cancelled" and srv.status(sid2).reason == f"cancelled: replaced by {sid3}"
     assert srv.run_until(srv.finished(sid3), 10) and srv.status(sid3).state == "done"
     assert srv.world().arms[ARM_ID].z == pytest.approx(TRAVEL_Z, abs=0.01)
     assert not any(e.kind == "skill_failed" for e in srv.events)

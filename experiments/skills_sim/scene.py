@@ -30,7 +30,7 @@ class Block:
 class Tray:
     """A row of square slots marked on the table (visual only: placing is judged by position)."""
     origin: tuple[float, float] = (0.36, 0.12)     # centre of slot 0
-    step: tuple[float, float] = (0.0, -0.06)       # slot i is at origin + i * step
+    step: tuple[float, float] = (0.0, -0.08)       # slot i is at origin + i * step; 8 cm: the gripper opens to block + 3 cm, so 6 cm pitch put a finger on the neighbour
     n: int = 5
     slot: float = 0.05
 

@@ -92,7 +92,7 @@ class HandObs:
     x: float
     y: float
     z: float
-    vx: float = 0.0
+    vx: float = 0.0                     # m/s
     vy: float = 0.0
     held_out: bool = False              # palm up and still: offered to take something
 
@@ -106,6 +106,7 @@ class ArmObs:
     holding: str | None                 # object id between closed fingers
     gripper_width: float
     mode: str                           # idle | running | holding | paused | stopped | tripped | failed
+    skill: str | None = None            # id of the skill running on this arm, so a reconnecting brain can status() it
 
 
 @dataclass
@@ -183,7 +184,7 @@ class RobotServer(Protocol):
         """resource://world"""
 
     def status(self, skill_id: str) -> SkillStatus:
-        """resource://skills/{id}"""
+        """resource://skills/{id}. Unknown id: KeyError."""
 
     def precondition(self, arm: str, skill: str, args: dict) -> str | None:
         """tool: None if the skill could start now on this arm, else why not (literal)."""
@@ -197,25 +198,32 @@ class RobotServer(Protocol):
         "cancelled: replaced by <id>", no event) and begins the new one."""
 
     def hold(self, arm: str) -> None:
-        """tool: stop moving at a safe point, keep the grip and the skill's state; resume() continues."""
+        """tool: stop moving at a safe point, keep the grip and the skill's state; resume() continues.
+        On an idle arm it is a no-op (nothing to hold; the mode stays idle)."""
 
     def pause(self, arm: str) -> None:
-        """tool: like hold, but the skill will not continue until resume(); used for a person nearby."""
+        """tool: like hold, but the skill will not continue until resume(); used for a person nearby.
+        No-op on an idle arm: not starting a skill while someone is close is the brain's decision."""
 
     def resume(self, arm: str) -> None:
-        """tool: continue after hold or pause."""
+        """tool: continue after hold or pause, and the only way to clear a tripped arm."""
 
     def retarget(self, skill_id: str) -> None:
         """tool: aim the running skill at where its object is now."""
 
     def stop(self) -> None:
-        """tool: STOP. Every arm parks; no skill survives. Only code calls this."""
+        """tool: STOP. Every arm parks; every running skill ends failed with "stopped: ..." and a
+        skill_failed event; later start() calls are refused. Terminal for this server: there is no
+        reset, a new server is made. Only code calls this."""
 
     def heartbeat(self) -> None:
         """tool: the brain is alive. A server that misses heartbeats for its timeout holds every arm."""
 
     def subscribe(self, callback: Callable[[RobotEvent], None]) -> None:
         """notifications: the callback runs on the server's thread; return fast."""
+
+    def unsubscribe(self, callback: Callable[[RobotEvent], None]) -> None:
+        """Remove a callback; unknown callbacks are ignored."""
 
 
 # ------------------------------------------------------------------ the recorder (part of the server)

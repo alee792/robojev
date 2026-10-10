@@ -306,6 +306,11 @@ class StubRobotServer:
             self.heartbeats += 1
             self._last_hb, self._hb_lost = self.now(), False
 
+    def unsubscribe(self, callback: Callable[[RobotEvent], None]) -> None:
+        with self._lock:
+            if callback in self._subs:
+                self._subs.remove(callback)
+
     def subscribe(self, callback: Callable[[RobotEvent], None]) -> None:
         with self._lock:
             self._subs.append(callback)
