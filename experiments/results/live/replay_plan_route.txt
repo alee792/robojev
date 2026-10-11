@@ -1,0 +1,21 @@
+replay file: replay_20261011-144248.jsonl.gz; slice files: 30
+
+## H4 after the fix: plan_arrived routed by the plan check alone (offline replay of recorded answers)
+
+| source | decider | good new plans | sent back before | sent back after | planted bad plans | caught before | caught after |
+|---|---|---|---|---|---|---|---|
+| replay | Jev, September answers | 185 | 91 (49%) | 0 (0%) |  |  |  |
+|  |  | before, why: {'unsure stay_local': 61, 'replan': 30} |  |  |  |  |  |
+| replay | Jev | 185 | 91 (49%) | 0 (0%) | 60 | 60 | 59 |
+|  |  | before, why: {'unsure stay_local': 67, 'replan': 24} |  |  |  |  |  |
+| replay | Decisions API | 185 | 123 (66%) | 0 (0%) | 60 | 59 | 47 |
+|  |  | before, why: {'replan': 31, 'unsure stay_local': 92} |  |  |  |  |  |
+| slice | Jev | 40 | 9 (22%) | 0 (0%) |  |  |  |
+|  |  | before, why: {'unsure stay_local': 8, 'replan': 1} |  |  |  |  |  |
+| slice | Decisions API | 40 | 8 (20%) | 0 (0%) |  |  |  |
+|  |  | before, why: {'unsure stay_local': 4, 'replan': 4} |  |  |  |  |  |
+
+Old-rule replica against the numbers docs/live-results.md section 3 printed (sent back/good, caught/planted):
+- replay jev_then: published 91/185; replica 91/185 OK
+- replay jev: published 91/185, 60/60; replica 91/185, 60/60 OK
+- replay decisions: published 123/185, 59/60; replica 123/185, 59/60 OK

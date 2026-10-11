@@ -1,6 +1,7 @@
 """Live models for the slice (tests/test_slice.py), chosen by environment variables:
 
-    ROBOJEV_DECIDER = mock | jev | decisions      (default mock)
+    ROBOJEV_DECIDER = mock | live | jev | decisions   (default mock: the test run needs no keys; `live`
+                                                   is the default live decider, Jev, per docs/live-results.md)
     ROBOJEV_PLANNER = mock | openai               (default mock)
     ROBOJEV_SHADOW  = 1    with a live decider, also send each decision request to the other live
                            backend in the background (not acted on) so both answer the same events
@@ -23,12 +24,25 @@ from robojev.brain.core.combine import Gates, JevDecider
 from robojev.brain.eval import oracle as O
 from robojev.brain.mocks import StubTruth, oracle_models, oracle_scenario
 
-DECIDER = os.environ.get("ROBOJEV_DECIDER", "mock")
+DEFAULT_LIVE_DECIDER = "jev"      # the live recommendation (docs/live-results.md); the Decisions API stays selectable
+
+
+def decider_name(value: str | None) -> str:
+    """The decider an environment value selects: unset -> mock; "live" -> the default live decider."""
+    name = value or "mock"
+    if name == "live":
+        name = DEFAULT_LIVE_DECIDER
+    if name not in ("mock", "jev", "decisions"):
+        raise ValueError(f"ROBOJEV_DECIDER must be mock, live, jev or decisions, not {value!r}")
+    return name
+
+
+DECIDER = decider_name(os.environ.get("ROBOJEV_DECIDER"))
 PLANNER = os.environ.get("ROBOJEV_PLANNER", "mock")
 SHADOW = os.environ.get("ROBOJEV_SHADOW", "") == "1"
 LIVE = DECIDER != "mock" or PLANNER != "mock"
 LIVE_DIR = Path(os.environ.get("ROBOJEV_LIVE_DIR", Path(__file__).resolve().parents[1] / "experiments/results/live"))
-assert DECIDER in ("mock", "jev", "decisions") and PLANNER in ("mock", "openai"), (DECIDER, PLANNER)
+assert PLANNER in ("mock", "openai"), PLANNER
 
 
 def tag() -> str:

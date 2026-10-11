@@ -10,6 +10,18 @@
 Code rules on top: a plan-check "yes" (or an unsure one) sends the plan back to the LLM; a failed
 step or an unmet plan with no in-plan fix cannot stay local; a Jev error is treated as low confidence
 everywhere.
+
+A new plan (`plan_arrived`) is routed by the plan check alone. docs/v2.md: "a new plan is presumed
+good: it goes back to the LLM only when one of these specific questions says yes, not on a general
+doubt". The generic route question did the opposite in the live runs (docs/live-results.md, H4): on
+185 new plans the oracle said to keep, it sent back 91 with Jev (49%) and 123 with the Decisions API
+(66%), unsure that a fresh plan "still holds as written" or confidently asking for a replan, while
+the plan-check Nouls flagged none of them and alone caught 59/60 planted bad plans with Jev. So on
+plan_arrived the route is stay_local unless a plan-check Noul flags a problem (then fast_llm, with
+the problems attached), with code-certain confidence; a route or in-plan-fix answer in the request
+is ignored for that event (core/decision.py no longer asks them). The replan-loop limit (rules.py,
+3 rejections since the user last spoke) stays as the backstop. The offline replay of the recorded
+answers under this rule: experiments/replay_plan_route.py.
 """
 
 from __future__ import annotations
@@ -91,11 +103,18 @@ def combine(event: Event, answers: dict | None, view, gates: Gates, abl: Ablatio
             p = float(a.get("noul", 0.0))
             conf[k] = noul_conf(p)
             done[k[5:]] = p >= 0.5 and noul_conf(p) >= gates.check
-    if abl.router:
+    if event.kind == "plan_arrived":
+        # a new plan is presumed good: the plan check alone sends it back (module doc); any route or
+        # fix answer is ignored, and the confidences are code's (certain), so no gate escalates it
+        fix, c_fix = "none", 1.0
+        conf["in_plan_fix"] = c_fix
+        route, c_route = ("fast_llm" if problems else "stay_local"), 1.0
+        reason = "plan check" if problems else "new plan: the plan check found nothing"
+    elif abl.router:
         route, c_route = _ch(answers, "route")
         route = route or "fast_llm"
     else:
-        routine = event.kind == "step_done" or (event.kind == "plan_arrived" and not problems)
+        routine = event.kind == "step_done"
         route, c_route = ("stay_local" if fix != "none" or routine else "fast_llm"), 1.0
     conf["route"] = c_route
     route_raw = route

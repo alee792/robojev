@@ -10,6 +10,18 @@ current step's), and offers only options it has checked apply. Questions:
   route          Router    Choice: stay_local / fast_llm / capable_llm / ask_user
   done.<id>      progress  Noul per done condition code cannot measure ("is it true that ...?")
   check.<object> plan check Noul per object the plan never mentions (yes = something is wrong)
+
+The task is shown twice. `user_words` is what the user asked for, in their own words: the task they
+typed and every correction the brain took as about the end result, newest last, never a transient
+"wait" or "go on". `task` is how the current plan reads it (the planner's restatement, corrections
+folded in, which stops the old replan loop). A correction is judged against `user_words`: the
+restatement can paraphrase ("ascending numeric order") in a way that hides the words a correction
+contradicts ("lowest on the left" vs "highest on the left"), and the live run showed Jev confidently
+carrying on through such a correction (docs/live-results.md, section 1).
+
+On `plan_arrived` only `right_now` and the plan-check Nouls are asked: a new plan is presumed good
+and goes back to the planner only on a specific plan-check yes, never on the generic route question
+(docs/v2.md "The decision"; core/combine.py has the numbers).
 """
 
 from __future__ import annotations
@@ -43,6 +55,7 @@ class View:
     runnable_other: str | None      # a pending step (not the current one) whose precondition holds
     tries: dict = field(default_factory=dict)   # step id -> failures so far
     grasped: bool = False           # the current step's object is in the gripper
+    user_words: list = field(default_factory=list)   # the task and each correction, verbatim, newest last (no transients)
 
     def name(self, oid) -> str:
         return self.names.get(oid, oid)
@@ -207,9 +220,11 @@ def build_state(event, v: View) -> dict:
     s = {"event": {"kind": event.kind.replace("_", " "), "what_happened": event.text}}
     if event.kind == "user_text":
         s["event"]["user_just_said"] = event.data.get("text", "")
-    # The task as it stands now: the planner restates it with every plan, corrections folded in, so Jev
-    # judges against one statement of what the user wants now, never the original task plus a list of
-    # later messages (docs/v2.md "The decision").
+    # What the user asked for, in their words (the task, then each correction the brain took as about
+    # the end result, newest last; never a transient "wait" or "go on"), and the task as the current
+    # plan reads it: the planner restates it with every plan, corrections folded in (docs/v2.md "The
+    # decision"). A correction is judged against the user's words, not the restatement (module doc).
+    s["user_words"] = list(v.user_words) or [v.task]
     s["task"] = (v.plan.get("reading") if v.plan else "") or v.task
     if v.replan_pending and v.user_messages and event.kind != "user_text":
         s["change_being_planned"] = {"user_said": v.user_messages[-1],
@@ -293,21 +308,22 @@ def build_questions(event, v: View, groups=("right_now", "in_plan_fix", "route")
             "instructions": {
                 "question": "Given `event`, what should the arm do right now?",
                 "context": "`plan_position.arm_in_step` says literally where the arm is in its current step; `robot.mode` says whether it is moving, paused or holding. The code's own stop distance for hands applies regardless of this answer.",
+                "about_the_task": "`user_words` is what the user asked for, in their own words (the task, then each correction, newest last); `task` is how the current plan reads it. If the user just asked for something different from `user_words`, the move in progress may be wrong even where it fits `task`.",
             },
             "criteria": {k: RIGHT_NOW_CRITERIA[k] for k in offered_right_now(v)},
         }
-    fixes = offered_fixes(event, v)
+    fixes = offered_fixes(event, v) if event.kind != "plan_arrived" else ["none"]   # a new plan needs no fix within itself
     if "in_plan_fix" in groups and len(fixes) > 1:     # only "none" applies: code knows the answer, don't ask
         qs["in_plan_fix"] = {
             "type": "choice",
             "instructions": {"question": "Can `event` be absorbed within the current plan with one of these fixes, without writing new steps or changing the task?"},
             "criteria": {k: FIX_CRITERIA[k] for k in fixes},
         }
-    if "route" in groups:
+    if "route" in groups and event.kind != "plan_arrived":     # a new plan: the plan check alone decides (module doc)
         qs["route"] = {
             "type": "choice",
             "instructions": {"question": "Who should handle `event`: the robot on its own with the current plan, or a planner that writes a new plan, or the user?",
-                             "ask_about": "whether the end result or the steps must change, not what the event is about"},
+                             "ask_about": "whether the end result or the steps must change, not what the event is about. Whether the user asks for a different end result is judged against `user_words` (what the user asked for, in their words), not against `task` (how the current plan reads it)"},
             "criteria": ROUTE_CRITERIA,
         }
     if v.plan and event.kind in ("step_done", "plan_done_unmet"):

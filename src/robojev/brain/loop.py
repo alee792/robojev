@@ -90,7 +90,7 @@ from .changes import SettledChanges
 from .connect import connect
 from .messages import Crashed, Decided, FromRobot, Message, Planned, Tick, UserSaid, Wake
 from .planner import ManifestPlanner, PlanSnapshot
-from .rules import RIGHT_NOW_ACTION, LoopDetector, ReplanGuard, enforce_gate, is_stop
+from .rules import RIGHT_NOW_ACTION, LoopDetector, ReplanGuard, enforce_gate, is_stop, is_transient, transient_mentions
 from .steps import CATALOG_NAME, call_args
 from .text import between_steps, change_text, where_text
 from .tracker import PlanTracker
@@ -189,6 +189,7 @@ class Brain:
         self.r = EpisodeResult()
         self.task = ""
         self.user_messages: list[str] = []
+        self.user_words: list[str] = []   # the task, then each correction taken as about the end result, verbatim (View.user_words)
         self.mode = "waiting"             # the episode: waiting (no plan yet) | running | done | stopped | gave_up | timeout
         self.replan_seq = 0               # the newest planner request; older results are stale
         self.replan_pending = False
@@ -256,6 +257,7 @@ class Brain:
         self._ran = True
         self._loop, self._q = asyncio.get_running_loop(), asyncio.Queue()
         self._t0, self.task = time.monotonic(), task
+        self.user_words = [task]
         self.server.subscribe(self._from_robot)
         self._observe()
         for arm in self.arms.values():
@@ -450,7 +452,8 @@ class Brain:
                     path_to=path, hand=hand_facts(st, path),
                     runnable_other=P.step_text(self.plan.steps()[other], self.names) if other else None,
                     tries=dict(self.plan.tries),
-                    grasped=bool(cur and st.arm.holding and st.arm.holding == cur.get("object")))
+                    grasped=bool(cur and st.arm.holding and st.arm.holding == cur.get("object")),
+                    user_words=list(self.user_words))
 
     def _with_other_arms(self, arm: ArmRun, names_: dict[str, str]) -> CoreWorld:
         """`arm`'s world with every other driven arm as one more object, so e12v2's nearby-objects
@@ -759,6 +762,8 @@ class Brain:
             return
         self.plan.done_answers.update(c.done)
         self._right_now(arm, c.right_now, ev)
+        if ev.kind == "user_text" and c.route != "stay_local" and self._once(ev, "words"):
+            self._user_words(ev.data.get("text", ""))
         if c.route == "stay_local":
             self._fix(arm, c.fix, ev)
         elif c.route in LLM_ROUTES:
@@ -790,6 +795,26 @@ class Brain:
         elif action == "running" and arm.mode in ("paused", "holding"):
             arm.hold_until, arm.pause_reason = None, None
             self._arm_to(arm, "running")
+
+    def _user_words(self, text: str) -> None:
+        """A typed line the decision took as about the end result (a planner or ask_user route) joins
+        the user's task-level words, verbatim, newest last; a transient command never does, even when
+        an unsure route sends it to the planner (rules.is_transient)."""
+        if text and not is_transient(text):
+            self.user_words.append(text)
+            self._note("user_words", words=list(self.user_words))
+
+    def _keep_reading(self, out: dict, kind: str) -> None:
+        """The reading guard (rules.transient_mentions): a plan whose restated task repeats a transient
+        line the user typed ("…after the user said 'hang on a second'…") keeps the previous reading
+        instead (the current plan's, or the task before any plan), and the log says why."""
+        leaked = transient_mentions(out.get("reading") or "", self.user_messages)
+        if not leaked:
+            return
+        kept = (self.plan.plan.get("reading") if self.plan.plan else "") or self.task
+        self._note("reading_kept", request=kind, leaked=leaked, rejected=out.get("reading"), kept=kept,
+                   why="the restated task repeated a transient command; the task holds only the end result")
+        out["reading"] = kept
 
     def _fix(self, arm: ArmRun, fix: str, ev: Event) -> None:
         other = self._runnable_other(arm, ev) if fix == "another_step_first" else None
@@ -875,6 +900,7 @@ class Brain:
                 self._resume_held()
             return
         if res.kind == "plan":
+            self._keep_reading(res.plan, "plan")
             self.plan.load(res.plan)
             self.mode = "running"
             for arm in self.arms.values():
@@ -883,6 +909,7 @@ class Brain:
             self._note("plan_applied", plan=res.plan)
             self.event("plan_arrived", "the first plan arrived: " + res.plan.get("reading", ""))
             return
+        self._keep_reading(res.diff, "replan")
         holdings = {a: arm.state.arm.holding for a, arm in self.arms.items()}
         newp, q, check = self.plan.merge(res.diff, msg.t_request, holdings)
         errs = self.planner.check(newp, self.state, self.world, check)

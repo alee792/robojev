@@ -370,8 +370,11 @@ def test_stub_refuses_a_grasp_on_the_other_arms_held_object(pair):
 
 # sha256 of every planner request (instructions, input, schema; plan, its retry, replan, its retry) on
 # the one-arm stub manifests, taken before H2 changed the brain.
-ONE_ARM_REQUESTS = {"widowx-stub": "d202c1112219faaf5d6d7b147067be3ee01260391a04c65bb02396d08589388f",
-                    "pusher-stub": "ead1d15fe675c8c8eb00c9bbdab104662b2d5fbc1b138260d7b4a2a7469fa4ff"}
+# The one-arm requests as they are now. Re-pinned 2026-10-11 when the planner instructions and the
+# `reading` descriptions changed on purpose (the restatement holds only the end result, in the user's
+# words: docs/live-results.md "After the fixes"); the multi-arm code must still leave them untouched.
+ONE_ARM_REQUESTS = {"widowx-stub": "b5633cbb4916d267ad0f1103c271b8b13ca21405e0ee16661b760f5d67a7228f",
+                    "pusher-stub": "50e35bfb2fcba3e87e6b419f6ad83ff5857dbae77e5705168c06e30ee3a24a78"}
 
 
 def _one_arm_requests(manifest) -> list:

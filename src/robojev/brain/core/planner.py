@@ -30,6 +30,7 @@ The arm's skills are motor capabilities only; they do not know the task:
 {_SKILLS}
 
 A plan has:
+- reading: the task as it stands now, in one sentence. It holds ONLY the end result the user wants, in the user's own words for it: if they said "lowest number on the left", say that, not "ascending numeric order". Fold every correction in (the latest wins) and keep the user's wording for what changed. Never put a pause, wait, resume or acknowledgement in it ("wait", "hang on", "go on", "ok"): those are moments, not the task, and the robot handles them itself.
 - steps: skill calls with their objects filled in, run in order. Put an object into a one-object place only when that place is empty at that point in the plan; move whatever is in the way first (to "table" if it has nowhere else to go). Do not move objects the task does not ask about unless they are in the way.
 - done_when: one condition per fact that must hold when the task is done, e.g. "block_5 is in tray_slot_3". Use a relation code can check:
 {_RELS}

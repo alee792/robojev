@@ -10,9 +10,9 @@ to both decision models. Everything else is unchanged: the same request building
 | Deciders | Jev `jev-1.13.0` (typesafe /v1/systemone), OpenAI Decisions API `gpt-6-luna` (/v1/decisions) |
 | Planner | `gpt-6-luna` on the Responses API, strict JSON schema, effort low, `prompt_cache_key` |
 | Code | `src/robojev/brain/backends/{jev,decisions_api,openai_planner}.py`; tests `tests/test_backends.py` (mocked HTTP) |
-| Switch | `ROBOJEV_DECIDER=mock\|jev\|decisions`, `ROBOJEV_PLANNER=mock\|openai`, `ROBOJEV_SHADOW=1` (tests/live_models.py) |
+| Switch | `ROBOJEV_DECIDER=mock\|live\|jev\|decisions`, `ROBOJEV_PLANNER=mock\|openai`, `ROBOJEV_SHADOW=1` (tests/live_models.py). **Default decider: Jev** (`live` = `jev`, per the recommendation below); the Decisions API is selected with `decisions`; the test run itself defaults to `mock` and needs no keys |
 | Logs | `experiments/results/live/`: `slice_*.jsonl.gz` (one per run: the server's frames and events, then every decision, plan, brain log line, and every decision request with the other backend's answer and the oracle's truth), `pytest_slice_runs.txt`, `slice_report.md`, `replay_*.jsonl` + `replay_report.txt`, `v1_*` |
-| Reproduce | `ROBOJEV_DECIDER=jev ROBOJEV_PLANNER=openai ROBOJEV_SHADOW=1 uv run --frozen python -m pytest -s tests/test_slice.py`; `uv run --frozen python experiments/live_slice_report.py`; `uv run --frozen python experiments/live_decisions_replay.py --n 600 --plants 60` |
+| Reproduce | `ROBOJEV_DECIDER=jev ROBOJEV_PLANNER=openai ROBOJEV_SHADOW=1 uv run --frozen python -m pytest -s tests/test_slice.py`; `uv run --frozen python experiments/live_slice_report.py`; `uv run --frozen python experiments/live_decisions_replay.py --n 600 --plants 60`; offline, no network: `uv run --frozen python experiments/replay_plan_route.py` (the section "After the fixes") |
 
 **The Decisions API in one request.** It takes an array of named questions, so all three groups
 (right_now, in_plan_fix, route) and any progress and plan-check Nouls go in one call, as they do to
@@ -173,6 +173,61 @@ A frame costs about +230 tokens and +20 ms. The accuracy number is not evidence 
 prop is a pink stick that does not look like a hand, and near the gripper the palm washes out against
 the lit table. V1 needs real frames: a photographed hand on the bay's camera, or a hand mesh in the
 twin. The latency and token cost are usable; the accuracy is not.
+
+## After the fixes (offline replay)
+
+Three design changes followed from sections 1 and 3 (the code is in `src/robojev/brain/`; the tests in
+`tests/test_brain_decision.py`; nothing in the backends' HTTP behaviour changed):
+
+- **P1, the correction.** The decision request now carries `user_words` (the task the user typed and
+  every correction the brain took as about the end result, verbatim, newest last; a transient "wait"
+  or "go on" never joins it) next to `task` (the plan's reading, kept: it stops the old replan loop).
+  The right-now and route questions say a correction is judged against `user_words`, "what the user
+  asked for, in their words", not against `task`, "how the current plan reads it". The planner is told
+  the restatement keeps the user's own words for the end result ("lowest number on the left", not
+  "ascending numeric order"). **Pending a live re-run (Handoff 7):** this needs Jev; offline, the unit
+  tests cover the field (present, verbatim, newest last, transients excluded) and the question text.
+- **P2, good plans sent back.** On `plan_arrived` the route is decided by the plan check alone: a
+  flagged object sends the plan to the fast LLM with the problems attached, otherwise it stays local;
+  the route and in-plan-fix questions are no longer asked for that event and their answers, if present,
+  are ignored (core/combine.py has the reasoning). The 3-rejections replan-loop limit stays as the
+  backstop. `experiments/replay_plan_route.py` re-runs the recorded requests and both deciders'
+  recorded answers (the replay above, and every plan_arrived of the live slice, acting and shadow)
+  through the brain's combine() as it is now, against a replica of the old rule that reproduces the
+  numbers in section 3 exactly (91/185, 123/185, 60/60, 59/60):
+
+  | source | decider | good new plans | sent back before | sent back after | planted bad plans | caught before | caught after |
+  |---|---|---|---|---|---|---|---|
+  | replay | Jev, September answers | 185 | 91 (49%) | **0 (0%)** | | | |
+  | replay | Jev | 185 | 91 (49%) | **0 (0%)** | 60 | 60 | **59** |
+  | replay | Decisions API | 185 | 123 (66%) | **0 (0%)** | 60 | 59 | **47** |
+  | slice (acting + shadow, with truth) | Jev | 40 | 9 (22%) | **0 (0%)** | | | |
+  | slice (acting + shadow, with truth) | Decisions API | 40 | 8 (20%) | **0 (0%)** | | | |
+
+  H4's bar (under 10%) is met by both. Planted bad plans caught stays 59/60 with Jev (the one miss is
+  a check Noul at 0.12, which the route question had caught at stay_local 0.64, i.e. by the gate).
+  **With the Decisions API it falls to 47/60**: its 13 misses are confident "no" predicates (p ≤ 0.19)
+  on the plan check, and the old rule caught 12 of them only through low-confidence route answers
+  (fast_llm at 0.27–0.75, or an unsure stay_local) that are the same answers that sent 123 good plans
+  back. No gate on the route answer separates them: counting a replan answer at confidence ≥ 0.5
+  recovers 3 planted plans for 9 good plans sent back (5%); at ≥ 0.3 (the fast_llm gate) 9 for 28
+  (15%). So the ≥ 59/60 bar holds for the default decider only; for the Decisions API the plan check
+  question itself is the weak part (47/60 alone, section 3), which is a prompt question for the plan
+  check, not a routing rule.
+- **P3, the leaked wait.** The planner instructions and the `reading` schema descriptions say the
+  restatement holds ONLY the end result, never a pause, wait, resume or acknowledgement. In code, once
+  the user has typed a transient line (rules.is_transient: wait, hang on, hold on, one sec, pause, go
+  on, resume, ...), a plan or replan whose reading quotes it or uses any transient phrase
+  (rules.transient_mentions) keeps the previous reading instead, and the log records why
+  (`reading_kept`); tested with the mock planner forced to leak the slice's exact wording. Run over
+  every plan_arrived in the September logs (all arms, 3,051 readings): the 20 readings that restate a
+  wait after one was typed are all caught (the planner paraphrases: "hang on a sec" came back as
+  "wait a moment as requested" and "pause the handover", so matching only the user's own phrase caught
+  12); 18 more are flagged, every one carrying the go-on ("Continue …", "Resume …", "…; continue placing
+  blocks 7, 11 and 12 …": a resume is not the end result either); no reading is flagged in an episode
+  without a transient line. The
+  slice's run (e) leak is caught. The cost: a replan that leaks and also folds in a correction keeps
+  the previous reading until the next clean plan (its steps are installed either way).
 
 ## Fixed along the way
 

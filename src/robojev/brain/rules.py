@@ -16,6 +16,12 @@ Priority: STOP > the robot's safety filter > right-now answer > route > in-plan 
   the user says something new (ReplanGuard).
 - A loop of steps (the same two alternating, one failing 3 times) escalates to the capable LLM
   (`LoopDetector`, from e12v2's harness).
+- Transient commands ("wait", "hang on", "go on", ...) are events, never part of the task
+  (docs/v2.md "The decision"). `is_transient` says whether a typed line is one, so it is kept out of
+  the user's task-level words shown to the decider (core/decision.View.user_words); `transient_mentions`
+  says whether a plan's restated task repeats one, so the loop keeps the previous reading instead
+  (docs/live-results.md H5: a wait that reached the planner came back inside the restatement, and
+  nothing cleared it).
 """
 from __future__ import annotations
 
@@ -27,10 +33,55 @@ from .core.data import Combined
 STAY_LOCAL_GATE = 0.8
 STOP_RE = re.compile(r"^\s*(stop|stop!|stop now|stop it|stop stop)\W*$", re.I)
 
+# Momentary commands: a pause, a wait, a resume, an acknowledgement. Each is matched as whole words.
+# ("a second" is left out: in task language it is an ordinal, "a second tower"; "wait a second" is still
+# transient through "wait" and the fillers below.)
+TRANSIENT_PHRASES = ("wait", "wait up", "hang on", "hold on", "hold it", "hold up", "one sec", "one second", "a sec",
+                     "a moment", "one moment", "just a moment", "pause", "stop", "go on", "go ahead",
+                     "carry on", "keep going", "continue", "resume", "proceed", "as you were")
+# Words that may surround a transient command without making it about the task.
+_FILLERS = {"ok", "okay", "oh", "ah", "um", "hmm", "please", "now", "robot", "a", "an", "the", "one", "sec", "second",
+            "seconds", "moment", "minute", "bit", "there", "just", "for", "me", "so", "then", "and", "thanks", "thank",
+            "you", "yes", "yeah", "right", "good", "fine", "all", "again", "hey", "it", "that", "is", "s", "can", "we"}
+TRANSIENT_RE = re.compile(r"\b(" + "|".join(re.escape(p) for p in sorted(TRANSIENT_PHRASES, key=len, reverse=True)) + r")\b", re.I)
+
 
 def is_stop(text: str) -> bool:
     """Typed "stop" is handled in code (docs/v2.md). Only a bare stop: "don't stop" or "stop at the tray" are text."""
     return bool(STOP_RE.match(text))
+
+
+def is_transient(text: str) -> bool:
+    """A typed line that is only a momentary command ("hang on a second", "ok, go on"), not a word
+    about the end result. "wait, put the red one on the left" is a correction: words remain once the
+    transient phrases and fillers are taken out."""
+    if not TRANSIENT_RE.search(text):
+        return False
+    rest = TRANSIENT_RE.sub(" ", text.lower())
+    return not [w for w in re.findall(r"[a-z']+", rest) if w not in _FILLERS]
+
+
+def transient_mentions(reading: str, said: list) -> list[str]:
+    """What a plan's restated task (`reading`) carries of the user's transient lines in `said`: once
+    the user has typed one, each such line quoted in the reading, and each transient phrase the
+    reading uses as whole words (the planner paraphrases: "hang on a sec" came back as "wait a moment
+    as requested" and "pause the handover" in the September logs). With no transient line typed, a
+    reading is never flagged ("continue lining the blocks up" is the planner's framing, not a leak).
+    Empty = the reading holds the end result only."""
+    out: list[str] = []
+    low = (reading or "").lower()
+    lines = [x for x in said if is_transient(x)]
+    if not low or not lines:
+        return out
+    for line in lines:
+        core = line.strip().strip(".!?,;: ").lower()
+        if core and core in low and core not in out:
+            out.append(core)
+    for m in TRANSIENT_RE.finditer(low):
+        phrase = m.group(1)
+        if phrase not in out and not any(phrase in x for x in out):
+            out.append(phrase)
+    return out
 
 
 class LoopDetector:
@@ -87,4 +138,5 @@ class ReplanGuard:
         return False
 
 
-__all__ = ["LoopDetector", "RIGHT_NOW_ACTION", "ReplanGuard", "STAY_LOCAL_GATE", "enforce_gate", "is_stop"]
+__all__ = ["LoopDetector", "RIGHT_NOW_ACTION", "ReplanGuard", "STAY_LOCAL_GATE", "TRANSIENT_PHRASES", "enforce_gate",
+           "is_stop", "is_transient", "transient_mentions"]
