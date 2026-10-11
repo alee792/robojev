@@ -11,6 +11,8 @@ from pathlib import Path
 
 import numpy as np
 
+from robojev.protocol import PlaceObs
+
 SIM_DIR = Path(os.environ.get("TROSSEN_ARM_MUJOCO_DIR", Path.home() / "trossen_arm_mujoco"))
 FOLLOWER_XML = SIM_DIR / "trossen_arm_mujoco/assets/wxai/wxai_follower.xml"
 TABLE_Z = -0.02          # table surface in base frame (the base plate sits 2 cm proud, as in the bay)
@@ -36,6 +38,20 @@ class Tray:
 
     def slot_xy(self, i: int) -> tuple[float, float]:
         return (self.origin[0] + i * self.step[0], self.origin[1] + i * self.step[1])
+
+    def places(self) -> dict[str, PlaceObs]:
+        """The tray as world-state places: `slot_i` (capacity 1, radius half the slot) and the group
+        `tray` listing them, centred on them. Shared by the sim's world and the real server's."""
+        out: dict[str, PlaceObs] = {}
+        for i in range(self.n):
+            x, y = self.slot_xy(i)
+            tag = " (the leftmost slot)" if i == 0 else " (the rightmost slot)" if i == self.n - 1 else ""
+            out[f"slot_{i}"] = PlaceObs(f"slot_{i}", f"tray slot {i}{tag}", "slot", x, y, 1, radius=self.slot / 2)
+        ids = tuple(out)
+        cx = sum(out[i].x for i in ids) / len(ids)
+        cy = sum(out[i].y for i in ids) / len(ids)
+        out["tray"] = PlaceObs("tray", "the tray (any free slot)", "group", cx, cy, self.n, ids)
+        return out
 
 
 @dataclass

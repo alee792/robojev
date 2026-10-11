@@ -69,10 +69,10 @@ sim.
 
 | # | Question | Prepared now | Runs |
 |---|---|---|---|
-| D1 | Does the real arm match sim for the skill interface? | A script running K2's 20 picks and K3's interrupts against the real backend, with the same pass bar | Arm |
+| D1 ◐ prepared | Does the real arm match sim for the skill interface? | Prepared 2026-10-11: `robots/widowx_real/` runs the sim's policies unchanged over v1's driver code (`RealRobotServer`, `StaticWorld` of typed-in positions, a fake driver for tests); `robojev-conformance --robot real` runs the same trials; `docs/day-one.md` is the checklist. Found in v1's driver wrapper and worked around at the driver boundary: no yaw command, and any opening under 3.6 cm per side closes by force. Runs on the arm remain | Arm |
 | D2 | Calibration: scene camera to arm base | A ChArUco or touch-point routine and its check | Arm |
 | D3 | If there's a second arm: is it a follower or a leader, and can it grasp? | W1 and W7 from `docs/widowx-pair.md` as scripts | Arm |
-| D4 | First real closed-loop run | A checklist: teleop off, workspace box set, STOP tested, one sorting episode | Arm |
+| D4 ◐ prepared | First real closed-loop run | `docs/day-one.md`: power, teleop off, workspace box from a touch-off, STOP tested, then the conformance trials and the slice | Arm |
 
 ## Order (revised after review, 2026-10-10)
 

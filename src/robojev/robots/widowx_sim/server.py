@@ -2,8 +2,10 @@
 skills from skills.py, a safety filter, a heartbeat watchdog and the recorder.
 
 Layers, top down, as in docs/architecture.md:
-  SimRobotServer  the protocol: manifest, world (MuJoCo ground truth), status, start/hold/pause/
-                  resume/retarget/stop/heartbeat, subscribe. Owns the lock, the clock and the events.
+  SimRobotServer  the protocol: manifest, world (MuJoCo ground truth), the clock, physics stepping,
+                  the lag trip and STOP. Everything above the backend (status, start/hold/pause/
+                  resume/retarget/heartbeat, subscribe, the watchdog, the argument checks, the
+                  events) is base.SkillServer, shared with the real server (robots/widowx_real).
   SimArm          one arm's ArmIO for the policies (skills.ArmIO) and its motor side: a velocity-
                   capped setpoint (v1's Mover, which also clamps to the workspace box), a rate-limited
                   yaw, v1's damped-least-squares IK tracking a straight-down orientation, the gripper
@@ -34,7 +36,6 @@ Choices the protocol leaves open, made here (report, do not settle):
 """
 from __future__ import annotations
 
-import itertools
 import math
 import threading
 import time
@@ -48,8 +49,8 @@ from robojev.config import Workspace
 
 from robojev import catalog
 from robojev.robots.widowx_sim import scene, skills
-from robojev.protocol import (ArmObs, ArmSpec, GripperSpec, HandObs, Manifest, ObjectObs, PlaceObs, Recorder, RobotEvent,
-                       SkillStatus, WorldState)
+from robojev.robots.widowx_sim.base import LagWatch, SkillServer
+from robojev.protocol import ArmObs, ArmSpec, GripperSpec, HandObs, Manifest, ObjectObs, PlaceObs, Recorder, RobotEvent, WorldState
 
 ARM_ID = "arm_0"
 ROBOT = "widowx-sim"
@@ -125,20 +126,12 @@ class SimWorld:
             self.blocks[b.name] = _Body(b.name, b.name.replace("_", " "), tail if len(tail) == 1 or tail.isdigit() else None,
                                         bid, gid, model.jnt_qposadr[jid], model.jnt_dofadr[jid], b.size)
         self.geom_to_block = {h.geom: oid for oid, h in self.blocks.items()}
-        self.places: dict[str, PlaceObs] = {}
-        if spec.tray:
-            t = spec.tray
-            ids = []
-            for i in range(t.n):
-                x, y = t.slot_xy(i)
-                tag = " (the leftmost slot)" if i == 0 else " (the rightmost slot)" if i == t.n - 1 else ""
-                self.places[f"slot_{i}"] = PlaceObs(f"slot_{i}", f"tray slot {i}{tag}", "slot", x, y, 1, radius=t.slot / 2)
-                ids.append(f"slot_{i}")
-            cx = sum(self.places[i].x for i in ids) / len(ids)
-            cy = sum(self.places[i].y for i in ids) / len(ids)
-            self.places["tray"] = PlaceObs("tray", "the tray (any free slot)", "group", cx, cy, t.n, tuple(ids))
+        self.places: dict[str, PlaceObs] = spec.tray.places() if spec.tray else {}
 
     # -- reads ---------------------------------------------------------------------------------------
+    def ids(self):
+        return self.blocks.keys()
+
     def pose(self, oid: str) -> skills.ObjPose | None:
         h = self.blocks.get(oid)
         if h is None:
@@ -211,26 +204,6 @@ class SimWorld:
 
 
 # ------------------------------------------------------------------ the arm
-
-
-class LagWatch:
-    """Fires once when the EE has lagged the setpoint by more than `trip_m` for `persist_s`, and
-    re-arms when the lag drops back under: one trip per obstacle, not one per physics step."""
-
-    def __init__(self, trip_m: float, persist_s: float):
-        self.trip_m, self.persist_s = trip_m, persist_s
-        self.over_s = 0.0
-        self.fired = False
-
-    def update(self, lag: float, dt: float) -> bool:
-        if lag <= self.trip_m:
-            self.over_s, self.fired = 0.0, False
-            return False
-        self.over_s += dt
-        if self.over_s >= self.persist_s and not self.fired:
-            self.fired = True
-            return True
-        return False
 
 
 class SimArm:
@@ -359,6 +332,10 @@ class SimArm:
         self.mover.resume()
         self.frozen_why = None
 
+    @property
+    def frozen(self) -> bool:
+        return self.mover.frozen
+
     # -- motor loop -----------------------------------------------------------------------------------
     def _ik_step(self, target, R_target: np.ndarray, gain: float = 0.6, damping: float = 0.05) -> None:
         """One damped-least-squares step on position and orientation, written to the joint ctrl
@@ -418,12 +395,13 @@ class SimArm:
 # ------------------------------------------------------------------ the server
 
 
-class SimRobotServer:
+class SimRobotServer(SkillServer):
     """protocol.RobotServer on MuJoCo. See the module docstring for the clock and the choices."""
 
     def __init__(self, spec: scene.SceneSpec, realtime: bool = False, recorder: Recorder | None = None,
                  heartbeat_timeout_s: float = 0.5, params: skills.Params | None = None, limits: Limits = LIMITS,
                  robot: str = ROBOT):
+        super().__init__(recorder, params, heartbeat_timeout_s)
         import mujoco
         self.mujoco = mujoco
         self.spec = spec
@@ -431,26 +409,17 @@ class SimRobotServer:
         self.data = mujoco.MjData(self.model)
         mujoco.mj_forward(self.model, self.data)
         self.realtime = realtime
-        self.recorder = recorder
-        self.heartbeat_timeout_s = heartbeat_timeout_s
-        self.params = params or skills.Params()
         self.limits = limits
         self.robot = robot
         self.sim_world = SimWorld(mujoco, self.model, self.data, spec)
+        self.world_view, self.travel_z, self.table_z, self.max_width = self.sim_world, TRAVEL_Z, scene.TABLE_Z, MAX_WIDTH
         self.arms = {ARM_ID: SimArm(mujoco, self.model, self.data, self.sim_world, ARM_ID, limits, TRAVEL_Z)}
         for a in self.arms.values():
             a.stage((HOME_XY[0], HOME_XY[1], TRAVEL_Z))
         self.dt = float(self.model.opt.timestep)
         self.steps_per_tick = max(1, round(1.0 / (POLICY_HZ * self.dt)))
         self.tick_s = self.steps_per_tick * self.dt
-        self._lock = threading.RLock()
-        self._runs: dict[str, skills.Skill] = {}
-        self._ids = itertools.count(1)
-        self._subs: list[Callable[[RobotEvent], None]] = []
         self._n = 0                          # physics steps so far: the clock
-        self._last_hb: float | None = None
-        self._hb_lost = False
-        self._stopped = False
         self._stop_evt = threading.Event()
         self._thread: threading.Thread | None = None
 
@@ -511,7 +480,7 @@ class SimRobotServer:
         """A `run_until` condition: the skill is done or failed."""
         return lambda: self._runs[skill_id].finished
 
-    # ---------------------------------------------------------------- protocol: manifest and resources
+    # ---------------------------------------------------------------- protocol: what the sim adds
     def manifest(self) -> Manifest:
         ws = self.limits.workspace
         arm = ArmSpec(ARM_ID, BASE_FRAME, (ws.x, ws.y, ws.z), GripperSpec(max_width=MAX_WIDTH, can_grasp=True),
@@ -535,247 +504,21 @@ class SimRobotServer:
         with self._lock:
             self.sim_world.hands = list(hands)
 
-    def status(self, skill_id: str) -> SkillStatus:
-        with self._lock:
-            run = self._runs.get(skill_id)
-            if run is None:
-                raise KeyError(f"no skill {skill_id}")
-            return run.status()
-
-    # ---------------------------------------------------------------- protocol: tools
-    def precondition(self, arm: str, skill: str, args: dict) -> str | None:
-        with self._lock:
-            return self._why_not(arm, skill, args)
-
-    def start(self, arm: str, skill: str, args: dict) -> str:
-        with self._lock:
-            why = self._why_not(arm, skill, args)
-            if why:
-                raise ValueError(why)
-            a = self.arms[arm]
-            sid = f"sk{next(self._ids)}"
-            if a.active:
-                old = a.skill
-                old.state, old.reason, old.notified = "cancelled", f"cancelled: replaced by {sid}", True
-            a.unfreeze()
-            a.skill = skills.SKILLS[skill](sid, arm, args, self.params)
-            self._runs[sid] = a.skill
-            note = getattr(self.recorder, "note", None)       # outside protocol.Recorder; the JSONL recorder has it
-            if note is not None:
-                note(kind="skill_start", skill_id=sid, arm=arm, skill=skill, args=dict(args))
-            return sid
-
-    def hold(self, arm: str) -> None:
-        with self._lock:
-            a = self._arm(arm)
-            if a.stopped:
-                return
-            if a.active:
-                a.skill.hold(a)
-
-    def pause(self, arm: str) -> None:
-        with self._lock:
-            a = self._arm(arm)
-            if a.stopped:
-                return
-            if a.active:
-                a.skill.pause(a)
-
-    def resume(self, arm: str) -> None:
-        with self._lock:
-            a = self._arm(arm)
-            if a.stopped:
-                return
-            if a.active:
-                a.skill.resume(a)
-            a.unfreeze()
-
-    def retarget(self, skill_id: str) -> None:
-        with self._lock:
-            run = self._runs.get(skill_id)
-            if run is None or run.finished:
-                return
-            run.retarget(self.arms[run.arm])
-
     def stop(self) -> None:
-        evs = []
+        evs: list[RobotEvent] = []
         with self._lock:
             if not self._stopped:
-                self._stopped = True
+                self._fail_all("stopped: STOP pressed; every arm is parking", evs)
                 for a in self.arms.values():
-                    if a.active:
-                        s = a.skill
-                        s.fail(a, "stopped: STOP pressed; every arm is parking")
-                        s.notified = True
-                        evs.append(self._ev("skill_failed", s.reason, skill_id=s.id, arm=a.id, object=s.args.get("object")))
-                    a.stopped = True
                     a.unfreeze()
                     a.goto((HOME_XY[0], HOME_XY[1], TRAVEL_Z), 0.03)
         self._emit(evs)
 
-    def heartbeat(self) -> None:
-        with self._lock:
-            self._last_hb, self._hb_lost = self.t, False
-
-    def unsubscribe(self, callback: Callable[[RobotEvent], None]) -> None:
-        with self._lock:
-            if callback in self._subs:
-                self._subs.remove(callback)
-
-    def subscribe(self, callback: Callable[[RobotEvent], None]) -> None:
-        with self._lock:
-            self._subs.append(callback)
-
     # ---------------------------------------------------------------- internals
-    def _arm(self, arm: str) -> SimArm:
-        a = self.arms.get(arm)
-        if a is None:
-            raise ValueError(f"no arm {arm}")
-        return a
-
-    def _held_by(self) -> dict[str, str]:
-        return {oid: a.id for a in self.arms.values() for oid in [a.held()] if oid}
-
-    def _why_not(self, arm: str, skill: str, args: dict) -> str | None:
-        """None, or a literal reason prefixed with a catalog.REASONS code."""
-        a = self.arms.get(arm)
-        spec = self.manifest().skill(skill)
-        if a is None:
-            return f"precondition: no arm {arm}"
-        if spec is None:
-            return f"precondition: {arm} has no skill {skill}"
-        if a.stopped:
-            return "precondition: the arm is stopped (STOP)"
-        schema = spec.args_schema
-        missing = [k for k in schema.get("required", []) if k not in args]
-        if missing:
-            return f"precondition: {skill} needs {', '.join(missing)}"
-        extra = [k for k in args if k not in schema.get("properties", {})]
-        if extra:
-            return f"precondition: {skill} takes no argument {', '.join(extra)}"
-        for k, v in args.items():
-            prop = schema["properties"][k]
-            kind = prop.get("type")
-            if kind == "string" and not isinstance(v, str) or kind == "number" and not isinstance(v, (int, float)):
-                return f"precondition: {k} must be a {kind}"
-            if "enum" in prop and v not in prop["enum"]:
-                return f"precondition: {k} must be one of {', '.join(prop['enum'])}, not {v!r}"
-            if kind == "number" and not prop.get("minimum", -math.inf) <= v <= prop.get("maximum", math.inf):
-                return f"precondition: {k} must be between {prop.get('minimum')} and {prop.get('maximum')}"
-        held = self._held_by()
-        if skill in ("pick_and_place", "stack_on", "hand_over"):
-            why = self._grasp_why_not(a, args["object"], held)
-            if why:
-                return why
-        if skill == "pick_and_place":
-            oid, pid = args["object"], args["place"]
-            pl = self.sim_world.places.get(pid)
-            if pl is None:
-                return f"precondition: there is no place {pid} in the world"
-            occ = self.sim_world.occupant(pid, held)
-            if pl.kind == "slot" and occ and occ != oid:
-                return f"blocked: {pl.name} is occupied by {occ}"
-            xy = self.sim_world.place_xy(pid, held)
-            if xy is None:
-                return f"blocked: {pl.name} has no free slot"
-            if not a.reachable((xy[0], xy[1], TRAVEL_Z)):
-                return f"unreachable: {pid} at ({xy[0]:.2f}, {xy[1]:.2f}) is outside the arm's workspace"
-        if skill == "stack_on":
-            oid, onto = args["object"], args["onto"]
-            b = self.sim_world.pose(onto)
-            if b is None:
-                return f"not_in_view: there is no object {onto} in the world"
-            if onto == oid:
-                return f"precondition: {oid} cannot be stacked on itself"
-            if onto in held:
-                return f"precondition: {onto} is held by {held[onto]}"
-            if not a.reachable((b.x, b.y, TRAVEL_Z)):
-                return f"unreachable: {onto} at ({b.x:.2f}, {b.y:.2f}) is outside the arm's workspace"
-            top = next((o for o in self.sim_world.blocks if o != oid and self.sim_world.where(o, held) == f"on:{onto}"), None)
-            if top:
-                return f"blocked: {onto} already has {top} on it"
-            o = self.sim_world.pose(oid)
-            if b.z + b.size / 2 + o.size + self.params.tip_height > TRAVEL_Z:      # the carried block would hit it
-                return f"unreachable: the top of {onto} is {b.z + b.size / 2 - scene.TABLE_Z:.3f} m above the table, too high to stack on"
-        if skill == "push":
-            oid = args["object"]
-            o = self.sim_world.pose(oid)
-            if o is None:
-                return f"not_in_view: there is no object {oid} in the world"
-            if oid in held:
-                return f"precondition: {oid} is held by {held[oid]}"
-            if a.held():
-                return f"precondition: the gripper is holding {a.held()}"
-            start, limit = skills.push_path(o, args["direction"], args["distance"], self.params)
-            push_z = scene.TABLE_Z + self.params.tip_height
-            for xy, what in ((start, "starts"), (limit, "ends")):
-                if not a.reachable((xy[0], xy[1], push_z)):
-                    return (f"unreachable: pushing {oid} {args['distance'] * 100:.0f} cm {args['direction']} {what} at "
-                            f"({xy[0]:.2f}, {xy[1]:.2f}), outside the arm's workspace")
-        if skill == "hand_over":
-            ox, oy = self.params.offer_xy
-            if not a.reachable((ox, oy, self.params.offer_z)):
-                return f"unreachable: the hand-over point ({ox:.2f}, {oy:.2f}) is outside the arm's workspace"
-        return None
-
-    def _grasp_why_not(self, a: SimArm, oid: str, held: dict[str, str]) -> str | None:
-        """What stops this arm picking `oid` up: unknown, too wide, in another gripper, this gripper
-        full of something else, out of reach. Already in this gripper is fine (the skill starts at lift)."""
-        o = self.sim_world.pose(oid)
-        if o is None:
-            return f"not_in_view: there is no object {oid} in the world"
-        if o.size + 0.004 > MAX_WIDTH:
-            return f"precondition: {oid} is {o.size * 100:.1f} cm wide; the fingers open to {MAX_WIDTH * 100:.1f} cm"
-        mine = a.held()
-        if mine and mine != oid:
-            return f"precondition: the gripper is holding {mine}"
-        if held.get(oid, a.id) != a.id:
-            return f"precondition: {oid} is held by {held[oid]}"
-        if not a.reachable((o.x, o.y, TRAVEL_Z)):
-            return f"unreachable: {oid} at ({o.x:.2f}, {o.y:.2f}) is outside the arm's workspace"
-        return None
-
-    def _ev(self, kind: str, text: str, **kw) -> RobotEvent:
-        return RobotEvent(self.t, kind, text, **kw)
-
-    def _emit(self, evs: list[RobotEvent]) -> None:
-        for ev in evs:
-            if self.recorder is not None:
-                self.recorder.event(ev)
-            for cb in list(self._subs):
-                cb(ev)
-
     def _tick(self) -> list[RobotEvent]:
         evs: list[RobotEvent] = []
-        t = self.t
-        if self._last_hb is not None and not self._hb_lost and t - self._last_hb > self.heartbeat_timeout_s:
-            self._hb_lost = True
-            for a in self.arms.values():
-                if a.stopped:
-                    continue
-                if a.active:
-                    a.skill.hold(a)
-                elif not a.mover.frozen:
-                    a.freeze()
-                    a.frozen_why = "heartbeat"
-            evs.append(self._ev("heartbeat_lost", f"no heartbeat for {self.heartbeat_timeout_s:.1f} s: every arm is holding"))
-        for a in self.arms.values():
-            a.t = t
-            s = a.skill
-            if s is None:
-                continue
-            if not s.finished:
-                s.tick(a)
-                if self.recorder is not None:
-                    self.recorder.frame(t, a.id, s.id, s.phase, a.observation(), a.action())
-            if s.finished and not s.notified:       # finished in its tick, or outside it (retarget, STOP)
-                s.notified = True
-                if s.state == "done":
-                    evs.append(self._ev("skill_done", f"{s.name} finished: {s.text}", skill_id=s.id, arm=a.id,
-                                        object=s.args.get("object")))
-                else:
-                    evs.append(self._ev("skill_failed", s.reason, skill_id=s.id, arm=a.id, object=s.args.get("object"),
-                                        data={"phase": s.phase}))
+        self._watchdog(evs)
+        self._tick_skills(evs)
         for _ in range(self.steps_per_tick):
             for a in self.arms.values():
                 a.before_step(self.dt)
@@ -783,14 +526,6 @@ class SimRobotServer:
             self._n += 1
             for a in self.arms.values():
                 why = a.after_step(self.dt)
-                if why and not a.stopped:
-                    sid = None
-                    if a.active:
-                        a.skill.trip(a, why)
-                        sid = a.skill.id
-                    else:
-                        a.freeze()
-                        a.frozen_why = "trip"
-                    evs.append(self._ev("safety_trip", f"the safety filter tripped on {a.id}: {why}; holding",
-                                        skill_id=sid, arm=a.id, data={"lag_m": a.lag_m}))
+                if why:
+                    self._trip(a, why, {"lag_m": a.lag_m}, evs)
         return evs
