@@ -277,6 +277,6 @@ def report(done: list[dict]) -> None:
 
 if __name__ == "__main__":
     if len(sys.argv) > 2 and sys.argv[1] == "--report":
-        report([json.loads(line) for line in open(sys.argv[2])])
+        report([json.loads(line) for line in (gzip.open(sys.argv[2], "rt") if sys.argv[2].endswith(".gz") else open(sys.argv[2]))])
     else:
         main()
