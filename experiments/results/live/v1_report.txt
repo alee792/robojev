@@ -1,0 +1,27 @@
+mid-carry: gripper at [0.283 0.026 0.099]
+rep 0 hand none  image: p_near 0.02  right_now hold  146 ms  954 tok
+rep 0 hand none  text : p_near 0.0  right_now hold  86 ms  719 tok
+rep 0 hand 0.08  image: p_near 0.0  right_now hold  183 ms  954 tok
+rep 0 hand 0.08  text : p_near 0.94  right_now hold  129 ms  722 tok
+rep 0 hand 0.15  image: p_near 0.0  right_now carry_on  120 ms  954 tok
+rep 0 hand 0.15  text : p_near 0.92  right_now pause  96 ms  729 tok
+rep 0 hand 0.4   image: p_near 0.93  right_now carry_on  140 ms  954 tok
+rep 0 hand 0.4   text : p_near 0.5  right_now hold  146 ms  730 tok
+rep 1 hand none  image: p_near 0.02  right_now hold  132 ms  954 tok
+rep 1 hand none  text : p_near 0.0  right_now hold  144 ms  719 tok
+rep 1 hand 0.08  image: p_near 0.01  right_now hold  189 ms  954 tok
+rep 1 hand 0.08  text : p_near 0.94  right_now hold  91 ms  722 tok
+rep 1 hand 0.15  image: p_near 0.01  right_now hold  158 ms  954 tok
+rep 1 hand 0.15  text : p_near 0.92  right_now pause  147 ms  729 tok
+rep 1 hand 0.4   image: p_near 0.03  right_now hold  125 ms  954 tok
+rep 1 hand 0.4   text : p_near 0.5  right_now hold  109 ms  730 tok
+rep 2 hand none  image: p_near 0.02  right_now hold  125 ms  954 tok
+rep 2 hand none  text : p_near 0.0  right_now hold  249 ms  719 tok
+rep 2 hand 0.08  image: p_near 0.04  right_now hold  189 ms  954 tok
+rep 2 hand 0.08  text : p_near 0.94  right_now hold  90 ms  722 tok
+rep 2 hand 0.15  image: p_near 0.02  right_now carry_on  195 ms  954 tok
+rep 2 hand 0.15  text : p_near 0.92  right_now pause  112 ms  729 tok
+rep 2 hand 0.4   image: p_near 0.66  right_now carry_on  150 ms  954 tok
+rep 2 hand 0.4   text : p_near 0.5  right_now hold  146 ms  730 tok
+image: hand-near right 4/12; latency p50 150 max 195 ms; tokens 954
+text: hand-near right 9/12; latency p50 129 max 249 ms; tokens 726
