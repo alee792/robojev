@@ -15,6 +15,14 @@ so "no contact" is the closest the gripper came to the reported hand position.
 
 Measured numbers are printed per test (pytest -s) and recorded in experiments/results/l1_slice.txt.
 pytest-asyncio is not installed: each episode runs under asyncio.run in a plain test.
+
+Live models (tests/live_models.py): ROBOJEV_DECIDER=jev|decisions and/or ROBOJEV_PLANNER=openai run the
+same four scenarios with a real decision model and a real planner, recording every run (server frames
+and events, the brain's decisions, plans and log, each decision request with the oracle's truth) to
+experiments/results/live/. Live runs need keys and are never part of the default run. A few
+assertions check the mocks' exact choices (the oracle's step list, its first two starts, "hold" on
+the correction); live, those are recorded rather than asserted, and the scenario is judged on
+world() and the timing bars as before.
 """
 from __future__ import annotations
 
@@ -29,7 +37,10 @@ from robojev.brain import Brain, BrainConfig
 from robojev.brain.eval.oracle import Goal
 from robojev.brain.eval.scenarios import Utt
 from robojev.brain.mocks import PRESS_STOP, Line, ScriptedPerception, ScriptedUser, oracle_models
+from robojev.recording.recorder import JsonlRecorder
 from robojev.robots.widowx_sim import scene
+
+import live_models as LM
 
 pytestmark = pytest.mark.skipif(not scene.FOLLOWER_XML.exists(),
                                 reason=f"{scene.FOLLOWER_XML} missing: set TROSSEN_ARM_MUJOCO_DIR")
@@ -53,17 +64,25 @@ DESCENDING = Goal({"block_5": "slot_0", "block_3": "slot_1", "block_1": "slot_2"
 
 
 @pytest.fixture
-def srv():
-    """The physics server on the wall clock, behind the logging perception layer."""
-    with SimRobotServer(scene.SceneSpec(blocks=list(BLOCKS), tray=scene.Tray(n=3)), realtime=True) as sim:
+def srv(request):
+    """The physics server on the wall clock, behind the logging perception layer. Live, the server
+    records to experiments/results/live/ (tests/live_models.py)."""
+    rec = JsonlRecorder(LM.out_path(request.node.name)) if LM.LIVE else None
+    with SimRobotServer(scene.SceneSpec(blocks=list(BLOCKS), tray=scene.Tray(n=3)), realtime=True, recorder=rec) as sim:
         with ScriptedPerception(sim) as p:
             p.events = []
             p.subscribe(p.events.append)
+            p.recorder, p.logged = rec, None
             yield p
+    if rec is not None:
+        print(f"\nrecorded: {rec.close()}")
 
 
 def brain(srv, versions, utts=None, user=None, **cfg) -> Brain:
-    decider, llm = oracle_models(srv, versions, utts)
+    if LM.LIVE:
+        decider, llm, srv.logged = LM.models(srv, versions, utts)
+    else:
+        decider, llm = oracle_models(srv, versions, utts)
     return Brain(srv, decider, llm, user, BrainConfig(max_s=90, **cfg))
 
 
@@ -125,11 +144,16 @@ def drops(srv, oid: str, since: float = 0.0) -> list[tuple[float, float]]:
     return out
 
 
-def summary(name: str, r, wall: float, **extra) -> None:
+def summary(name: str, r, wall: float, srv=None, **extra) -> None:
     bits = [f"wall {wall:.1f} s", f"events {dict(r.events)}", f"steps started/done/failed {r.steps_started}/{r.steps_done}/{r.steps_failed}",
             f"plans {len(r.llm)} (stale {r.stale_plans}, failed {r.failed_plans}, loops {r.loops})"]
+    if LM.LIVE:
+        extra = {**extra, "plan_ms": [round(sum(a["latency_ms"] for a in p["attempts"])) for p in r.llm],
+                 "decision_ms": [round(d["latency_ms"]) for d in r.decisions]}
     bits += [f"{k} {v}" for k, v in extra.items()]
-    print(f"\nL1 {name}: " + "; ".join(bits))
+    print(f"\nL1 {name} [{LM.tag()}]: " + "; ".join(bits))
+    if srv is not None and getattr(srv, "recorder", None) is not None:
+        LM.record_episode(srv.recorder, name, r, srv.logged, {"wall_s": wall, **extra})
 
 
 # ---------------------------------------------------------------- (a) the sort
@@ -138,11 +162,13 @@ def summary(name: str, r, wall: float, **extra) -> None:
 def test_a_three_block_sort_on_physics(srv):
     r, wall = episode(brain(srv, [ASCENDING]))
     ok, why = judge_sort(srv, ASCENDING)
-    summary("sort", r, wall, verdict=why)
+    summary("sort", r, wall, srv, verdict=why, starts=[c[2][2] for c in tools(srv, "start")])
     assert r.outcome == "done", r.log
     assert ok, why
-    assert r.steps_done == 3 and r.steps_failed == 0 and r.failed_plans == 0
-    assert [c[2][1] for c in tools(srv, "start")] == ["pick_and_place"] * 3
+    assert r.steps_failed == 0 and r.failed_plans == 0
+    if not LM.LIVE:                                           # the oracle's plan: one pick per block
+        assert r.steps_done == 3
+        assert [c[2][1] for c in tools(srv, "start")] == ["pick_and_place"] * 3
     assert r.events["scene_change"] == 0                      # placing a block never read as someone else's doing
     assert not tools(srv, "stop", "pause")
     assert wall < 60.0
@@ -158,16 +184,21 @@ def test_b_correction_mid_carry_holds_then_reverses_the_order(srv):
     t_hold = first_mode(srv, ("holding", "paused"), t_text)
     ok, why = judge_sort(srv, DESCENDING)
     dropped = drops(srv, "block_1")
-    summary("correction", r, wall, text_to_hold_s=None if t_hold is None else round(t_hold - t_text, 3), verdict=why,
-            starts=[c[2][2] for c in tools(srv, "start")], drops=dropped)
+    said = next((d for d in r.decisions if d["event"] == "user_text"), None)
+    summary("correction", r, wall, srv, text_to_hold_s=None if t_hold is None else round(t_hold - t_text, 3), verdict=why,
+            starts=[c[2][2] for c in tools(srv, "start")], drops=dropped,
+            said_right_now=said and said["combined"].right_now, said_route=said and said["combined"].route,
+            readings=[d["text"] for d in r.decisions if d["event"] == "plan_arrived"])
     assert r.outcome == "done", r.log
     assert t_hold is not None and t_hold - t_text < REACT_S, (t_hold, t_text)
-    said = next(d for d in r.decisions if d["event"] == "user_text")
-    assert said["combined"].right_now == "hold"
+    assert said is not None
+    if not LM.LIVE:                                           # live, the model's choice is recorded (said_right_now)
+        assert said["combined"].right_now == "hold"
     assert ok, why
     # the held block was carried on to its new slot: the new skill began with it in the gripper
     starts = [c[2][2] for c in tools(srv, "start")]
-    assert starts[:2] == [{"object": "block_1", "place": "slot_0"}, {"object": "block_1", "place": "slot_2"}]
+    if not LM.LIVE:                                           # the oracle's replan; a live one may differ
+        assert starts[:2] == [{"object": "block_1", "place": "slot_0"}, {"object": "block_1", "place": "slot_2"}]
     assert [e.kind for e in srv.events if e.kind == "skill_failed"] == []
     assert dropped == [] and r.steps_failed == 0
     assert not tools(srv, "stop")
@@ -184,7 +215,7 @@ def test_c_hand_near_the_gripper_pauses_within_half_a_second_and_resumes(srv):
     t_pause = first_mode(srv, ("paused",), appeared)
     resumed = [t for t, _, _ in tools(srv, "resume")]
     ok, why = judge_sort(srv, ASCENDING)
-    summary("hand", r, wall, hand_to_pause_s=None if t_pause is None else round(t_pause - appeared, 3),
+    summary("hand", r, wall, srv, hand_to_pause_s=None if t_pause is None else round(t_pause - appeared, 3),
             leave_to_resume_s=None if not resumed else round(resumed[0] - left, 3), min_hand_dist_m=round(srv.min_hand_dist, 3),
             verdict=why)
     assert r.outcome == "done", r.log
@@ -220,7 +251,7 @@ def test_d_stop_mid_carry_parks_the_arm_and_never_drops_the_block(srv):
     a, b = w.arms[ARM_ID], w.objects["block_1"]
     parked_after = time.monotonic() - t_stop
     dropped = drops(srv, "block_1", since=t_stop)
-    summary("stop", r, wall, stop_to_parked_s=round(parked_after, 2), arm_mode=a.mode, holding=a.holding,
+    summary("stop", r, wall, srv, stop_to_parked_s=round(parked_after, 2), arm_mode=a.mode, holding=a.holding,
             block_where=b.where, block_z=round(b.z, 3), drops=dropped)
     assert a.mode == "stopped"
     assert math.hypot(a.x - HOME_XY[0], a.y - HOME_XY[1]) < 0.01, (a.x, a.y)
