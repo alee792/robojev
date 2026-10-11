@@ -23,8 +23,12 @@ in about 850 requests.
 
 **Confidence.** The API's own `confidence` field is Jev's formula `(p_max − 1/n)/(1 − 1/n)` rounded
 to two places: over 1,371 choice answers the largest difference is 0.005. Both are exposed
-(`confidence_api`, `confidence_formula`); the backend gives combine() the formula. The gate behaves
-the same with either (table below).
+(`confidence_api`, `confidence_formula`). **The gate should use the API's field.** It is the same
+number, so the gates set on Jev apply unchanged. But computed from the two-decimal probabilities, the
+formula comes out 0.7999999999999999 where the API says 0.80, and that put 13 of 1,520 replayed
+answers just under the 0.8 or 0.5 gate. The backend now defaults to the API field and rounds the
+formula (commit after these runs; the runs below used the unrounded formula; no slice decision fell
+on a gate edge).
 
 A fifth scenario was added to the slice: **(e)** "hang on a second" typed mid-carry, then "ok, go on"
 2 s later. The arm must pause within 0.5 s and resume, and no restated task may mention the wait (H5).
@@ -42,11 +46,27 @@ A fifth scenario was added to the slice: **(e)** "hang on a second" typed mid-ca
 What the failures were:
 
 - **Jev on the correction.** Asked about "actually, highest on the left" while carrying block 1 to
-  slot 0, Jev answered `carry_on` (p 0.89, conf 0.83) and `stay_local` (0.65), the same in all three
-  runs. The right-now answer cleared its 0.5 gate, so the arm carried on and put block 1 in slot 0.
-  The route answer fell under 0.8, so a replan went out; it came back 4–6 s later and the arm moved
-  block 1 again (4 steps instead of 3). The end state was right, but the hold the user is owed never
-  came. The Decisions API answered `hold` (0.66) on the same request each time.
+  slot 0, Jev answered `carry_on` (p 0.89, conf 0.83 in run 1) and `stay_local` (0.65), the same in all
+  three runs. The right-now answer cleared its 0.5 gate, so the arm carried on and put block 1 in
+  slot 0. The route answer fell under 0.8, so a replan went out; it came back 4–6 s later and the arm
+  moved block 1 again (4 steps instead of 3). The end state was right, but the hold the user is owed
+  never came. The Decisions API answered `hold` (0.66) on the same request each time.
+  **Why: the restated task.** The decision's `task` is the planner's restatement
+  (core/decision.py, by design). Here it read "Place block_1, block_3, and block_5 in the tray from
+  left to right in ascending numeric order". Jev does not read "highest on the left" as contradicting
+  that. The same request, 5 calls per variant:
+
+  | state | Jev right_now | Decisions API right_now |
+  |---|---|---|
+  | as recorded | carry_on ×5 (0.56–0.67) | hold ×5 (0.86) |
+  | `task` = the user's "Line the blocks up in the tray, lowest number on the left." | hold ×5 (0.45–0.61) | hold ×5 (0.97) |
+  | `arm_in_step` as e12v2's literal phase ("holding block 1 at travel height, carrying it to…") | carry_on ×5 | hold ×5 (0.28) |
+  | both | hold ×5 (0.43–0.66) | hold ×5 (0.85) |
+
+  In e12v2's replay Jev also leaned `carry_on` on 6 of 14 corrections, but always under 0.5, so the
+  cautious fallback held. In the slice the restatement made it confident. This is not a code bug, and
+  nothing was changed. It is the restatement (H5's subject too) hiding the words a correction
+  contradicts.
 - **The Decisions API's 1.1 s hold.** One right-now decision took 1,097 ms (the slowest of 84 in the
   loop). The hold arrived after the 0.5 s bar.
 - **The Decisions API's leak (H5).** Its route confidence on "hang on a second" was low (0.48), so the
