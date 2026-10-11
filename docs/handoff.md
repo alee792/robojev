@@ -448,3 +448,38 @@ their own commits and say so. Commit new code and logs to `claude/widowx-pair`; 
 **Deliverables:** the backends with tests (mocked HTTP); `experiments/results/live/` logs; a
 `docs/live-results.md` with the tables; a plain-language comment on PR #3 answering 1-4, ending with:
 which decider to make the default, and the top three risks you now see for the real arm.
+
+# Handoff 7: re-run the correction and the wait live, after the brain fixes
+
+Paste the block below into a Claude Code session on the MacBook (`OPENAI_API_KEY`, `TYPESAFE_API_KEY`).
+
+---
+
+You are re-running two live scenarios of robojev's slice after three brain fixes made from your last
+run (`docs/live-results.md`, "After the fixes (offline replay)"): the decision now sees the user's
+own words (`user_words`) beside the plan's reading; a new plan is routed by the plan-check answers
+alone; a transient "wait" can no longer enter the restated task. The offline replay shows good-plan
+send-backs at 0% for both deciders; what it cannot show is whether Jev now holds on "actually,
+highest on the left".
+
+**Setup:** `git fetch origin claude/widowx-pair && git checkout claude/widowx-pair && uv sync --extra sim --extra mcp`;
+`uv run --frozen --extra mcp python -m pytest -q` (expect ~559 passed, 4 skipped; one known
+load-sensitive test in `test_robots_widowx_real.py`). Read `docs/live-results.md` and
+`tests/live_models.py` (`ROBOJEV_DECIDER=jev|decisions`, `ROBOJEV_PLANNER=openai`).
+
+**Run**, recording to `experiments/results/live/` as before, 5 runs each:
+1. Scenario (b), the correction mid-carry, with Jev and with the Decisions API.
+2. Scenario (e), wait then go on, with both.
+3. Then the full five scenarios once per decider, so nothing regressed.
+
+**Report, with numbers, as a comment on PR #3 and a new section in `docs/live-results.md`:**
+1. On (b): does the decider now say hold, with what confidence, and text-to-hold time; the final
+   order; drops. Before: Jev 0/3 (carry on at 0.83), Decisions API 2/3.
+2. On (e): any wait in the restated task; whether the guard fired (`reading_kept` notes in the log).
+3. Good new plans sent back to the planner across all runs, per decider (offline: 0%).
+4. Anything the fixes made worse: more escalations, slower decisions, a plan the plan check should
+   have caught and didn't (the Decisions API's plan-check predicate was the weak part offline).
+5. Your default-decider recommendation again, given the new numbers.
+
+**Rules:** never print API keys; don't change brain rules to improve numbers; fix real bugs in their
+own commits and say so; commit to `claude/widowx-pair`, no history rewriting.
