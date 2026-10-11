@@ -56,7 +56,7 @@ class Logged:
     def answer(self, state, questions, ref=None):
         ev, view = ref
         try:
-            truth = O.truth(ev, view, self.sc, self.truth_src.truth())
+            truth = O.truth(ev, view, self.sc, self.truth_src)
         except Exception as e:                   # the oracle can't judge every live situation; say so
             truth = {"error": repr(e)[:200]}
         fut = self.pool.submit(self.shadow.answer, state, questions) if self.shadow else None
