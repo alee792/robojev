@@ -45,7 +45,7 @@ sim.
 | K2 ✔ | `pick_and_place` as real motion: approach, grasp, lift, carry, place, release | Done: 80/80 over seeds 0-3 (`trials.py`) | Here |
 | K3 ✔ | Interrupting mid-motion: hold at a safe point keeping the grip, pause, resume, re-target to a moved block | Done inside K2: hold / pause / resume / retarget from every phase, tested | Here |
 | K4 ✔ | `stack_on`, `push`, `hand_over` (to a hand position), `survey` | Done 2026-10-10: stack_on 80/80, push 80/80 (seeds 0-3), hand_over tested with an injected hand; begin-from-held and hold/resume mid-skill for each | Here |
-| K5 | Two arms in one scene (two WidowX models) with the shared-zone lock | 10 runs of moves in parallel with no arm-arm contact | Here |
+| K5 ✔ | Two arms in one scene (two WidowX models) with the shared-zone lock | Done 2026-10-11: both arms picking at once 20/20 each with 0 trips; hand-over through the zone 20/20, every trial exercising the lock; one-arm trials unchanged. `robojev-conformance --arms 2` | Here |
 | K6 ✔ | The robot server as a real MCP server (stdio or HTTP) with the heartbeat watchdog | Done 2026-10-10 (`mcp_server.py`, `mcp_client.py`): the brain's 3-block sort passes over a stdio subprocess unchanged; event delivery 1.6 ms p50 / 2.5 ms p95, heartbeat 1.6 ms, world 2.1 ms | Here |
 
 ### Perception (sim and offline)
@@ -142,6 +142,16 @@ a port of its tick loop.
   errors carry text only (the `code: text` convention survives, a code field doesn't); the
   high-level server derives schemas from Python signatures, so manifest-driven tools need the
   low-level one. The transport cost is not the problem; the SDK's request/response shape is.
+- **Two facing arms collide wrist to wrist, not fingertip to fingertip (K5).** The wrist-roll
+  housing stands 10.4 cm ahead of the fingertips toward the facing arm, at every straight-down pose,
+  so the physics forces fingertip separation of at least 25 cm along the base line. A proximity
+  check on end-effector points is meaningless for a pair; the server checks the fingertips, the
+  wrist housing and the gripper bar as the model has them, and holds the later-moving arm at a 4 cm
+  gap. Consequence: base spacing must be at least 0.72 m (0.76 m default, an 8 cm strip on the
+  centre line); own-half work beyond an arm's side line cannot overlap in time with the other arm's
+  zone work. Also found: a carry that keeps the pick's wrist yaw can roll the 19 cm gripper bar into
+  the folded upper arm at a close destination; the carry now re-aims the closing axis for the
+  destination (one-arm trials unchanged).
 - **Sim grasp numbers are logic-checks only.** The sim actuator allows 400 N against a real grip of
   tens of N, and pad friction here is hand-tuned. K2's 19/20 proves phases and geometry; real grasp
   reliability is D1's bar, with the same script pointed at the real backend.

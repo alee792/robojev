@@ -8,12 +8,24 @@ real arm (D1) the positions are typed in and the judge reads the server's own bo
     uv run --frozen robojev-conformance --robot real --robot-ip 192.168.1.5 --blocks blocks.json \\
         --teleop-off-ack "your name" --skill pick_and_place --n 20
     uv run --frozen robojev-conformance --robot real --driver fake --blocks blocks.json --skill pick_and_place --n 5
+    uv run --frozen robojev-conformance --arms 2 --skill pick_and_place --n 10
+    uv run --frozen robojev-conformance --arms 2 --skill handover_via_zone --n 10
 
 Sim: each trial is a fresh scene. pick_and_place: one 4 cm block at a random pose in x 0.26-0.38,
 y -0.15..0.15, random yaw, a random tray slot as the destination. stack_on: two such blocks at least
 10 cm apart, the first stacked on the second. push: one block, a random catalog direction and a
 distance of 3-12 cm whose path stays in the workspace. hand_over is not here: the sim has no hands,
 so it is exercised by injecting one (tests/test_robots_widowx_sim.py).
+
+Two arms (K5, `--arms 2`, sim only): the pair scene of scene.pair(). pick_and_place runs both arms
+AT ONCE, each within its own half (a 4 cm block at a random pose x 0.17-0.21 from its base, y
+-0.14..0.14; arm_0's goes to a random staging spot, arm_1's to a random tray slot), scored per arm,
+and any safety_trip fails the trial: K5's bar of parallel moves with no arm-arm contact.
+handover_via_zone is the sequence this script drives, the brain not involved: arm_0 puts a block
+from its half on a random shared-zone spot, and once that is done arm_1 picks it from there into a
+random tray slot; arm_1 usually meets the zone lock, since arm_0 is still clearing the zone when
+arm_1 starts, and the verdict says so. Judged from the final world: the block in the slot, both
+grippers empty, both arms at travel height.
 
 Real: one `RealRobotServer` for the whole run (staging the arm once), the blocks where `--blocks`
 says (robots/widowx_real/world.load_blocks), re-laid by a person between trials at the prompt; the
@@ -50,6 +62,9 @@ from robojev.robots.widowx_sim.server import ARM_ID, LIMITS, SimRobotServer
 
 RESULTS = Path(__file__).resolve().parents[2] / "experiments" / "results" / "k2_trials.jsonl"
 SKILLS = ("pick_and_place", "stack_on", "push")
+PAIR_SKILLS = ("pick_and_place", "handover_via_zone")
+PAIR_X_RANGE = (0.17, 0.21)   # from the arm's own base: in front of its tray/stage row (x 0.11), well inside its half
+PAIR_Y_RANGE = (-0.14, 0.14)
 X_RANGE = (0.26, 0.38)
 Y_RANGE = (-0.15, 0.15)
 PUSH_RANGE = (0.03, 0.12)   # m
@@ -89,6 +104,29 @@ class Verdict:
     reason: str | None
     sim_s: float               # seconds on the server's clock: sim time in sim, wall time on the real arm
     wall_s: float
+    arms: dict = field(default_factory=dict)   # pair trials: ok per arm
+
+
+@dataclass
+class Step:
+    """One skill on one arm of a pair trial."""
+    arm: str
+    skill: str
+    args: dict
+
+
+@dataclass
+class PairTrial:
+    """A two-arm trial: `kind` "pick_and_place" runs its steps at once (one per arm, each in its own
+    half); "handover_via_zone" runs them in order (arm_0 to a zone spot, then arm_1 to the tray)."""
+    index: int
+    kind: str
+    blocks: list[scene.Block]
+    steps: list[Step]
+
+    @property
+    def parallel(self) -> bool:
+        return self.kind == "pick_and_place"
 
 
 def _block(rng: random.Random, name: str) -> scene.Block:
@@ -121,6 +159,28 @@ def sample(rng: random.Random, index: int, n_slots: int, skill: str = "pick_and_
     if skill == "push":
         return Trial(index, skill, [b1], _push_args(rng, b1, LIMITS.workspace, scene.TABLE_Z))
     raise ValueError(f"no trials for {skill}")
+
+
+def _own_block(rng: random.Random, name: str, spec: scene.SceneSpec, arm: str, rgba=(0.85, 0.25, 0.2, 1)) -> scene.Block:
+    """A block at a random pose in `arm`'s own half (PAIR_X_RANGE from its base, PAIR_Y_RANGE across)."""
+    x, y = spec.bases()[arm].to_common((rng.uniform(*PAIR_X_RANGE), rng.uniform(*PAIR_Y_RANGE)))
+    return scene.Block(name, (x, y), yaw=rng.uniform(-math.pi, math.pi), rgba=rgba)
+
+
+def sample_pair(rng: random.Random, index: int, kind: str, spec: scene.SceneSpec | None = None) -> PairTrial:
+    """A random pair trial of `kind` on the layout of `spec` (default scene.pair())."""
+    spec = spec or scene.pair()
+    b1 = _own_block(rng, "block_1", spec, scene.ARM_0)
+    if kind == "pick_and_place":
+        b2 = _own_block(rng, "block_2", spec, scene.ARM_1, rgba=(0.2, 0.4, 0.8, 1))
+        steps = [Step(scene.ARM_0, "pick_and_place", {"object": "block_1", "place": f"{spec.stage.slot_id}_{rng.randrange(spec.stage.n)}"}),
+                 Step(scene.ARM_1, "pick_and_place", {"object": "block_2", "place": f"{spec.tray.slot_id}_{rng.randrange(spec.tray.n)}"})]
+        return PairTrial(index, kind, [b1, b2], steps)
+    if kind == "handover_via_zone":
+        steps = [Step(scene.ARM_0, "pick_and_place", {"object": "block_1", "place": f"zone_{rng.randrange(spec.zone().spots)}"}),
+                 Step(scene.ARM_1, "pick_and_place", {"object": "block_1", "place": f"{spec.tray.slot_id}_{rng.randrange(spec.tray.n)}"})]
+        return PairTrial(index, kind, [b1], steps)
+    raise ValueError(f"no pair trials for {kind}")
 
 
 def sample_laid_out(rng: random.Random, index: int, blocks: list[scene.Block], n_slots: int, skill: str,
@@ -219,6 +279,25 @@ def judge_trial(world: WorldState, manifest: Manifest, trial: Trial, table_z: fl
     raise ValueError(f"no judge for {trial.skill}")
 
 
+def judge_pair(world: WorldState, manifest: Manifest, trial: PairTrial) -> tuple[bool, str, dict[str, bool]]:
+    """The final world of a pair trial: every object rests where its last step was to leave it, every
+    arm that took part is empty and at travel height. Also per arm: that arm's own steps' objects
+    and its own state, for the per-arm score."""
+    last = {s.args["object"]: s for s in trial.steps}
+    per_arm: dict[str, bool] = {}
+    problems, good = [], []
+    for oid, step in last.items():
+        ok, why = judge(world, manifest, oid, step.args["place"], step.arm)
+        per_arm[step.arm] = per_arm.get(step.arm, True) and ok
+        (good if ok else problems).append(f"{step.arm}: {why}")
+    for arm in dict.fromkeys(s.arm for s in trial.steps):
+        bad = _arm_checks(world, manifest, arm)
+        if bad:
+            per_arm[arm] = False
+            problems += [f"{arm}: {p}" for p in bad]
+    return (not problems), "; ".join(problems or good), per_arm
+
+
 def make_server(trial: Trial, recorder: JsonlRecorder | None) -> SimRobotServer:
     return SimRobotServer(scene.SceneSpec(blocks=list(trial.blocks)), realtime=False, recorder=recorder)
 
@@ -253,6 +332,67 @@ def run_trial(trial: Trial, recorder: JsonlRecorder | None = None, srv=None, wor
     return v
 
 
+def run_pair_trial(trial: PairTrial, recorder: JsonlRecorder | None = None, timeout_s: float = SKILL_TIMEOUT_S) -> Verdict:
+    """One two-arm trial on a fresh pair server: the steps at once or in order (each given `timeout_s`
+    of sim time), then the judge. A safety_trip anywhere fails the trial; the text notes when an arm
+    waited for the shared zone."""
+    t0 = time.perf_counter()
+    srv = SimRobotServer(scene.pair(trial.blocks), realtime=False, recorder=recorder)
+    events: list[RobotEvent] = []
+    srv.subscribe(events.append)
+    waited: set[str] = set()
+    sids: list[str] = []
+
+    def begin(step: Step) -> str | None:
+        why = srv.precondition(step.arm, step.skill, step.args)
+        if why is None:
+            sids.append(srv.start(step.arm, step.skill, step.args))
+        return why
+
+    def finished_or_waiting() -> bool:
+        for sid in sids:
+            st = srv.status(sid)
+            if st.state == "holding" and st.phase_text.startswith("waiting for the shared zone"):
+                waited.add(st.arm)
+        return all(srv._runs[s].finished for s in sids)
+
+    try:
+        groups = [trial.steps] if trial.parallel else [[s] for s in trial.steps]
+        for group in groups:
+            for step in group:
+                why = begin(step)
+                if why:
+                    return Verdict(False, f"refused on {step.arm}: {why}", "refused", why, srv.t, time.perf_counter() - t0)
+            srv.run_until(finished_or_waiting, timeout_s)
+            if any(srv.status(s).state != "done" for s in sids):
+                break
+        srv.run_for(SETTLE_S)
+        sts = [srv.status(s) for s in sids]
+        ok, text, per_arm = judge_pair(srv.world(), srv.manifest(), trial)
+    finally:
+        srv.unsubscribe(events.append)
+    trips = [e for e in events if e.kind == "safety_trip"]
+    if trips:
+        ok, text = False, f"{text}; safety_trip: {trips[0].text}"
+        per_arm = {a: False for a in per_arm}
+    if waited:
+        text += f" ({', '.join(sorted(waited))} waited for the shared zone)"
+    state = "done" if all(st.state == "done" for st in sts) else next(st.state for st in sts if st.state != "done")
+    reason = next((st.reason for st in sts if st.reason), None)
+    v = Verdict(ok, text, state, reason, srv.t, time.perf_counter() - t0, per_arm)
+    if recorder is not None:
+        recorder.note(kind="verdict", trial=asdict(trial), verdict=asdict(v), events=[e.kind for e in events])
+    return v
+
+
+def describe_pair(trial: PairTrial) -> str:
+    parts = []
+    for step in trial.steps:
+        b = next(b for b in trial.blocks if b.name == step.args["object"])
+        parts.append(f"{step.arm}: {b.name} ({b.xy[0]:.3f}, {b.xy[1]:+.3f}) -> {step.args['place']}")
+    return "; ".join(parts)
+
+
 def describe(trial: Trial) -> str:
     b = trial.blocks[0]
     s = f"block ({b.xy[0]:.3f}, {b.xy[1]:+.3f}) yaw {math.degrees(b.yaw):+6.1f} deg"
@@ -280,6 +420,23 @@ def _report(skill: str, n: int, seed: int, verdicts: list[Verdict], rec: JsonlRe
     return 0 if wins >= math.ceil(0.95 * n) else 1
 
 
+def _report_pair(kind: str, n: int, seed: int, verdicts: list[Verdict], rec: JsonlRecorder | None) -> int:
+    """Per-arm and whole-trial scores; the exit code wants 95 % per arm (and per trial)."""
+    arms = sorted({a for v in verdicts for a in v.arms})
+    per_arm = {a: sum(v.arms.get(a, False) for v in verdicts) for a in arms}
+    wins = sum(v.ok for v in verdicts)
+    print(f"\n{kind} x 2 arms: " + ", ".join(f"{a} {per_arm[a]}/{n}" for a in arms) + f", trials {wins}/{n} (seed {seed}); "
+          f"mean {sum(v.sim_s for v in verdicts) / max(1, n):.1f} s per trial; "
+          f"{sum('waited for the shared zone' in v.why for v in verdicts)} trials met the zone lock")
+    for v in verdicts:
+        if not v.ok:
+            print(f"  failed: skill {v.state} {v.reason or ''} | {v.why}")
+    if rec is not None:
+        print("recorded:", rec.close())
+    bar = math.ceil(0.95 * n)
+    return 0 if wins >= bar and all(w >= bar for w in per_arm.values()) else 1
+
+
 def _line(i: int, trial: Trial, v: Verdict, clock: str) -> str:
     mark = "ok  " if v.ok else "FAIL"
     return (f"{mark} {i:2d}  {describe(trial)}  {v.sim_s:5.1f} s {clock} {v.wall_s:4.1f} s wall  skill {v.state}"
@@ -288,8 +445,10 @@ def _line(i: int, trial: Trial, v: Verdict, clock: str) -> str:
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    ap.add_argument("--skill", choices=SKILLS, default="pick_and_place")
+    ap.add_argument("--skill", choices=sorted(set(SKILLS) | set(PAIR_SKILLS)), default="pick_and_place")
     ap.add_argument("--n", type=int, default=20)
+    ap.add_argument("--arms", type=int, choices=(1, 2), default=1,
+                    help="2: the two-arm pair scene (sim only): pick_and_place on both arms at once, or handover_via_zone")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--out", type=Path, default=None,
                     help="JSONL of every policy tick and event; default: none, so a check run can't overwrite "
@@ -307,6 +466,24 @@ def main(argv=None) -> int:
     a = ap.parse_args(argv)
     rng = random.Random(a.seed)
     rec = None if a.out is None else JsonlRecorder(a.out)
+    if a.arms == 2:
+        if a.robot != "sim":
+            ap.error("--arms 2 runs in sim only")
+        if a.skill not in PAIR_SKILLS:
+            ap.error(f"--arms 2 runs {' or '.join(PAIR_SKILLS)}")
+        verdicts = []
+        for i in range(a.n):
+            trial = sample_pair(rng, i, a.skill)
+            if rec is not None:
+                rec.tag = {"trial": i}
+            v = run_pair_trial(trial, rec)
+            verdicts.append(v)
+            mark = "ok  " if v.ok else "FAIL"
+            print(f"{mark} {i:2d}  {describe_pair(trial)}  {v.sim_s:5.1f} s sim {v.wall_s:4.1f} s wall  skill {v.state}"
+                  f"{'' if v.reason is None else ' (' + v.reason + ')'}  | {v.why}")
+        return _report_pair(a.skill, a.n, a.seed, verdicts, rec)
+    if a.skill not in SKILLS:
+        ap.error(f"{a.skill} needs --arms 2")
     if a.robot == "sim":
         n_slots = scene.Tray().n
         verdicts = []

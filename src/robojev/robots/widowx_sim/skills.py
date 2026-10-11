@@ -9,7 +9,9 @@ So a 4 cm cube is held by a fingertip pinch on its lower 1.5 cm: the gripper poi
 (90 deg pitch, reachable out to x = 0.42 at travel height), the tips go to 0.5 cm above the table,
 and the jaws close to the block's width minus a squeeze. Pitch is never chosen; only yaw is, aligned
 with the block's faces (mod 90 deg) and nearest the direction perpendicular to the arm's azimuth,
-which is where the wrist roll is zero, so the roll stays within +-45 deg.
+which is where the wrist roll is zero, so the roll stays within +-45 deg; the carry re-aims it the
+same way for the destination (K5 found the gripper housing meeting the upper arm when a block was
+set down 11 cm from the base with the pick's yaw kept, 60 deg of roll).
 
 The pre-grasp opening shrinks for neighbours (the L1 follow-up): the pads' outer faces sit
 `finger_t` outside the fingertips, so next to another block the jaws open only as wide as keeps a
@@ -186,8 +188,11 @@ class Skill:
         self.phase = self.first_phase   # named from the start: status() before the first tick is honest
         self.text = "starting"
         self.heading: tuple[float, float] | None = None
-        self.tripped = False            # held by the safety filter, not by the brain
-        self.trip_text = ""
+        # What keeps a holding skill still, by holder: "brain" (hold()), "trip" (the safety filter;
+        # the value is its text), "zone" (the shared-zone lock; the value says why: "held by arm_1").
+        # Running again needs every holder gone: resume() clears the brain's and the filter's, only
+        # the lock clears its own.
+        self.holds: dict[str, str] = {}
         self.notified = False           # the server has sent the done/failed event
         self.active_s = 0.0             # time spent running (held time excluded): the timeout
         self.phase_s = 0.0              # same, since the phase began
@@ -226,10 +231,33 @@ class Skill:
     def finished(self) -> bool:
         return self.state in ("done", "failed")
 
+    @property
+    def tripped(self) -> bool:
+        """held by the safety filter, not by the brain"""
+        return "trip" in self.holds
+
+    @property
+    def trip_text(self) -> str:
+        return self.holds.get("trip", "")
+
+    @property
+    def waiting(self) -> str | None:
+        """why this skill is waiting for the shared zone ("held by arm_1"), else None"""
+        return self.holds.get("zone")
+
+    def _still(self, io: ArmIO, holder: str, why: str) -> None:
+        """Record a holder; freeze the arm the first time that holder appears (the lock may move a
+        waiting arm back to its side line, so a repeated wait() must not re-freeze it)."""
+        if not self.finished:
+            if holder not in self.holds:
+                io.freeze()
+            self.holds[holder] = why
+            if self.state == "running":
+                self.state = "holding"
+
     def hold(self, io: ArmIO) -> None:
-        if self.state == "running":
-            io.freeze()
-            self.state = "holding"
+        if self.state in ("running", "holding"):
+            self._still(io, "brain", "held")
 
     def pause(self, io: ArmIO) -> None:
         if self.state in ("running", "holding"):
@@ -239,18 +267,33 @@ class Skill:
     def trip(self, io: ArmIO, text: str) -> None:
         """The safety filter tripped: hold and remember why; resume() is the only way out. A paused
         skill stays paused (the brain's request outranks the filter's)."""
-        if not self.finished:
-            io.freeze()
-            if self.state == "running":
-                self.state = "holding"
-            self.tripped, self.trip_text = True, text
+        self._still(io, "trip", text)
+
+    def wait(self, io: ArmIO, why: str) -> None:
+        """The shared-zone lock: stay out of the zone until `proceed()`; `why` is literal ("held by
+        arm_1"). A paused or held skill remembers the wait, so the brain's resume() cannot take it in."""
+        self._still(io, "zone", why)
+
+    def proceed(self, io: ArmIO) -> None:
+        """The lock is this arm's: go on, unless the brain or the filter also holds the skill."""
+        if self.holds.pop("zone", None) is not None and self.state == "holding" and not self.holds:
+            self._go(io)
 
     def resume(self, io: ArmIO) -> None:
+        """Clears the brain's hold, a pause and a trip; a skill still waiting for the shared zone
+        stays holding, and runs the moment the lock is granted."""
         if self.state in ("holding", "paused"):
-            io.unfreeze()
-            self.state = "running"
-            self.tripped = False
-            self._prog_t, self._prog_p = io.t, io.ee()    # a hold is not a stall
+            self.holds.pop("brain", None)
+            self.holds.pop("trip", None)
+            if self.holds:
+                self.state = "holding"
+            else:
+                self._go(io)
+
+    def _go(self, io: ArmIO) -> None:
+        io.unfreeze()
+        self.state = "running"
+        self._prog_t, self._prog_p = io.t, io.ee()    # a hold is not a stall
 
     def retarget(self, io: ArmIO) -> None:
         pass
@@ -294,7 +337,12 @@ class Skill:
     def status(self) -> SkillStatus:
         text = self.text
         if self.state == "holding":
-            text = (f"safety trip ({self.trip_text}), held: " if self.tripped else "held: ") + text
+            if self.tripped:
+                text = f"safety trip ({self.trip_text}), held: " + text
+            elif self.waiting is not None:
+                text = f"waiting for the shared zone, {self.waiting}: " + text
+            else:
+                text = "held: " + text
         elif self.state == "paused":
             text = "paused: " + text
         elif self.state == "failed":
@@ -447,9 +495,10 @@ class Grasping(Skill):
         elif ph == "carry":
             dx, dy = self.dest
             goal = (dx, dy, io.travel_z)
-            self.text = f"carrying {self.obj} to {self.dest_text}"
-            io.goto(goal, p.v_travel)
-            if self._at(io, goal, z_tol=0.01):
+            yaw = grasp_yaw(dx, dy, self.yaw)     # the same 90-deg family, re-aimed so the roll is near zero at the destination too:
+            self.text = f"carrying {self.obj} to {self.dest_text}"   # near the base the 19 cm gripper housing meets the upper arm at 60 deg of roll
+            io.goto(goal, p.v_travel, yaw=yaw)
+            if self._at(io, goal, z_tol=0.01) and abs(wrap(io.ee_yaw() - yaw)) < p.yaw_tol:
                 self._enter(io, "lower")
             elif self._stalled(io):
                 self.fail(io, f"stalled: no progress carrying {self.obj} at {fmt_xyz(io.ee())}")

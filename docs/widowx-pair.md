@@ -34,7 +34,9 @@ steady, and only the follower picks.
 
 ## Layout
 
-Bases facing each other across the table, about 0.6–0.7 m apart. Each arm owns the half nearest it,
+Bases facing each other across the table, **0.76 m apart** (0.72 m is the physical minimum: the
+wrist-roll housing stands 10 cm ahead of the fingertips, so two facing arms meet wrist to wrist
+while their fingertips are still 21 cm apart; K5 in `docs/harness-spikes.md`). Each arm owns the half nearest it,
 and the middle strip, which both can reach, is the **shared zone**. The tray sits in one arm's half
 and blocks start in the other's, so moving a block across means passing it over: put it down in the
 shared zone for the other arm, or hand it gripper to gripper. Cooperation is required by the layout,
@@ -92,7 +94,7 @@ The v2 skills gain an `arm` argument, plus:
 | W2 | Can one Mac drive both arms at once? | Two `trossen_arm` connections from one process; simultaneous moves; measure setpoint timing | Both arms track smoothly; no dropped connections over 10 min |
 | W3 | Where is each base relative to the other? | Scene camera plus a fiducial, or touch both grippers to the same marked points | Both arms agree on a point within ~1 cm |
 | W4 | Can we simulate the pair? | Two WidowX AI models from `trossen_arm_mujoco` in one MuJoCo scene, behind the same skill interface | e12v2 sorting runs in sim with two arms |
-| W5 | How big is the shared zone? | Reach map for both arms at the chosen spacing | A strip both reach top-down, wide enough for two blocks |
+| W5 ✔ (sim) | How big is the shared zone? | Answered in sim by K5: at 0.76 m both reach a wide strip, but the usable zone is the 8 cm centre line with 3 hand-over spots, and an arm must stay behind its side line (26 cm from the centre) while the other works there | Confirm the numbers on the real pair |
 | W6 | Can the arms hand a block gripper to gripper? | 20 handovers in the shared zone | 18 of 20; otherwise hand over by putting down |
 | W7 | Does the leader behave like the follower under our motion code? | Run v1's `RealArm` against .3 with teleop off: workspace box, speed cap, effort trip, park | Same behaviour as the follower |
 
