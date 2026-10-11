@@ -30,7 +30,7 @@ sim.
 | # | Question | Pass when | Runs |
 |---|---|---|---|
 | H1 ✔ | Can e12v2's core run on wall-clock time with real async events instead of simulated ticks? | Done 2026-10-10: a new asyncio loop around e12v2's pure functions (now `src/robojev/brain/`), 34 tests with ~150 ms mock latency | Here |
-| H2 | Can the harness treat "the arm" as a list of one or two arms with no other change? | One-arm and two-arm toy runs pass; the step schema carries `arm` | Here |
+| H2 ✔ | Can the harness treat "the arm" as a list of one or two arms with no other change? | Done 2026-10-11: plan steps carry `arm` only when the manifest has more than one (single-arm planner requests hash-identical to before); reach checked per arm; parallel steps unless they share an object or slot; one decision per arm per event; STOP parks all. 18 tests on the two-arm stub | Here |
 | H3 | Does the OpenAI Decisions API work as a decision backend, and does the 0.8 gate still work on its confidence? | Replay of e12v2 scenarios: answers within a few points of Jev's, gate catches the same share of wrong answers, p95 under ~400 ms | Mac |
 | H4 | Can the plan check stop sending good plans back (39% today)? | Under 10% of good plans rejected, with planted bad plans still caught | Mac |
 | H5 | Can a transient "wait" stop leaking into the restated task? | No restated task contains a transient command across the scenarios | Mac |
