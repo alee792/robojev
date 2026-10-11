@@ -4,7 +4,7 @@ import time
 import numpy as np
 
 from robojev.arm import ArmSnapshot
-from robojev.brain import Brain
+from robojev.v1_brain import Brain
 from robojev.config import DEFAULT as cfg
 from robojev.perception.memory import Entity
 from robojev.skills import offered, goal_for, resolve_place

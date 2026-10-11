@@ -385,3 +385,66 @@ changes. Reboots are fine. Don't connect to the robot.
 - A short plain-language comment on PR #2: is the Pi a candidate for the control box (jitter numbers
   against a 1 ms loop), does the camera work on it, how fast are OpenAI calls from it, and what you
   need from me next.
+
+# Handoff 6: run the slice with live models (Decisions API and Jev)
+
+Paste the block below into a Claude Code session on the MacBook (`OPENAI_API_KEY`, `TYPESAFE_API_KEY`).
+
+---
+
+You are running robojev's harness slice with live models for the first time. In simulation with mock
+decisions it already passes: the brain sorts 3 blocks on a physics WidowX in 23 s, holds within 0.10 s
+of a spoken correction, pauses within 0.11 s of a hand, parks on STOP with the block held
+(`experiments/results/l1_slice.txt`). Your job is the same four scenarios with a real decision model
+and a real planner, and a comparison of OpenAI's Decisions API against Jev as the decision model.
+
+**Setup**
+1. `git fetch origin claude/widowx-pair && git checkout claude/widowx-pair`, then
+   `uv sync --extra sim --extra mcp`. The MuJoCo WidowX model is `~/trossen_arm_mujoco` (set
+   `TROSSEN_ARM_MUJOCO_DIR` if it lives elsewhere). Rendering works on the Mac.
+2. Read `docs/architecture.md`, `docs/harness-spikes.md` (H3, H4, H5, V1), `src/robojev/protocol.py`,
+   `src/robojev/brain/core/interfaces.py` (`DecisionBackend`, `LLMBackend`), `src/robojev/brain/loop.py`
+   and `tests/test_slice.py` (how the slice is wired with mocks: swap the decider and planner, keep
+   everything else).
+3. `uv run --frozen --extra mcp python -m pytest -q` (expect 433 passed, 3 skipped; ~3.5 min).
+
+**Build** (new code only under `src/robojev/brain/backends/`, plus tests):
+1. Port `experiments/e12v2/backends.py` (the Jev HTTP backend and the OpenAI structured-output planner
+   backend with `prompt_cache_key`) into `src/robojev/brain/backends/{jev,openai_planner}.py`. Don't
+   edit e12v2.
+2. `src/robojev/brain/backends/decisions_api.py`: a `DecisionBackend` over OpenAI's Decisions API
+   (`POST https://api.openai.com/v1/decisions`, `gpt-6-luna`; read the official docs at
+   developers.openai.com first: question types, per-option probabilities, the separate confidence
+   field, images as inline base64). Map our three question groups (right now, in-plan fix, route) onto
+   its choice questions in ONE request if it supports several questions per call, else three requests
+   in parallel; return the same `{"answers", "latency_ms", "in_tok", "meta"}` shape the Jev backend
+   does, with confidence computed the way `brain/core/combine.py` expects (read how the gate uses it;
+   if the API's confidence field differs from Jev's `(p_max - 1/n)/(1 - 1/n)`, expose both and say
+   which the gate should use).
+3. A `--decider {mock,jev,decisions}` / `--planner {mock,openai}` switch in `tests/test_slice.py`
+   (env vars are fine), so the same four scenarios run live. Live runs are not part of the default
+   test run.
+
+**Run** (each scenario 3 times; record every run with the recorder to `experiments/results/live/`):
+- Slice with Jev + `gpt-6-luna` planner (low effort).
+- Slice with Decisions API + `gpt-6-luna` planner.
+- Then the e12v2 held-out and core scenarios through the brain if `tests/test_brain.py`'s scenario
+  helpers make that cheap; otherwise just the four.
+
+**Questions to answer, with numbers**
+1. Do all four scenarios pass live, with each decider? Correction-to-hold and hand-to-pause times
+   against the mock's 0.10 / 0.11 s, and the planner's replan latency.
+2. Decisions API vs Jev on the same events: agreement rate, latency p50/p95, and how the 0.8 gate
+   behaves on each one's confidence (share of wrong answers caught vs share escalated; the e12v2 logs
+   method in `experiments/e12v2/eval/metrics.py` shows how we measured it before).
+3. H4: how often does the plan check send a good plan back (it was 39% in e12v2)? H5: does a
+   transient "wait" ever leak into the restated task?
+4. V1 preview, if time: one Decisions API call per scene-change event with a rendered camera frame
+   attached (the sim renders on the Mac): latency, and whether "hand near gripper" is judged right.
+
+**Rules:** never print API keys. Don't change the brain's rules to improve numbers; fix real bugs in
+their own commits and say so. Commit new code and logs to `claude/widowx-pair`; don't rewrite history.
+
+**Deliverables:** the backends with tests (mocked HTTP); `experiments/results/live/` logs; a
+`docs/live-results.md` with the tables; a plain-language comment on PR #3 answering 1-4, ending with:
+which decider to make the default, and the top three risks you now see for the real arm.

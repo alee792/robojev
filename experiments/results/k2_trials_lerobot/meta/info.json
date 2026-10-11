@@ -1,0 +1,125 @@
+{
+  "codebase_version": "robojev-lerobot-npz/1",
+  "lerobot_layout": "v2.1",
+  "robot_type": "widowx-sim",
+  "fps": 50,
+  "total_episodes": 20,
+  "total_frames": 7014,
+  "total_tasks": 5,
+  "total_videos": 0,
+  "total_chunks": 1,
+  "chunks_size": 1000,
+  "splits": {
+    "train": "0:20"
+  },
+  "data_path": "data/chunk-{episode_chunk:03d}/episode_{episode_index:06d}.npz",
+  "video_path": null,
+  "features": {
+    "timestamp": {
+      "dtype": "float32",
+      "shape": [
+        1
+      ],
+      "names": null
+    },
+    "frame_index": {
+      "dtype": "int64",
+      "shape": [
+        1
+      ],
+      "names": null
+    },
+    "episode_index": {
+      "dtype": "int64",
+      "shape": [
+        1
+      ],
+      "names": null
+    },
+    "index": {
+      "dtype": "int64",
+      "shape": [
+        1
+      ],
+      "names": null
+    },
+    "task_index": {
+      "dtype": "int64",
+      "shape": [
+        1
+      ],
+      "names": null
+    },
+    "observation.state": {
+      "dtype": "float32",
+      "shape": [
+        9
+      ],
+      "names": [
+        "ee_x",
+        "ee_y",
+        "ee_z",
+        "ee_yaw",
+        "gripper_width",
+        "held",
+        "target_x",
+        "target_y",
+        "target_z"
+      ]
+    },
+    "observation.setpoint": {
+      "dtype": "float32",
+      "shape": [
+        3
+      ],
+      "names": [
+        "x",
+        "y",
+        "z"
+      ]
+    },
+    "observation.frozen": {
+      "dtype": "bool",
+      "shape": [
+        1
+      ],
+      "names": null
+    },
+    "phase": {
+      "dtype": "string",
+      "shape": [
+        1
+      ],
+      "names": null
+    },
+    "action": {
+      "dtype": "float32",
+      "shape": [
+        6
+      ],
+      "names": [
+        "goal_x",
+        "goal_y",
+        "goal_z",
+        "yaw",
+        "gripper",
+        "speed"
+      ]
+    }
+  },
+  "catalog_version": "0.1",
+  "catalog_version_source": "assumed: catalog.py at export time",
+  "units": "m, rad, s; positions in the arm's base frame",
+  "timing": {
+    "period_s": 0.02,
+    "max_abs_jitter_s": 0.0,
+    "gaps": 0,
+    "gap_factor": 1.5,
+    "resampled": false
+  },
+  "skipped_frames": 0,
+  "source": {
+    "file": "k2_trials.jsonl",
+    "sha256": "ce1383d74e4e5e952a07518827546a89361281e9226764803398fc0b691ddbd6"
+  }
+}

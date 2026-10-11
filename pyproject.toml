@@ -19,9 +19,13 @@ cameras = [
   "pyrealsense2; sys_platform != 'darwin'",
   "pyrealsense2-macosx; sys_platform == 'darwin'",
 ]
+mcp = [
+    "mcp>=2,<3",
+]
 
 [project.scripts]
 robojev = "robojev.cli:main"
+robojev-conformance = "robojev.conformance:main"
 
 [build-system]
 requires = ["hatchling"]

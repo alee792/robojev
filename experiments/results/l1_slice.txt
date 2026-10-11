@@ -1,0 +1,112 @@
+L1: the thin end-to-end slice on physics (2026-10-10)
+=====================================================
+
+tests/test_l1_slice.py. The brain (experiments/skills_sim/brain, a client of the robot protocol on a
+real asyncio clock) drives the MuJoCo WidowX server (experiments/skills_sim/sim_server.py,
+realtime=True) through physics pick_and_place, with e12v2's mock decider (oracle arm, ~150 ms
+sampled latency, slept for real) and mock planner (~300 ms median, slept for real). No API keys.
+Judged from the server's world() with trials.judge(): every block resting inside its slot's radius,
+gripper empty, arm back at travel height.
+
+Scene: blocks 5, 1, 3 at x 0.26, y +0.12 / 0 / -0.12 (left to right as the robot sees them), a
+three-slot tray at x 0.36 (slot_0 leftmost, y +0.12, 8 cm pitch). Task text "Line the blocks up
+in the tray, lowest number on the left." Mid-carry = 0.3 s into the carry phase (a 10-16 cm carry
+takes about a second). Times are wall-clock, from the perception layer's 10 ms poll of world() and
+its log of tool calls, not from anything the brain reports about itself.
+
+Run:  uv run --frozen python -m pytest -q -s tests/test_l1_slice.py       (needs TROSSEN_ARM_MUJOCO_DIR)
+
+Results (three runs each; the spread is given where it moved)
+--------------------------------------------------------------
+
+(a) 3-block sort                                                   PASS
+    wall 22.9 s (22.9, 22.9, 22.9); 3 steps started / 3 done / 0 failed; 1 plan, 1 attempt
+    events: plan_arrived 1, step_done 3, scene_change 0 (no placement read as someone else's doing)
+    verdict: block_1 in slot_0, block_3 in slot_1, block_5 in slot_2; gripper empty; arm at travel height
+    retries: none (stale plans 0, failed plans 0, loops 0, step failures 0)
+    The two-block run before this was 14.8 s; 7.6 s per block is the skill's pace, planning adds ~0.4 s.
+
+(b) correction "actually, highest on the left", typed mid-carry of block 1       PASS
+    wall 23.1 s (22.8, 23.1, 23.1); 4 starts / 3 done / 0 failed; 2 plans (first plan + 1 replan)
+    text -> server reports holding: 0.100 s, 0.105 s, 0.102 s      (bar 0.5 s)
+    decision on the text: right_now hold, route fast_llm (as the stub's version of the test expects)
+    starts on the wire: block_1->slot_0 (cancelled by the next start while held, no event),
+                        block_1->slot_2, block_5->slot_0, block_3->slot_1
+    final: block_5 in slot_0, block_3 in slot_1, block_1 in slot_2 (reversed); no skill_failed, no drop
+    events: plan_arrived 2, user_text 1, step_done 3
+    retries: none
+    The held block was carried on to its new slot: the new pick_and_place found block_1 already
+    between the fingers and began at "lift" with the hold's grip intact.
+
+(c) a hand 0.15 m ahead of the gripper, mid-carry, for 1.5 s                     PASS
+    wall 24.5 s (24.5, 24.5, 24.5); 3 starts / 3 done / 0 failed; 1 plan
+    hand enters -> server reports paused: 0.105 s, 0.105 s, 0.097 s      (bar 0.5 s)
+    hand leaves -> resume() called:       0.173 s, 0.172 s, 0.177 s
+    closest the gripper came to the hand: 0.132 m, 0.122 m, 0.122 m (never under 0.05 m); the arm
+    reported nothing but "paused" between the pause and the resume
+    events: plan_arrived 1, scene_change 3 (hand appeared; its "in the arm's path" flag changed once
+    the arm was paused and had no heading; hand gone), step_done 3
+    retries: none
+    Variant, measured outside the test (scratch, 3 runs): the same hand with NO scene_change
+    notification, found only on the brain's own 200 ms poll of world(): pause after 0.299 / 0.303 /
+    0.289 s, resume 0.273 / 0.276 / 0.265 s after it left, closest 0.092 m. Inside the bar, but the
+    worst case is 200 ms of poll plus ~320 ms of decision latency, i.e. just over 0.5 s: a perception
+    process on the real robot must notify (scene_change), not only update the resource.
+    HOW THE HAND GETS IN: the MuJoCo server has no person in its scene and its world() reports no
+    hands. The hand is a perception override (skills_sim/brain/mocks.py ScriptedPerception, labelled
+    as such), a RobotServer wrapper that lays a HandObs over world().hands and sends the scene_change,
+    where a perception process (P3) would sit on the real robot. It is not a body in the physics, so
+    "no contact" is judged from the closest distance between the EE and the reported hand position.
+
+(d) STOP pressed mid-carry of block 1                                            PASS
+    brain episode 3.6 s to "stopped"; the arm parked at home (within 1 cm) 2.54 s / 2.44 s after
+    stop() (0.03 m/s crawl, ~7 cm); nothing sent to the server after stop()
+    block 1: held throughout (world: gripper:arm_0, z 0.113 at the park), never in the air unheld
+    for longer than the 0.2 s grace at any sample; exactly one skill_failed, "stopped: STOP pressed;
+    every arm is parking"; the brain asked no decision about STOP (user_text 0)
+    retries: none
+
+Suite: 314 passed, 3 skipped (pre-existing: test_segment.py needs ultralytics), 142 s wall. The L1
+module adds ~75 s of that, being real-time physics; the three sort runs are 23-25 s each.
+
+What broke, and what changed
+----------------------------
+
+Nothing in the brain or the server broke: the four scenarios passed on the first run, and the
+numbers held over three runs. The only mismatch surfaced was one of capability, not of behaviour:
+the sim server has no way to put a hand into the world (nothing in its scene is a person, world()
+always reports hands=[]), so scenario (c) could not be run from the sim's side. Rather than teach
+the physics about hands (a body the arm could hit would need its own contact handling and would not
+be how the real robot sees hands anyway), I added a perception override in front of the server,
+ScriptedPerception in skills_sim/brain/mocks.py: a pass-through RobotServer that reports a scripted
+HandObs in world().hands, sends the scene_change a perception process would, and logs every tool
+call and every arm-mode change with the wall time (the same class gives (a), (b) and (d) their
+measurements). It is a test double; the Brain never imports mocks.py. Two smaller changes:
+ScriptedUser's attach time is now a public `t0`, so a test can put "when the text was typed" and
+"when the server reported holding" on the same clock; and the sim_server module docstring said STOP
+fails skills with the code "stalled" while the code (correctly) uses the catalog's "stopped" -- the
+docstring now matches. No test was loosened; protocol.py and catalog.py were not touched.
+
+Things the protocol or the catalog made awkward (report, do not settle)
+----------------------------------------------------------------------
+
+- Place ids. The sim says slot_0..n-1, the stub and e12v2's scenarios say tray_slot_1..n. e12v2's
+  oracle orders a sorting plan by parsing "tray_slot_<k>" (eval/oracle._rank), so on the sim it falls
+  back to the Goal's dict order: the mock planner's step order is whatever order the test wrote the
+  Goal in. Harmless with the oracle, but it is why the test builds Goal({...}) by hand instead of
+  reusing scenarios.sort_goal(). Already on the follow-ups list; L1 confirms it bites.
+- Hands are a resource with no source. protocol.WorldState carries hands and the brain reacts to
+  them, but nothing on the server side of the protocol produces them, and the protocol's only
+  notification for a hand is the generic scene_change. The measurement above shows the 0.5 s bar
+  wants that notification: polled, the brain is at 0.3 s typical and ~0.5 s worst case.
+- Mid-skill phase. The protocol gives a skill's phase only through status(skill_id); a test that
+  wants "while carrying" has to read ArmObs.skill (which the sim fills and the stub does not, as the
+  follow-ups note) and then status() it. Fine, but two calls and a field the brain does not use yet.
+- STOP's end state is the server's choice. The sim keeps the grip and parks with the block in hand;
+  the stub sets the block down. Both satisfy "set down or held, never dropped", and the brain does
+  not care, but the protocol docstring for stop() does not say which a server should do.
+- Cancellation by start(). A correction replaces the held skill by starting the next one on a busy
+  arm (no cancel tool, no event for the replaced skill). It worked here because the new
+  pick_and_place notices the object already between the fingers; a skill that did not would have to
+  release and re-grasp. Worth a line in the catalog: a grasping skill started with its object in the
+  gripper carries on from there.
