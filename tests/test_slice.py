@@ -260,3 +260,34 @@ def test_d_stop_mid_carry_parks_the_arm_and_never_drops_the_block(srv):
     failed = [e for e in srv.events if e.kind == "skill_failed"]
     assert len(failed) == 1 and failed[0].text.startswith("stopped: ")
     assert r.events["user_text"] == 0                          # STOP is code: no decision is asked about it
+
+
+# ---------------------------------------------------------------- (e) wait, then go on (H5)
+
+WAIT, GO_ON = "hang on a second", "ok, go on"
+TRANSIENT = ("wait", "hang on", "hold on", "pause", "go on", "go ahead", "continue", "resume")
+
+
+def test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task(srv):
+    """A transient "wait" pauses the arm and "go on" resumes it; neither is part of the task, so no
+    restated task (a plan's reading) may mention them (H5)."""
+    user = ScriptedUser([Line(carrying(srv, "block_1"), WAIT),
+                         Line(lambda: bool(user.said) and time.monotonic() - user.t0 - user.said[0][0] >= 2.0, GO_ON)])
+    r, wall = episode(brain(srv, [ASCENDING], {WAIT: Utt("wait"), GO_ON: Utt("go_on")}, user))
+    t_wait, t_go = (user.t0 + t for t, _ in user.said[:2])
+    t_pause = first_mode(srv, ("paused", "holding"), t_wait)
+    resumed = [t for t, _, _ in tools(srv, "resume") if t >= t_go]
+    ok, why = judge_sort(srv, ASCENDING)
+    readings = [d["text"] for d in r.decisions if d["event"] == "plan_arrived"]
+    leaked = [x for x in readings if any(w in x.lower() for w in TRANSIENT)]
+    decided = [(d["text"], d["combined"].right_now, d["combined"].route) for d in r.decisions if d["event"] == "user_text"]
+    summary("wait_go", r, wall, srv, wait_to_pause_s=None if t_pause is None else round(t_pause - t_wait, 3),
+            go_to_resume_s=None if not resumed else round(resumed[0] - t_go, 3), user_text_decisions=decided,
+            readings=readings, leaked=leaked, verdict=why)
+    assert r.outcome == "done", r.log
+    assert t_pause is not None and t_pause - t_wait < REACT_S, (t_pause, t_wait)
+    assert t_pause < t_go                                      # it stopped before being told to go on
+    assert resumed, "never resumed after go on"
+    assert ok, why
+    assert leaked == [], leaked
+    assert drops(srv, "block_1") == [] and r.steps_failed == 0
