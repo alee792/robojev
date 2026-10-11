@@ -111,6 +111,8 @@ e12v2's oracle, logged with each request.
 | in_plan_fix | 258 | 93.8% | 95.0% | 96.5% | 95.0% |
 | route | 561 | 85.2% | 89.1% | 88.2% | 87.9% |
 
+On the 53 user-text requests alone, right-now right: Jev 45, Decisions API 51.
+
 On the slice's own events (live, acting + shadow, n 142): agreement right_now 96%, in_plan_fix 99%,
 route 93%; right against the oracle (n 104 with truth): Jev 95 / 99 / 94%, Decisions API 99 / 100 / 94%.
 
