@@ -113,7 +113,7 @@ from the shape-only labeller (the VLM tier is the fix) and override/timeout inte
 | `src/robojev/config.py` | every limit, band, threshold and timing constant |
 | `src/robojev/questions/v0.py` | the battery (target, motion, hover_position, hover_height, speed, avoid, orders_violated) |
 | `src/robojev/state.py` | World -> situation report (orders first, glossary, user text, facts with bands) |
-| `src/robojev/brain.py` | answers -> commands: gates, hysteresis, avoid (dodge) override, silence ladder |
+| `src/robojev/v1_brain.py` | answers -> commands: gates, hysteresis, avoid (dodge) override, silence ladder |
 | `src/robojev/loop.py` | 10 Hz tick, in-flight/stale/out-of-order handling, perception thread, logging |
 | `src/robojev/events.py` | change detector: what makes a tick worth a Jev request |
 | `src/robojev/arm/` | one interface; `fake`, `sim` (MuJoCo), `real` (trossen driver, own thread, park-on-exit) |

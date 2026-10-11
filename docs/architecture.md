@@ -73,7 +73,7 @@ a YAM) runs its own **robot server** speaking one protocol, shaped like MCP:
   decision loop reads.
 - **Notifications:** skill done or failed, safety trip, scene change, heartbeat lost.
 
-On top of the protocol sits a **catalog** (`experiments/skills_sim/catalog.py`): fixed names and
+On top of the protocol sits a **catalog** (`src/robojev/catalog.py`): fixed names and
 argument shapes for the standard skills (`pick_and_place`, `stack_on`, `push`, `hand_over`, `survey`,
 `hold`), standard failure codes, and the control tools and resources every server must have. A
 robot advertises the standard skills it can do, unchanged, and anything else under a prefix
@@ -161,9 +161,29 @@ later. One line: standard skills and a reactive loop, on top of MHS, exposed thr
 5. Two arms: one harness drives both through one skill server, which owns the shared-zone lock. Two
    brains (two harnesses, one shared world state) come later.
 6. Sim first, with ground-truth positions, before camera perception.
-7. Code layout (proposed): e12v2's core moves into `src/robojev` as the new brain; v1's motion code
-   (`Mover`, effort watchdog, IK) is reused inside the skill server; v1's per-tick primitives and
-   brain retire.
+7. Code layout (done 2026-10-10, after L1 passed): the harness slice was promoted from
+   `experiments/skills_sim/` into `src/robojev`, with e12v2's pure functions copied in as the brain's
+   core; `experiments/e12v2/` stays whole as history. Where things live:
+   - `robojev.protocol`, `robojev.catalog`: the robot protocol (MCP-shaped, in-process Python) and
+     the standard skills, failure codes, control tools and resources.
+   - `robojev.brain`: the brain, a client of the protocol on an asyncio clock (`loop`, `tracker`,
+     `rules`, `arm`, `changes`, `connect`, `planner`, `schema`, `steps`, `adapt`, `text`,
+     `messages`). `brain/core/` is e12v2's design logic copied verbatim (data, decision, combine,
+     plan, planner, changes, safety, interfaces); `brain/eval/` is e12v2's evaluation oracle and mock
+     models, and `brain/mocks.py` the offline stand-ins over a robot server; the brain never imports
+     either. The brain imports nothing from `robojev.robots`, `robojev.arm` or `robojev.perception`
+     (checked by an AST test in `tests/test_brain.py`).
+   - `robojev.robots`: the robot servers. `stub` (physics-free), `widowx_sim/` (the MuJoCo WidowX:
+     `scene`, `skills`, `server`), `mcp/` (`server`: any `RobotServer` as an MCP server; `client`:
+     the brain's `MCPRobotServer` over stdio or in-process streams).
+   - `robojev.recording`: the server-side JSONL recorder and the LeRobot-style export.
+   - `robojev.conformance` (`robojev-conformance`): N trials of a standard skill judged from the
+     world state; D1 points it at the real backend.
+   - `robojev.arm`, `robojev.config`, `robojev.perception`: v1's motion code (`Mover`, `Workspace`,
+     the effort watchdog; `RealArm` backs the real server at D1), limits, and perception, reused.
+   - v1's per-tick system (`v1_brain`, `loop`, `skills`, `questions`, `state`, `world`, `events`,
+     `jev`) is retiring but still behind the `robojev` CLI, the dashboard and `replay`; it goes when
+     the CLI is rewritten around the brain.
 
 ## Skills and policies
 

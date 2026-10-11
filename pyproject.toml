@@ -25,6 +25,7 @@ mcp = [
 
 [project.scripts]
 robojev = "robojev.cli:main"
+robojev-conformance = "robojev.conformance:main"
 
 [build-system]
 requires = ["hatchling"]

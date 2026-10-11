@@ -8,7 +8,7 @@ need. The demo's specifics wait.
 
 | Piece | Where | State |
 |---|---|---|
-| v2 harness: events, decisions, plans, replans, safety rules | `experiments/e12v2/core` | Passes closed loop, but against a kinematic toy world, on simulated ticks |
+| v2 harness: events, decisions, plans, replans, safety rules | `experiments/e12v2/core` (since promoted: `src/robojev/brain`) | Passes closed loop, but against a kinematic toy world, on simulated ticks |
 | Motion code for the real arm: workspace box, speed cap, effort trip, park | `src/robojev/arm/real.py` (v1) | Worked on the follower |
 | MuJoCo WidowX backend with IK and a rendered wrist camera | `src/robojev/arm/sim.py` (v1) | Worked; cup scene, one arm |
 | v1 primitives (move above, grasp, place, ...) | `src/robojev/skills.py` | v1's per-tick vocabulary, not v2's skills |
@@ -29,7 +29,7 @@ sim.
 
 | # | Question | Pass when | Runs |
 |---|---|---|---|
-| H1 ✔ | Can e12v2's core run on wall-clock time with real async events instead of simulated ticks? | Done 2026-10-10: a new asyncio loop around e12v2's pure functions (`experiments/skills_sim/brain/`), 34 tests with ~150 ms mock latency | Here |
+| H1 ✔ | Can e12v2's core run on wall-clock time with real async events instead of simulated ticks? | Done 2026-10-10: a new asyncio loop around e12v2's pure functions (now `src/robojev/brain/`), 34 tests with ~150 ms mock latency | Here |
 | H2 | Can the harness treat "the arm" as a list of one or two arms with no other change? | One-arm and two-arm toy runs pass; the step schema carries `arm` | Here |
 | H3 | Does the OpenAI Decisions API work as a decision backend, and does the 0.8 gate still work on its confidence? | Replay of e12v2 scenarios: answers within a few points of Jev's, gate catches the same share of wrong answers, p95 under ~400 ms | Mac |
 | H4 | Can the plan check stop sending good plans back (39% today)? | Under 10% of good plans rejected, with planted bad plans still caught | Mac |
@@ -90,8 +90,8 @@ should surface in days, not after the skill library is "done".
 5. **Last:** K4-K6, then D1-D4 so day one is scripted.
 
 During the spikes all three "processes" run in one process with the interfaces enforced; the socket
-arrives at K6. Code lives in `experiments/skills_sim/` and is promoted into `src/robojev` only after
-L1 passes. H1 is a small new asyncio loop around e12v2's pure functions (combine, gates, plan), not
+arrives at K6. Code lived in `experiments/skills_sim/` and was promoted into `src/robojev` once L1
+passed (2026-10-10; the layout is in `docs/architecture.md`, choice 7). H1 is a small new asyncio loop around e12v2's pure functions (combine, gates, plan), not
 a port of its tick loop.
 
 ## Findings so far
@@ -112,7 +112,7 @@ a port of its tick loop.
   90° nearest the wrist's zero-roll direction, 0.15 m/s travel / 0.10 vertical / 0.05 for the last
   2 cm, travel_z 0.10. Grasp detected from both finger sides touching the same block with the width
   within 2.5 mm of its size. Hold / pause / resume / retarget work from every phase; a lag trip,
-  a missed heartbeat and every failure code are exercised by `tests/test_skills_sim.py`.
+  a missed heartbeat and every failure code are exercised by `tests/test_robots_widowx_sim.py`.
 - **First brain-on-physics run (H1 × K2, 2026-10-10).** Placing block 2 jostled block 1 in the
   next slot; its `where` flickered slot → table → slot for ~200 ms, e12v2's change detector called
   that "moved by someone else", the decider re-queued it, and re-picking from the crowded tray

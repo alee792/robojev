@@ -1,7 +1,7 @@
 """Event-driven requests: the change detector, the silence ladder's freshness rule, and the
 2-of-3 majority on the `next` guard."""
 from robojev.arm import ArmSnapshot
-from robojev.brain import Brain
+from robojev.v1_brain import Brain
 from robojev.config import DEFAULT
 from robojev.events import ChangeDetector
 from robojev.world import EntityView, World

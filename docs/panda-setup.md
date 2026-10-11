@@ -16,7 +16,7 @@ exact version to the robot's system image using Franka's compatibility table. **
 
 | Machine | Runs |
 |---|---|
-| Control box | Everything on demo day, as separate processes: the harness (`experiments/e12v2/core`) with its LLM and decision calls, the dashboard, and a small **skill server** on libfranka + a Python binding that runs skills at 1 kHz and reports done/failed |
+| Control box | Everything on demo day, as separate processes: the harness (`src/robojev/brain`) with its LLM and decision calls, the dashboard, and a small **skill server** on libfranka + a Python binding that runs skills at 1 kHz and reports done/failed |
 | MacBook | Development and the MuJoCo sim of the Panda; on demo day, just a browser on the dashboard |
 | Robot | Panda arm + controller; Desk web UI |
 | Pi 5 | See below: the control box itself (risky) or the camera host (recommended) |
