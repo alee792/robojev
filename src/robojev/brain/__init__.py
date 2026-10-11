@@ -1,10 +1,11 @@
-"""H1 + M1: the brain as a client of the robot protocol, on a real clock with async events.
+"""H1 + M1 + H2: the brain as a client of the robot protocol, on a real clock with async events.
 
 Imports nothing hardware-specific (nothing from robojev.robots): only robojev.protocol,
 robojev.catalog and core/, e12v2's pure functions.
 
-    loop.py      Brain: the asyncio loop (one queue; models in threads; heartbeat)
-    tracker.py   the plan, the queue, each step's status: e12v2's bookkeeping without its tick loop
+    loop.py      Brain: the asyncio loop (one queue; models in threads; heartbeat), one ArmRun per driven arm
+    tracker.py   the plan, the queue, each step's status: e12v2's bookkeeping without its tick loop, per arm
+    arms.py      several arms: reach, which steps may run side by side, the holding rule per arm
     rules.py     the code rules: STOP, models only pause, the confidence gate, the replan-loop limit
     arm.py       every protocol call that moves the arm
     changes.py   e12v2's change detector, with object changes settled before they are events

@@ -12,8 +12,22 @@ clock without MuJoCo or a model. A clock thread advances skills on wall time:
   asked and lands in whichever slot or bin its centre is now inside (else on the table).
 - survey and hold just take their time.
 
-A scripted person can move an object, put a hand near the gripper, or trip the safety filter, at a
-time or when a condition on the world holds, so scene_change and safety_trip events occur.
+A scripted person can move an object, put a hand near either arm's gripper, or trip either arm's
+safety filter, at a time or when a condition on the world holds, so scene_change and safety_trip
+events occur.
+
+Two arms (`widowx_pair`, `pair_scene`): bases facing each other across the table, positions in one
+"table" frame shared by both (+x from arm_0's base toward arm_1's), each arm with its own workspace
+box and home. The strip both reach is the shared zone, a place of kind "zone" whose members are two
+hand-over slots. The **shared-zone lock** is the server's, as on the real pair: only one arm may be
+inside the zone at a time. The stub models time, not space, so "inside" is a flag a skill holds for
+the segment that goes into the zone: the reach when its object starts in the zone, the carry (or
+push) when its destination is in it. A skill whose next segment needs the zone while the other arm
+holds it waits where it is, making no progress, its mode still "running", with the phase text
+"waiting outside the shared zone for <arm> to leave it ..." (phase "wait_zone"). The flag is kept
+while the skill is held, paused or tripped (the arm is still in there) and given up when the segment
+ends or the skill ends, fails, is cancelled or STOP is pressed. `zone_log` records every enter,
+leave and wait.
 
 Protocol rules, and how this server keeps them:
   - Nothing blocks: every call takes the lock briefly; motion happens on the clock thread.
@@ -36,11 +50,15 @@ Protocol rules, and how this server keeps them:
     cancelled), beside the literal `phase_text`.
   - Missed heartbeats for `heartbeat_timeout_s` (once the first has arrived) hold every running arm
     and send heartbeat_lost; resume() is the brain's to send.
+  - STOP parks every arm at its own home.
 
 Choices the protocol leaves open, made here (reported, not settled):
   - precondition() checks the arguments and the world, not whether the arm is busy: the brain asks
     it about steps other than the running one.
   - status() of an unknown id raises KeyError.
+  - A grasping skill on an object in another arm's gripper is refused at precondition() and start().
+  - A free spot on the table is near the table place's centre when the arm reaches it, else in front
+    of the arm's own home (each arm puts things down in its own half).
 
 Units: metres and seconds. Base frame: +x forward, +y left, +z up (as on the real arm).
 """
@@ -83,6 +101,45 @@ def push_only(robot: str = "pusher-stub") -> Manifest:
     return Manifest(robot, (arm,), (catalog.PUSH, catalog.SURVEY, catalog.HOLD), catalog=catalog.CATALOG_VERSION)
 
 
+PAIR_WORKSPACES = {"arm_0": ((0.10, 0.40), (-0.30, 0.30), (-0.02, 0.35)),
+                   "arm_1": ((0.30, 0.60), (-0.30, 0.30), (-0.02, 0.35))}
+PAIR_HOMES = {"arm_0": (0.20, 0.0), "arm_1": (0.50, 0.0)}
+ZONE_X = 0.35               # the shared zone's centre line: both workspaces cover x 0.30 to 0.40
+
+
+def widowx_pair(robot: str = "widowx-pair-stub") -> Manifest:
+    """Two WidowX-AI-like followers facing each other, both offering every standard skill. Workspaces
+    are in the shared "table" frame: arm_0 reaches x 0.10 to 0.40 m, arm_1 x 0.30 to 0.60 m, so the
+    strip x 0.30 to 0.40 m (the shared zone) is the only part both reach."""
+    arms = tuple(ArmSpec(a, "table", ws, GripperSpec(max_width=0.044, can_grasp=True), TRAVEL_Z,
+                         f"a WidowX AI-like follower, base at x {0.0 if a == 'arm_0' else 0.70:.2f} m")
+                 for a, ws in PAIR_WORKSPACES.items())
+    return Manifest(robot, arms, catalog.STANDARD, catalog=catalog.CATALOG_VERSION)
+
+
+def pair_scene(numbers=(5, 1, 3)) -> tuple[list[ObjectObs], list[PlaceObs]]:
+    """The two-arm table: numbered 4 cm blocks in a row in arm_0's half (x 0.18), the shared zone and
+    its two hand-over slots on the centre line (x 0.35), and a tray of one slot per block in arm_1's
+    half (x 0.54). Slot 1 is the leftmost (+y) as arm_0 sees the table; the tray and the zone are
+    groups of their slots; the table and the person are places too."""
+    n = len(numbers)
+    slots = [PlaceObs(f"tray_slot_{i}", f"tray slot {i}" + (" (the leftmost slot)" if i == 1 else
+                                                          " (the rightmost slot)" if i == n else ""),
+                      "slot", 0.54, 0.12 - 0.24 * (i - 1) / (n - 1) if n > 1 else 0.0, 1)
+             for i in range(1, n + 1)]
+    zone = [PlaceObs(f"zone_slot_{i}", f"shared zone slot {i}", "slot", ZONE_X, y, 1)
+            for i, y in ((1, 0.05), (2, -0.05))]
+    places = slots + zone + [
+        PlaceObs("tray", "the tray (any slot)", "group", 0.54, 0.0, 0, tuple(p.id for p in slots)),
+        PlaceObs("shared_zone", "the shared zone (both arms reach it; one arm inside at a time)", "zone", ZONE_X, 0.0, 0,
+                 tuple(p.id for p in zone), radius=0.08),
+        PlaceObs("table", "the table", "table", 0.20, -0.22, 0, radius=0.30),
+        PlaceObs("person", "the person", "person", 0.35, -0.45, 0)]
+    objs = [ObjectObs(f"block_{k}", f"block {k}", 0.18, 0.12 - 0.12 * i, 0.0, "table", label=str(k), size=0.04)
+            for i, k in enumerate(numbers)]
+    return objs, places
+
+
 def sort_scene(numbers=(1, 3, 5), n_slots: int | None = None) -> tuple[list[ObjectObs], list[PlaceObs]]:
     """Numbered 4 cm blocks in a row on the table in front of a row of tray slots. Slot 1 is the
     leftmost (+y); a "tray" group, the table and the person are places too."""
@@ -114,6 +171,9 @@ class _Run:
     state: str = "running"              # running | holding | paused | done | failed | cancelled
     grasped: bool = False               # object in the gripper (or, for push, under the fingertip)
     reason: str | None = None
+    zone_reach: bool = False            # the reach goes into the shared zone (the object starts there)
+    zone_carry: bool = False            # the carry or push goes into the shared zone (its destination is there)
+    zone_wait: str | None = None        # the arm inside the zone this skill is waiting for, while it waits
 
     @property
     def active(self) -> bool:
@@ -137,12 +197,15 @@ class StubRobotServer:
     (person_moves, person_hand, trip, at), and the `calls`, `history`, `script_log` records tests read."""
 
     def __init__(self, manifest: Manifest, objects: list[ObjectObs], places: list[PlaceObs], *,
-                 durations: dict[str, float] | None = None, tick_s: float = 0.02, heartbeat_timeout_s: float = 1.0):
+                 durations: dict[str, float] | None = None, tick_s: float = 0.02, heartbeat_timeout_s: float = 1.0,
+                 homes: dict[str, tuple[float, float]] | None = None):
+        """`homes`: arm id -> (x, y) where it starts and parks; an arm not named starts at HOME."""
         self._manifest = manifest
         self._lock = threading.RLock()
         self._objs = {o.id: copy.deepcopy(o) for o in objects}
         self._places = {p.id: p for p in places}
-        self._arms = {a.id: ArmObs(a.id, *HOME, a.travel_z, None, a.gripper.max_width if a.gripper else 0.0, "idle")
+        self._homes = {a.id: (homes or {}).get(a.id, HOME) for a in manifest.arms}
+        self._arms = {a.id: ArmObs(a.id, *self._homes[a.id], a.travel_z, None, a.gripper.max_width if a.gripper else 0.0, "idle")
                       for a in manifest.arms}
         self._specs = {a.id: a for a in manifest.arms}
         self._hands: list[HandObs] = []
@@ -161,6 +224,8 @@ class StubRobotServer:
         self.history: list[tuple[float, str, str]] = []      # (t, arm, mode) on every mode change
         self.script_log: list[tuple[float, str]] = []        # (t, what) when a scripted beat fires
         self.heartbeats = 0
+        self._zone_owner: str | None = None                  # id of the skill inside the shared zone
+        self.zone_log: list[tuple[float, str, str]] = []     # (t, arm, "enter" | "leave" | "wait")
 
     # ---------------------------------------------------------------- lifecycle (not protocol)
     def open(self) -> StubRobotServer:
@@ -202,20 +267,29 @@ class StubRobotServer:
             return [self._ev("scene_change", f"a person moved {o.name}; it is now {self._where_text(o.where)}", object=oid)]
         self.at(when, f"person moves {oid}", act)
 
-    def person_hand(self, when, for_s: float = 1.0, dist: float = 0.15, speed: float = 0.1, arm: str = "arm_0") -> None:
-        """A hand appears `dist` m from the gripper on the person's side, reaching toward it at `speed`
-        m/s (reported, not moved: the toy hand holds its pose), and leaves `for_s` s later."""
+    def person_hand(self, when, for_s: float = 1.0, dist: float = 0.15, speed: float = 0.1, arm: str = "arm_0",
+                    xy: tuple[float, float] | None = None) -> None:
+        """A hand appears `dist` m from `arm`'s gripper on the person's side (or at `xy`, at the
+        gripper's height), reaching toward that gripper at `speed` m/s (reported, not moved: the toy
+        hand holds its pose), and leaves `for_s` s later."""
         def leave() -> list[RobotEvent]:
             self._hands = []
             return [self._ev("scene_change", "the person's hand has gone out of view")]
 
         def act() -> list[RobotEvent]:
             a = self._arms[arm]
-            ang = math.atan2(-a.y, 0.6 - a.x)
+            if xy is None:
+                ang = math.atan2(-a.y, 0.6 - a.x)
+                hx, hy = a.x + dist * math.cos(ang), a.y + dist * math.sin(ang)
+            else:
+                hx, hy = xy
+                ang = math.atan2(hy - a.y, hx - a.x)
             ux, uy = math.cos(ang), math.sin(ang)
-            self._hands = [HandObs(a.x + dist * ux, a.y + dist * uy, a.z, -speed * ux, -speed * uy)]
+            self._hands = [HandObs(hx, hy, a.z, -speed * ux, -speed * uy)]
             self._beats.append(_Beat(self.now() + for_s, "person's hand leaves", leave))
-            return [self._ev("scene_change", f"a person's hand appeared {dist:.2f} m from the gripper")]
+            d = math.hypot(hx - a.x, hy - a.y)
+            return [self._ev("scene_change", f"a person's hand appeared {d:.2f} m from {arm}'s gripper"
+                             if len(self._arms) > 1 else f"a person's hand appeared {dist:.2f} m from the gripper")]
         self.at(when, "person's hand appears", act)
 
     def trip(self, when, text: str = "effort limit exceeded", arm: str = "arm_0") -> None:
@@ -261,11 +335,15 @@ class StubRobotServer:
             old = self._active(arm)
             if old is not None:
                 old.state, old.reason = "cancelled", f"cancelled: replaced by {sid}"
+                self._leave_zone(old)
             a, o = self._arms[arm], self._objs.get(args.get("object", ""))
             dur = float(args.get("seconds", 1.0)) if skill == "hold" else self._dur.get(skill, 1.0)
             r = _Run(sid, arm, skill, dict(args), dur, (a.x, a.y), (o.x, o.y) if o else None)
             if skill in GRASPING and a.holding == args.get("object"):
                 r.elapsed, r.grasped = r.duration / 2, True      # already in the gripper: carry from here
+            if r.aim is not None:
+                r.zone_reach = not r.grasped and self._in_zone(*r.aim)
+                r.zone_carry = self._in_zone(*self._dest(r))
             self._runs[sid] = r
             self._mode(arm, "running")
         return sid
@@ -297,7 +375,7 @@ class StubRobotServer:
                 if a.holding:                     # parking sets the held object down under the gripper
                     o = self._objs[a.holding]
                     o.where, o.x, o.y, a.holding = "table", a.x, a.y, None
-                a.x, a.y, a.z = *HOME, self._specs[a.id].travel_z
+                a.x, a.y, a.z = *self._homes[a.id], self._specs[a.id].travel_z
                 self._mode(a.id, "stopped")
         self._emit(evs)
 
@@ -379,6 +457,8 @@ class StubRobotServer:
         return evs
 
     def _advance(self, r: _Run, dt: float) -> list[RobotEvent]:
+        if not self._zone_free(r):
+            return []                             # waiting outside the shared zone: no progress
         r.elapsed += dt
         f = min(1.0, r.elapsed / r.duration)
         if r.name in ("survey", "hold"):
@@ -398,6 +478,12 @@ class StubRobotServer:
             r.grasped = True
             if r.name != "push":
                 o.where, a.holding = f"gripper:{r.arm}", o.id
+            if not self._zone_free(r):            # the carry goes into the zone and the other arm is in it
+                r.elapsed = r.duration / 2
+                a.x, a.y = r.aim
+                if r.name != "push":
+                    o.x, o.y = a.x, a.y
+                return []
         dest = self._dest(r)
         k = max(0.0, (f - 0.5) / 0.5)
         a.x, a.y = r.aim[0] + (dest[0] - r.aim[0]) * k, r.aim[1] + (dest[1] - r.aim[1]) * k
@@ -416,9 +502,13 @@ class StubRobotServer:
             b = self._objs[r.args["onto"]]
             return (b.x, b.y)
         p = self._places[r.args["place"]]
-        if p.kind == "table":                     # a free spot near the table place's centre
-            n = sum(1 for o in self._objs.values() if o.where == "table")
-            return (p.x, p.y + 0.06 * n)
+        if p.kind == "table":                     # a free spot near the table place's centre, in this arm's reach
+            if _inside(self._specs[r.arm].workspace, p.x, p.y):
+                n = sum(1 for o in self._objs.values() if o.where == "table")
+                return (p.x, p.y + 0.06 * n)
+            hx = self._homes[r.arm][0]            # out of reach: in front of the arm's own home instead
+            n = sum(1 for o in self._objs.values() if o.where == "table" and abs(o.x - hx) < 0.05)
+            return (hx, p.y + 0.06 * n)
         return (p.x, p.y)
 
     def _finish(self, r: _Run) -> RobotEvent:
@@ -443,6 +533,7 @@ class StubRobotServer:
             o.x, o.y = self._dest(r)
             o.where = self._landed(o)
         r.state = "done"
+        self._leave_zone(r)
         self._mode(r.arm, "idle")
         return self._ev("skill_done", f"{r.name} finished: {self._phase(r)}", skill_id=r.id, arm=r.arm, object=oid)
 
@@ -450,6 +541,7 @@ class StubRobotServer:
         """End a skill that started: "<code>: <text>" in status().reason and in the event; the arm
         reads "failed" until its next start (`idle=False`: the caller sets the arm's mode)."""
         r.state, r.reason = "failed", why
+        self._leave_zone(r)
         if idle:
             self._mode(r.arm, "failed")
         return self._ev("skill_failed", why, skill_id=r.id, arm=r.arm, object=r.args.get("object"), data={"reason": why})
@@ -460,6 +552,36 @@ class StubRobotServer:
             if p.kind in ("slot", "bin") and math.hypot(o.x - p.x, o.y - p.y) <= p.radius:
                 return p.id
         return "table"
+
+    # ---------------------------------------------------------------- the shared-zone lock
+    def _in_zone(self, x: float, y: float) -> bool:
+        """(x, y) is inside a shared zone (a place of kind "zone", by its radius)."""
+        return any(p.kind == "zone" and math.hypot(x - p.x, y - p.y) <= p.radius for p in self._places.values())
+
+    def _zone_free(self, r: _Run) -> bool:
+        """Whether `r` may make progress: its current segment stays out of the zone (any flag it held is
+        given up), or goes in and the zone is free or already its own (taken now). Else it waits."""
+        needs = r.zone_carry if r.grasped else r.zone_reach
+        if not needs:
+            self._leave_zone(r)
+            return True
+        if self._zone_owner in (None, r.id):
+            if self._zone_owner is None:
+                self._zone_owner = r.id
+                self.zone_log.append((self.now(), r.arm, "enter"))
+            r.zone_wait = None
+            return True
+        inside = self._runs[self._zone_owner].arm
+        if r.zone_wait != inside:
+            self.zone_log.append((self.now(), r.arm, "wait"))
+        r.zone_wait = inside
+        return False
+
+    def _leave_zone(self, r: _Run) -> None:
+        r.zone_wait = None
+        if self._zone_owner == r.id:
+            self._zone_owner = None
+            self.zone_log.append((self.now(), r.arm, "leave"))
 
     # ---------------------------------------------------------------- preconditions
     def _why_not(self, arm: str, skill: str, args: dict) -> str | None:
@@ -479,6 +601,8 @@ class StubRobotServer:
             return f"not_in_view: {args['object']} is not in view"
         if o.where == "person":
             return f"precondition: {o.name} is held by the person"
+        if skill in GRASPING and o.where.startswith("gripper:") and o.where != f"gripper:{arm}":
+            return f"precondition: {o.name} is in {o.where[8:]}'s gripper"
         if not _inside(self._specs[arm].workspace, o.x, o.y):
             return f"unreachable: {o.name} is outside {arm}'s reach"
         top = next((x.name for x in self._objs.values() if x.where == f"on:{o.id}"), None)
@@ -525,6 +649,10 @@ class StubRobotServer:
                 "the person" if r.name == "hand_over" else r.args.get("direction", ""))
         if r.state == "done":
             return f"{on} pushed {dest}" if r.name == "push" else f"{on} put down at {dest}"
+        if r.zone_wait is not None and r.active:
+            what = (f"holding {on}" if r.grasped and r.name != "push" else
+                    f"next to {on}" if r.grasped else f"not yet at {on}")
+            return f"waiting outside the shared zone for {r.zone_wait} to leave it, {what}"
         if r.name == "push":
             return f"pushing {on} {dest}" if r.grasped else f"moving to {on} to push it {dest}, not yet touching it"
         if r.grasped:
@@ -537,6 +665,8 @@ class StubRobotServer:
             return r.state
         if r.name in ("survey", "hold"):
             return r.name
+        if r.zone_wait is not None:
+            return "wait_zone"
         if not r.grasped:
             return "reach"
         return "push" if r.name == "push" else "carry"

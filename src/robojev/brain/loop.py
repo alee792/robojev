@@ -39,28 +39,53 @@ e12v2's change detector, settled (changes.py), decides what changed that the rob
 each change is one event.
 safety_trip holds the arm in code and becomes an event. heartbeat_lost (the server already held the
 arm) is the brain's own link failing, not news about the world: the arm resumes after the usual hold.
+
+Several arms (docs/widowx-pair.md "Crawl: one brain, two arms"; docs/architecture.md choice 5). One
+brain, one planner, one plan; each step names its arm (planner.py). Each driven arm has its own
+ArmRun: its mode (running, holding, paused), pause reason, hold timer, the decision that gates its
+next step, its skill, its change detector for hands, its loop detector. What is shared stays one:
+the queue, the planner (one request in flight), the heartbeat, STOP (one stop() parks every arm).
+  - Steps: each arm starts its next step when it is free, so steps on different arms run side by
+    side; a step whose object is held or claimed by another arm, or that uses an object or slot
+    another arm's step is using, waits (arms.py). The shared-zone lock is the server's, not ours.
+  - Events: every event becomes one core Event per arm it concerns, each decided once, with that
+    arm's view; Event.data carries "arm" and "about" (the event the copies share). A step's end, a
+    safety trip, a found skill, paused_idle: its own arm. User text and a new plan: every arm. An
+    object moved: the arms that reach it, where it was or is, or that have a step for it. A hand:
+    the arm it is nearest, any arm it is near or in the path of, and an arm that was told of it
+    (until it hears it leave). A plan_done_unmet: the arm of the last step for its object.
+  - Views: the "arm" facts (position, holding, phase text, mode) are the arm's own; the plan's
+    position lists that arm's steps (a plan_arrived check sees the whole plan); every other arm is
+    one more thing in the scene, listed among nearby objects with its phase text.
+  - Decisions: right-now and in-plan fixes apply to the arm asked about. A replan or a question to
+    the user happens once per event, however many of its copies ask for it.
+With one arm (or BrainConfig.arm naming one) this is exactly the one-arm loop: one ArmRun, events
+with no arm data, the whole plan in every view.
 """
 from __future__ import annotations
 
 import asyncio
 import copy
+import threading
 import time
 from collections import Counter
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from functools import partial
 from typing import Protocol
 
 from .core import plan as P
 from .core.changes import hand_facts
-from .core.data import LLM_ROUTES, Event
+from .core.data import LLM_ROUTES, Event, Geometry, Obj
+from .core.data import WorldState as CoreWorld
 from .core.decision import View
 
 from .. import catalog
-from ..protocol import RobotEvent, RobotServer
-from .adapt import core_state, geometry, names, xy_cm
+from ..protocol import ArmSpec, RobotEvent, RobotServer
+from .adapt import CM, core_state, geometry, names, xy_cm
 from .arm import ArmControl
+from .arms import reaches, waits_for
 from .changes import SettledChanges
 from .connect import connect
 from .messages import Crashed, Decided, FromRobot, Message, Planned, Tick, UserSaid, Wake
@@ -72,6 +97,7 @@ from .tracker import PlanTracker
 
 END = ("done", "stopped", "gave_up", "timeout")
 ARM_BUSY = ("running", "holding", "paused", "tripped")
+NEAR_BANDS = ("very close", "near")       # core.changes.hand_band: a hand this close concerns any arm
 
 
 class UserChannel(Protocol):
@@ -96,7 +122,7 @@ class BrainConfig:
     max_plan_rejections: int = 3      # rules.ReplanGuard
     stay_local_gate: float = 0.8      # rules.enforce_gate
     settle_s: float = 0.4             # an object change must hold this long to be an event (changes.py)
-    arm: str | None = None            # the arm to drive; None = the manifest's first (H2 widens this)
+    arm: str | None = None            # the one arm to drive; None = every arm in the manifest
     workers: int = 4                  # threads for model calls
 
 
@@ -107,7 +133,7 @@ class EpisodeResult:
     done_s: float | None = None
     decisions: list[dict] = field(default_factory=list)
     llm: list[dict] = field(default_factory=list)       # one record per planner request that came back
-    events: Counter = field(default_factory=Counter)
+    events: Counter = field(default_factory=Counter)    # per event, however many arms it concerned
     steps_started: int = 0
     steps_done: int = 0
     steps_failed: int = 0
@@ -117,8 +143,28 @@ class EpisodeResult:
     log: list[dict] = field(default_factory=list)
 
 
+@dataclass
+class ArmRun:
+    """One driven arm's share of the episode (module docstring, "Several arms")."""
+    id: str
+    spec: ArmSpec
+    ctl: ArmControl
+    geom: Geometry
+    changes: SettledChanges
+    loops: LoopDetector
+    mode: str = "waiting"                  # waiting | running | holding | paused: what the brain wants the arm doing
+    pause_reason: str | None = None
+    hold_until: float | None = None
+    awaiting: int | None = None            # the event whose decision gates this arm's next step
+    state: CoreWorld | None = None         # the world as e12v2 reads it from this arm (cm; its gripper is "gripper")
+    last_event_t: float = 0.0              # the last event concerning this arm (paused_idle)
+    in_flight: int = 0                     # decisions asked about this arm and not yet back
+    hand_told: bool = False                # it has been told of the hand in view (and must hear it leave)
+    waiting_on: str | None = None          # why its next step waits for another arm, while it does
+
+
 class Brain:
-    """One episode against one robot server.
+    """One episode against one robot server, driving every arm (or BrainConfig.arm alone).
 
     `decider`: an e12v2 Decider (decide(event, view) -> {"combined": Combined, ...}; e12v2's
     JevDecider over any DecisionBackend). `planner`: route -> e12v2 LLMBackend; the brain builds
@@ -130,32 +176,29 @@ class Brain:
                  cfg: BrainConfig | None = None):
         self.cfg = cfg or BrainConfig()
         self.server, self.decider, self.user = server, decider, user
-        self.manifest, spec = connect(server, self.cfg.arm)
-        self.arm_id = spec.id
-        self.arm = ArmControl(server, spec.id)
-        self.planner = ManifestPlanner(planner, self.manifest, spec.id)
-        self.geom = geometry(spec, self.cfg.heartbeat_s)
-        self.plan = PlanTracker()
-        self.changes = SettledChanges(self.cfg.settle_s)
-        self.loops = LoopDetector(self.cfg.loop_repeats)
+        self.manifest, specs = connect(server, self.cfg.arm)
+        self.stopped = threading.Event()
+        self.arms = {a.id: ArmRun(a.id, a, ArmControl(server, a.id, self.stopped), geometry(a, self.cfg.heartbeat_s),
+                                  SettledChanges(self.cfg.settle_s), LoopDetector(self.cfg.loop_repeats))
+                     for a in specs}
+        self.primary = specs[0].id
+        self.multi = len(self.arms) > 1
+        self.planner = ManifestPlanner(planner, self.manifest, tuple(self.arms))
+        self.plan = PlanTracker(self.primary)
         self.replans = ReplanGuard(self.cfg.max_plan_rejections)
         self.r = EpisodeResult()
         self.task = ""
         self.user_messages: list[str] = []
-        self.mode = "waiting"             # waiting | running | holding | paused | done | stopped | gave_up | timeout
-        self.pause_reason: str | None = None
-        self.hold_until: float | None = None
-        self.awaiting: int | None = None  # the event whose decision gates the next step
+        self.mode = "waiting"             # the episode: waiting (no plan yet) | running | done | stopped | gave_up | timeout
         self.replan_seq = 0               # the newest planner request; older results are stale
         self.replan_pending = False
         self.llm_requests = 0
         self.misfits = 0
-        self.world = self.state = None
+        self.world = self.state = None    # the protocol world; the primary arm's core world (done checks, schema ids)
         self.names: dict[str, str] = {}
         self._new_events: list[Event] = []
         self._ev_id = 0
-        self._in_flight = 0               # decisions asked and not yet back
-        self._last_event_t = 0.0
+        self._once_keys: set[tuple[int, str]] = set()   # (event, "replan" | "ask") already acted on
         self._robot_moved: set[str] = set()   # objects the robot moved since the change detector last looked
         self._stop_why: str | None = None
         self._loop: asyncio.AbstractEventLoop | None = None
@@ -176,10 +219,10 @@ class Brain:
         self._stop("the STOP button")
 
     def _stop(self, why: str) -> None:
-        if self.arm.stopped.is_set():
+        if self.stopped.is_set():
             return
         self._stop_why = why
-        self.arm.stop()
+        self.arms[self.primary].ctl.stop()      # the server's stop() parks every arm; the flag is shared
         self._post(Wake())
 
     def _from_robot(self, ev: RobotEvent) -> None:
@@ -215,11 +258,12 @@ class Brain:
         self._t0, self.task = time.monotonic(), task
         self.server.subscribe(self._from_robot)
         self._observe()
-        self.changes.update(self.state, 0.0)
-        self._take_over_arm()
+        for arm in self.arms.values():
+            arm.changes.update(arm.state, 0.0)
+        self._take_over_arms()
         if self.user is not None:
             self.user.attach(self.say, self.press_stop)
-        if self.mode == "waiting":
+        if self.mode == "waiting" and not any(a.ctl.foreign for a in self.arms.values()):
             self._request_plan()
         beat = asyncio.create_task(self._heartbeat())
         try:
@@ -229,7 +273,7 @@ class Brain:
                 except TimeoutError:
                     self.mode = "timeout"
                     break
-                if self.arm.stopped.is_set():
+                if self.stopped.is_set():
                     self.mode = "stopped"
                     self._note("stop", why=self._stop_why)
                     break
@@ -243,7 +287,8 @@ class Brain:
             self._closed = True
             self._pool.shutdown(wait=False, cancel_futures=True)
             if self.mode not in ("done", "stopped"):
-                self.arm.set_motion("holding")      # timeout, given up or a bug: leave the arm still, grip kept
+                for arm in self.arms.values():      # timeout, given up or a bug: leave every arm still, grip kept
+                    arm.ctl.set_motion("holding")
         self.r.outcome, self.r.wall_s = self.mode, self.now()
         self._note("end", outcome=self.mode)
         return self.r
@@ -262,8 +307,9 @@ class Brain:
                 self._user_said(text)
             case Tick():
                 self._observe_changes()
-                if self.arm.foreign and self.world.arms[self.arm_id].mode not in ARM_BUSY:
-                    self._found_skill_ended(None)
+                for arm in self.arms.values():
+                    if arm.ctl.foreign and self.world.arms[arm.id].mode not in ARM_BUSY:
+                        self._found_skill_ended(arm, None)
                 self._timers()
             case Decided(event=ev, out=out):
                 self._apply_decision(ev, out)
@@ -275,19 +321,25 @@ class Brain:
                 pass
 
     def _advance(self) -> None:
-        """Start the next step when nothing holds it back."""
-        if self.mode == "running" and not self.arm.busy and self.awaiting is None and self.plan.plan is not None:
-            self._start_next()
+        """Start each free arm's next step when nothing holds it back."""
+        if self.plan.plan is None:
+            return
+        for arm in self.arms.values():
+            if self.mode in END:
+                return
+            if arm.mode == "running" and not arm.ctl.busy and arm.awaiting is None:
+                self._start_next(arm)
 
     def _dispatch(self) -> None:
-        """One decision per new event, each in a thread, each with the view as it is now."""
+        """One decision per new event (per arm it concerns), each in a thread, with the view as it is now."""
         evs, self._new_events = self._new_events, []
         for ev in evs:
             if ev.kind == "plan_arrived" and self.replans.trusting:
                 self._note("plan_trusted", why="replan loop: running the new plan without deciding on it")
                 continue
-            view = self._view(ev)
-            self._in_flight += 1
+            arm = self._arm_of(ev)
+            view = self._view(ev, arm)
+            arm.in_flight += 1
             self._in_thread(partial(self.decider.decide, ev, view), partial(Decided, ev))
 
     # ================================================================ helpers
@@ -300,24 +352,39 @@ class Brain:
     def _note(self, note: str, /, **rec) -> None:
         self.r.log.append({"t": round(self.now(), 3), "note": note, **rec})
 
+    def _arm_of(self, ev: Event) -> ArmRun:
+        return self.arms[ev.data.get("arm", self.primary)]
+
+    def _once(self, ev: Event, what: str) -> bool:
+        """True the first time `what` is done for this event (any of its per-arm copies)."""
+        key = (ev.data.get("about", ev.id), what)
+        if key in self._once_keys:
+            return False
+        self._once_keys.add(key)
+        return True
+
     def _observe(self) -> None:
         self.world = self.server.world()
-        self.state = core_state(self.world, self.arm_id, self.geom, self.cfg.heartbeat_s)
+        for arm in self.arms.values():
+            arm.state = core_state(self.world, arm.id, arm.geom, self.cfg.heartbeat_s)
+        self.state = self.arms[self.primary].state
         self.names = names(self.world)
+        if self.multi:
+            self.names.update({f"gripper:{a}": f"{a}'s gripper" for a in self.world.arms})
 
-    def _arm_to(self, mode: str) -> None:
-        """The brain's mode, and the server call that makes the arm match it (arm.py)."""
-        if self.mode == mode:
+    def _arm_to(self, arm: ArmRun, mode: str) -> None:
+        """The arm's mode, and the server call that makes the arm match it (arm.py)."""
+        if arm.mode == mode:
             return
-        before, self.mode = self.mode, mode
-        self.arm.set_motion(mode)
-        self._note("mode", before=before, after=mode)
+        before, arm.mode = arm.mode, mode
+        arm.ctl.set_motion(mode)
+        self._note("mode", arm=arm.id, before=before, after=mode)
 
-    def _heading(self) -> tuple[float, float] | None:
-        """Where our skill is heading (cm), for "in the arm's path"; None while paused or between steps."""
-        if self.arm.skill_id is None or self.mode == "paused":
+    def _heading(self, arm: ArmRun) -> tuple[float, float] | None:
+        """Where the arm's skill is heading (cm), for "in the arm's path"; None while paused or between steps."""
+        if arm.ctl.skill_id is None or arm.mode == "paused":
             return None
-        return xy_cm(self.arm.status().heading)
+        return xy_cm(arm.ctl.status().heading)
 
     @staticmethod
     def _obj(step: dict) -> str | None:
@@ -330,95 +397,152 @@ class Brain:
         return name, call_args(step, catalog.BY_NAME[name])
 
     def _why_not(self, step: dict) -> str | None:
-        return self.arm.precondition(*self._call(step))
+        return self.arms[self.plan.arm_of(step)].ctl.precondition(*self._call(step))
 
-    def _runnable_other(self, ev: Event | None) -> str | None:
-        """A pending step, other than the current one and the event's, that could start now."""
+    def _waits(self, step: dict) -> str | None:
+        """Why `step` must wait for another arm (arms.waits_for); never with one arm."""
+        if not self.multi:
+            return None
+        return waits_for(step["id"], self.plan.queue, self.plan.steps(), self.plan.status, self.world, self.primary, self.names)
+
+    def _runnable_other(self, arm: ArmRun, ev: Event | None) -> str | None:
+        """A pending step of `arm`, other than its current one and the event's, that could start now."""
         if self.plan.plan is None:
             return None
-        skip = ({ev.step_id} if ev is not None and ev.step_id else set()) | ({self.plan.cur["id"]} if self.plan.cur else set())
+        cur = self.plan.current(arm.id)
+        skip = ({ev.step_id} if ev is not None and ev.step_id else set()) | ({cur["id"]} if cur else set())
         steps = self.plan.steps()
-        return next((sid for sid in self.plan.pending(skip) if self._why_not(steps[sid]) is None), None)
+        return next((sid for sid in self.plan.pending(skip) if self.plan.arm_of(steps[sid]) == arm.id
+                     and self._why_not(steps[sid]) is None and self._waits(steps[sid]) is None), None)
 
-    def _view(self, ev: Event | None) -> View:
-        """What the decider sees (e12v2's View), a snapshot: it is read in another thread."""
-        st, cur = self.state, self.plan.cur
+    def _phase(self, arm: ArmRun) -> str:
+        """Where the arm is, literally: its skill's phase text, or between steps."""
+        st = arm.state
+        if arm.ctl.skill_id is not None:
+            return arm.ctl.status().phase_text
+        if arm.ctl.foreign:
+            return "partway through a skill started before this brain connected"
+        last = self.plan.last.get(arm.id)
+        if last is not None:
+            text = between_steps(P.step_text(last, self.names), self.plan.status.get(last["id"]) == "done",
+                                 self.name(st.arm.holding) if st.arm.holding else None)
+        else:
+            text = "not started on any step yet" if self.plan.plan else "waiting for the first plan"
+        if arm.waiting_on is not None:
+            nxt = self.plan.next_for(arm.id)
+            if nxt is not None:
+                text += f"; its next step, {P.step_text(self.plan.steps()[nxt], self.names)}, waits: {arm.waiting_on}"
+        return text
+
+    def _view(self, ev: Event | None, arm: ArmRun) -> View:
+        """What the decider sees (e12v2's View) about `arm`, a snapshot: it is read in another thread."""
+        st, cur = arm.state, self.plan.current(arm.id)
         if cur is None and ev is not None and ev.step_id and self.plan.plan:
             cur = self.plan.steps().get(ev.step_id)
-        if self.arm.skill_id is not None:
-            phase = self.arm.status().phase_text
-        elif self.arm.foreign:
-            phase = "partway through a skill started before this brain connected"
-        elif self.plan.last_step is not None:
-            last = self.plan.last_step
-            phase = between_steps(P.step_text(last, self.names), self.plan.status.get(last["id"]) == "done",
-                                  self.name(st.arm.holding) if st.arm.holding else None)
-        else:
-            phase = "not started on any step yet" if self.plan.plan else "waiting for the first plan"
-        path, other = self._heading(), self._runnable_other(ev)
-        return View(t=self.now(), task=self.task, user_messages=list(self.user_messages), state=st, plan=self.plan.plan,
-                    queue=list(self.plan.queue), status=dict(self.plan.status), current=cur, phase=phase, mode=self.mode,
-                    pause_reason=self.pause_reason, replan_pending=self.replan_pending, names=dict(self.names),
+        whole = not self.multi or (ev is not None and ev.kind == "plan_arrived")
+        queue = list(self.plan.queue) if whole else [q for q in self.plan.queue if self.plan.arm_of(self.plan.steps()[q]) == arm.id]
+        names_ = dict(self.names)
+        shown = st if whole else self._with_other_arms(arm, names_)
+        path, other = self._heading(arm), self._runnable_other(arm, ev)
+        return View(t=self.now(), task=self.task, user_messages=list(self.user_messages), state=shown, plan=self.plan.plan,
+                    queue=queue, status=dict(self.plan.status), current=cur, phase=self._phase(arm), mode=arm.mode,
+                    pause_reason=arm.pause_reason, replan_pending=self.replan_pending, names=names_,
                     path_to=path, hand=hand_facts(st, path),
                     runnable_other=P.step_text(self.plan.steps()[other], self.names) if other else None,
                     tries=dict(self.plan.tries),
                     grasped=bool(cur and st.arm.holding and st.arm.holding == cur.get("object")))
 
-    # ================================================================ events
-    def event(self, kind: str, text: str, obj: str | None = None, step_id: str | None = None, /, **data) -> Event:
-        """A new event; it gets one decision when the current message is done. `data` goes to the
-        decider as Event.data (e.g. text= for user_text: what the user said, verbatim)."""
-        self._ev_id += 1
-        ev = Event(self._ev_id, self.now(), kind, text, obj, step_id, data)
-        self._new_events.append(ev)
-        self.r.events[kind] += 1
-        self._last_event_t = self.now()
-        self._note("event", id=ev.id, event=kind, text=text)
-        return ev
+    def _with_other_arms(self, arm: ArmRun, names_: dict[str, str]) -> CoreWorld:
+        """`arm`'s world with every other driven arm as one more object, so e12v2's nearby-objects
+        list shows it (distance band, in the path) like anything else moving on the table. Its name
+        carries its phase text; it is "in" the shared zone or its own side of the table."""
+        objs = dict(arm.state.objects)
+        for other in self.arms.values():
+            if other is arm:
+                continue
+            a, oid = other.state.arm, f"arm:{other.id}"
+            zone = next((p for p in self.world.places.values() if p.kind == "zone"
+                         and (a.x / CM - p.x) ** 2 + (a.y / CM - p.y) ** 2 <= p.radius ** 2), None)
+            names_[oid] = f"{other.id}, the other arm ({self._phase(other)})"
+            names_[f"side:{other.id}"] = zone.name if zone is not None else f"{other.id}'s side of the table"
+            objs[oid] = Obj(oid, names_[oid], "", None, "", a.x, a.y, a.z, f"side:{other.id}" if zone is None else zone.id)
+        return replace(arm.state, objects=objs)
 
-    def _take_over_arm(self) -> None:
-        """At connect: a skill already on the arm is left to run (module docstring, "Reconnecting")."""
-        a = self.world.arms[self.arm_id]
-        if a.mode == "stopped":
-            self.mode, self._stop_why = "stopped", "the arm was already stopped (STOP) when the brain connected"
-            self._note("stop", why=self._stop_why)
-            return
-        if a.mode not in ARM_BUSY:
-            return
-        self.arm.foreign = True
-        self._note("found_skill", mode=a.mode, holding=a.holding)
-        if a.mode == "running":
-            self.mode = "running"
-        elif a.mode == "holding":
-            self.mode, self.hold_until = "holding", self.now() + self.cfg.hold_s
-        else:
-            self.mode, self.pause_reason = "paused", f"found {a.mode} when the brain connected"
-            held = f", holding {self.name(a.holding)}" if a.holding else ""
-            self.event("arm_found", f"when the brain connected, the arm was {a.mode} partway through a skill it did not start{held}")
+    # ================================================================ events
+    def event(self, kind: str, text: str, obj: str | None = None, step_id: str | None = None, /, *,
+              arms: Iterable[str] | None = None, gate: bool = False, **data) -> list[Event]:
+        """A new event: one core Event per arm it concerns (`arms`, default every arm), each decided
+        once when the current message is done. `gate`: its decision gates that arm's next step.
+        `data` goes to the decider as Event.data (e.g. text= for user_text: what the user said,
+        verbatim); with several arms it also carries "arm" and "about" (the shared event id)."""
+        about, out = self._ev_id + 1, []
+        self.r.events[kind] += 1
+        for a in (list(arms) if arms is not None else list(self.arms)):
+            arm = self.arms[a]
+            self._ev_id += 1
+            ev = Event(self._ev_id, self.now(), kind, text, obj, step_id, {**data, "arm": a, "about": about} if self.multi else data)
+            self._new_events.append(ev)
+            arm.last_event_t = self.now()
+            if gate:
+                arm.awaiting = ev.id
+            self._note("event", id=ev.id, event=kind, text=text, arm=a)
+            out.append(ev)
+        return out
+
+    def _take_over_arms(self) -> None:
+        """At connect: a skill already on an arm is left to run (module docstring, "Reconnecting")."""
+        for arm in self.arms.values():
+            a = self.world.arms[arm.id]
+            if a.mode == "stopped":
+                self.mode, self._stop_why = "stopped", "the arm was already stopped (STOP) when the brain connected"
+                self._note("stop", why=self._stop_why)
+                return
+            if a.mode not in ARM_BUSY:
+                continue
+            arm.ctl.foreign = True
+            self._note("found_skill", arm=arm.id, mode=a.mode, holding=a.holding)
+            if a.mode == "running":
+                arm.mode = "running"
+            elif a.mode == "holding":
+                arm.mode, arm.hold_until = "holding", self.now() + self.cfg.hold_s
+            else:
+                arm.mode, arm.pause_reason = "paused", f"found {a.mode} when the brain connected"
+                held = f", holding {self.name(a.holding)}" if a.holding else ""
+                self.event("arm_found", f"when the brain connected, the arm was {a.mode} partway through a skill it did not start{held}",
+                           arms=[arm.id])
+
+    def _skill_arm(self, ev: RobotEvent) -> ArmRun | None:
+        """The driven arm a skill event is about: by its arm, else by the skill id."""
+        if ev.arm is not None:
+            return self.arms.get(ev.arm)
+        return next((a for a in self.arms.values() if a.ctl.skill_id == ev.skill_id), None) or \
+            next((a for a in self.arms.values() if a.ctl.foreign), None) or self.arms[self.primary]
 
     def _robot_event(self, ev: RobotEvent) -> None:
-        if ev.arm is not None and ev.arm != self.arm_id:
+        if ev.arm is not None and ev.arm not in self.arms:
             self._note("robot_event_ignored", event=ev.kind, arm=ev.arm, why="another arm")
             return
         if ev.kind in ("skill_done", "skill_failed"):
-            ok = ev.kind == "skill_done"
-            if ev.skill_id is not None and ev.skill_id == self.arm.skill_id:
+            ok, arm = ev.kind == "skill_done", self._skill_arm(ev)
+            if ev.skill_id is not None and ev.skill_id == arm.ctl.skill_id:
                 reason = None if ok else self._failure_reason(ev)
-                self.arm.ended()
+                arm.ctl.ended()
                 self._observe()
-                self._step_ended(ok, reason)
-            elif self.arm.foreign and ev.skill_id is not None:
-                self._found_skill_ended(ev)
+                self._step_ended(arm, ok, reason)
+            elif arm.ctl.foreign and ev.skill_id is not None:
+                self._found_skill_ended(arm, ev)
             else:
                 self._note("robot_event_ignored", event=ev.kind, skill_id=ev.skill_id, why="not our current skill")
         elif ev.kind == "scene_change":
             self._observe_changes()
         elif ev.kind == "safety_trip":
-            self._tripped(ev)
+            for arm in ([self.arms[ev.arm]] if ev.arm is not None else list(self.arms.values())):
+                self._tripped(arm, ev)
         elif ev.kind == "heartbeat_lost":
             self._note("heartbeat_lost", text=ev.text)
-            if self.mode == "running":       # the server already holds the arm: resume after the usual hold
-                self.mode, self.hold_until = "holding", self.now() + self.cfg.hold_s
+            for arm in self.arms.values():       # the server already holds every arm: resume after the usual hold
+                if arm.mode == "running":
+                    arm.mode, arm.hold_until = "holding", self.now() + self.cfg.hold_s
         else:
             self._note("robot_event_ignored", event=ev.kind, why="unknown kind")
 
@@ -429,21 +553,21 @@ class Brain:
         except KeyError:
             return ev.text
 
-    def _tripped(self, ev: RobotEvent) -> None:
+    def _tripped(self, arm: ArmRun, ev: RobotEvent) -> None:
         """The safety filter outranks every answer: hold now, in code, then decide what it means. The
         brain counts the arm as paused, so no timer resumes it: only a decision or the user does."""
-        self.arm.set_motion("holding")
+        arm.ctl.set_motion("holding")
         if self.mode in END:
             return
-        self.mode, self.pause_reason, self.hold_until = "paused", "the robot's safety filter tripped", None
-        self._note("mode", after="paused", because="safety_trip")
-        self.event("safety_trip", f"the robot's safety filter tripped ({ev.text}); the arm is holding where it was")
+        arm.mode, arm.pause_reason, arm.hold_until = "paused", "the robot's safety filter tripped", None
+        self._note("mode", arm=arm.id, after="paused", because="safety_trip")
+        self.event("safety_trip", f"the robot's safety filter tripped ({ev.text}); the arm is holding where it was", arms=[arm.id])
 
-    def _found_skill_ended(self, ev: RobotEvent | None) -> None:
+    def _found_skill_ended(self, arm: ArmRun, ev: RobotEvent | None) -> None:
         """The skill found at connect ended (its end event, or None: the arm reads free): the arm is
-        ours. Plan from the world it left."""
-        self.arm.foreign = False
-        what, obj = "the arm reads " + self.world.arms[self.arm_id].mode, None
+        ours. Once no arm runs a found skill, plan from the world they left."""
+        arm.ctl.foreign = False
+        what, obj = "the arm reads " + self.world.arms[arm.id].mode, None
         if ev is not None:
             try:
                 st = self.server.status(ev.skill_id)
@@ -452,89 +576,143 @@ class Brain:
                 what, obj = ev.text, ev.object
         if obj:
             self._robot_moved.add(obj)
-        self._note("found_skill_ended", skill_id=ev.skill_id if ev else None, event=ev.kind if ev else None, what=what)
+        self._note("found_skill_ended", arm=arm.id, skill_id=ev.skill_id if ev else None, event=ev.kind if ev else None, what=what)
         self._observe()
-        self.mode, self.pause_reason, self.hold_until = "waiting", None, None
-        self._request_plan()
+        arm.mode, arm.pause_reason, arm.hold_until = "waiting", None, None
+        if self.plan.plan is None and not any(a.ctl.foreign for a in self.arms.values()):
+            self._request_plan()
 
     def _user_said(self, text: str) -> None:
         self.user_messages.append(text)
         self.replans.user_spoke()
-        if self.mode == "paused" and (self.pause_reason or "").startswith("waiting for the user's answer"):
-            self._arm_to("holding")               # the answer ends that pause; hold while it is decided
-            self.pause_reason, self.hold_until = None, self.now() + self.cfg.hold_s
+        for arm in self.arms.values():
+            if arm.mode == "paused" and (arm.pause_reason or "").startswith("waiting for the user's answer"):
+                self._arm_to(arm, "holding")          # the answer ends that pause; hold while it is decided
+                arm.pause_reason, arm.hold_until = None, self.now() + self.cfg.hold_s
         self.event("user_text", f'the user typed: "{text}"', text=text)
 
     def _observe_changes(self) -> None:
-        """Re-read the world; each settled change the robot didn't cause is one scene_change event."""
+        """Re-read the world; each settled change the robot didn't cause is one scene_change event,
+        for the arms it concerns. Objects come from the primary arm's detector; hands from each arm's own."""
         self._observe()
-        for ch in self.changes.update(self.state, self.now(), self._heading(), self._robot_touched()):
-            self.event("scene_change", change_text(ch, self.name), ch.get("object"), change=ch)
+        touched = self._robot_touched()
+        for arm in self.arms.values():
+            for ch in arm.changes.update(arm.state, self.now(), self._heading(arm), touched):
+                if ch["what"] == "hand":
+                    if self._hand_concerns(arm, ch):
+                        self.event("scene_change", change_text(ch, self.name), None, arms=[arm.id], change=ch)
+                elif arm.id == self.primary:
+                    self.event("scene_change", change_text(ch, self.name), ch.get("object"),
+                               arms=self._object_arms(ch), change=ch)
+
+    def _hand_concerns(self, arm: ArmRun, ch: dict) -> bool:
+        """A hand change is `arm`'s decision when the hand is nearest this arm of all, near it or in
+        its path, or the arm was told of the hand before (so it hears it go). One arm: always."""
+        if not self.multi:
+            return True
+        now = ch["now"]
+        near = now is not None and (now[0] in NEAR_BANDS or now[2] or self._nearest_arm(arm) == arm.id)
+        told, arm.hand_told = arm.hand_told, now is not None and (arm.hand_told or near)
+        return told or near
+
+    def _nearest_arm(self, arm: ArmRun) -> str | None:
+        """Of every driven arm, the one whose gripper is nearest the hand `arm` sees."""
+        h = arm.state.hand
+        if h is None:
+            return None
+        return min(self.arms.values(), key=lambda o: ((h.x - o.state.arm.x) ** 2 + (h.y - o.state.arm.y) ** 2 +
+                                                      (h.z - o.state.arm.z) ** 2, o is not arm)).id
+
+    def _object_arms(self, ch: dict) -> list[str]:
+        """An object change concerns the arms that reach it where it was or is, or have a step for it
+        running or to come; failing all, the primary arm."""
+        if not self.multi:
+            return [self.primary]
+        pts = [(xy[0] / CM, xy[1] / CM) for xy in (ch.get("from_xy"), ch.get("to_xy")) if xy]
+        o = self.world.objects.get(ch.get("object", ""))
+        if o is not None:
+            pts.append((o.x, o.y))
+        steps = self.plan.steps()
+        stepping = {self.plan.arm_of(steps[q]) for q in self.plan.queue if steps[q]["object"] == ch.get("object")}
+        out = [a for a, arm in self.arms.items() if a in stepping or any(reaches(arm.spec, x, y) for x, y in pts)]
+        return out or [self.primary]
 
     def _robot_touched(self) -> set[str]:
         """Objects the robot itself moved since the detector last looked: those of steps that ended,
-        and the running step's object once it is in the gripper or at the step's goal (its end event
-        may still be on its way) or, for push, at all. Anything else that moved, someone else moved."""
+        and each running step's object once it is in the gripper or at the step's goal (its end event
+        may still be on its way) or, for push, at all; with several arms, anything in any gripper.
+        Anything else that moved, someone else moved."""
         out, self._robot_moved = self._robot_moved, set()
-        cur = self.plan.cur
-        if cur is not None and cur["object"] in self.state.objects:
-            where = self.state.objects[cur["object"]].where
-            goal = P.step_goal(cur)
-            if cur["skill"] == "push" or where == "gripper" or (goal is not None and where == goal[1]):
-                out.add(cur["object"])
+        for arm in self.arms.values():
+            cur = self.plan.current(arm.id)
+            if cur is not None and cur["object"] in arm.state.objects:
+                where = arm.state.objects[cur["object"]].where
+                goal = P.step_goal(cur)
+                if cur["skill"] == "push" or where == "gripper" or (goal is not None and where == goal[1]):
+                    out.add(cur["object"])
+        if self.multi:
+            out |= {o.id for o in self.world.objects.values() if o.where.startswith("gripper:")}
         return out
 
     def _timers(self) -> None:
         t = self.now()
-        if self.mode == "holding" and not self.replan_pending and self.hold_until is not None and t >= self.hold_until:
-            self.hold_until = None
-            self._arm_to("running")
-        if self.mode == "paused" and t - self._last_event_t >= self.cfg.paused_idle_s and not self._in_flight:
-            self.event("paused_idle", f"the arm has been paused for {self.cfg.paused_idle_s:.0f} s ({self.pause_reason}) "
-                                      "and nothing has changed")
+        for arm in self.arms.values():
+            if arm.mode == "holding" and not self.replan_pending and arm.hold_until is not None and t >= arm.hold_until:
+                arm.hold_until = None
+                self._arm_to(arm, "running")
+            if arm.mode == "paused" and t - arm.last_event_t >= self.cfg.paused_idle_s and not arm.in_flight:
+                self.event("paused_idle", f"the arm has been paused for {self.cfg.paused_idle_s:.0f} s ({arm.pause_reason}) "
+                                          "and nothing has changed", arms=[arm.id])
 
     # ================================================================ steps
-    def _start_next(self) -> None:
-        sid = self.plan.next_pending()
+    def _start_next(self, arm: ArmRun) -> None:
+        sid = self.plan.next_for(arm.id)
         if sid is None:
-            self._check_done()
+            if not self.plan.pending(set()) and all(not a.ctl.busy and a.awaiting is None for a in self.arms.values()):
+                self._check_done()
             return
         s = self.plan.steps()[sid]
+        wait = self._waits(s)
+        if wait != arm.waiting_on:
+            arm.waiting_on = wait
+            if wait is not None:
+                self._note("step_waits", arm=arm.id, step=P.step_text(s, self.names), why=wait)
+        if wait is not None:
+            return
         name, args = self._call(s)
-        why = self.arm.precondition(name, args)
+        why = arm.ctl.precondition(name, args)
         if why is None:
             try:
-                self.arm.start(name, args)
+                arm.ctl.start(name, args)
             except ValueError as e:               # refused at start: same as a failed precondition
                 why = str(e)
         txt = P.step_text(s, self.names)
         if why is not None:
             self.plan.could_not_start(sid)
             self.r.steps_failed += 1
-            ev = self.event("step_failed", f"step could not start: {txt}: {why}", self._obj(s), sid,
-                            reason=f"could not start: {why}")
-            self.awaiting = ev.id
+            self.event("step_failed", f"step could not start: {txt}: {why}", self._obj(s), sid,
+                       arms=[arm.id], gate=True, reason=f"could not start: {why}")
         else:
             self.plan.begin(sid)
             self.r.steps_started += 1
-            self._note("step_start", step=txt, skill_id=self.arm.skill_id)
-        self._loop_check(s, sid)
+            self._note("step_start", arm=arm.id, step=txt, skill_id=arm.ctl.skill_id)
+        self._loop_check(arm, s, sid)
 
-    def _loop_check(self, s: dict, sid: str) -> None:
-        if not (self.loops.record((s["skill"], s["object"], s["target"], s["direction"]))
+    def _loop_check(self, arm: ArmRun, s: dict, sid: str) -> None:
+        if not (arm.loops.record((s["skill"], s["object"], s["target"], s["direction"]))
                 or self.plan.tries[sid] >= self.cfg.max_step_failures):
             return
         self.r.loops += 1
         self.plan.tries[sid] = 0
         txt = P.step_text(s, self.names)
-        self._note("loop", step=txt)
-        self._arm_to("holding")
+        self._note("loop", arm=arm.id, step=txt)
+        self._arm_to(arm, "holding")
         if not self.replan_pending:
             ev = Event(0, self.now(), "loop", f"loop: {txt} keeps coming back", self._obj(s), sid)
             self._start_replan("capable_llm", f"a loop: the plan keeps returning to {txt} without progress", ev)
 
-    def _step_ended(self, ok: bool, reason: str | None) -> None:
-        s = self.plan.end(ok, self.now())
+    def _step_ended(self, arm: ArmRun, ok: bool, reason: str | None) -> None:
+        s = self.plan.end(arm.id, ok, self.now())
         obj = self._obj(s)
         if obj:
             self._robot_moved.add(obj)
@@ -542,14 +720,13 @@ class Brain:
         if ok:
             self.r.steps_done += 1
             g = P.step_goal(s)
-            after = (f"; {self.name(g[0])} is now {where_text(self.state.objects[g[0]].where, self.name)}"
-                     if g and g[0] in self.state.objects else "")
-            ev = self.event("step_done", f"step finished: {txt}{after}", obj, s["id"])
+            objs = arm.state.objects
+            after = f"; {self.name(g[0])} is now {where_text(objs[g[0]].where, self.name)}" if g and g[0] in objs else ""
+            self.event("step_done", f"step finished: {txt}{after}", obj, s["id"], arms=[arm.id], gate=True)
         else:
             self.r.steps_failed += 1
-            ev = self.event("step_failed", f"step failed: {txt}: {reason}", obj, s["id"], reason=reason)
-        self._note("step_end", step=txt, ok=ok, reason=reason)
-        self.awaiting = ev.id
+            self.event("step_failed", f"step failed: {txt}: {reason}", obj, s["id"], arms=[arm.id], gate=True, reason=reason)
+        self._note("step_end", arm=arm.id, step=txt, ok=ok, reason=reason)
 
     def _check_done(self) -> None:
         if self.replan_pending:
@@ -562,59 +739,64 @@ class Brain:
         elif not self.plan.unmet_raised:
             self.plan.unmet_raised = True
             obj = unmet[0]["object"] if unmet[0]["object"] in self.state.objects else None
-            ev = self.event("plan_done_unmet", "every planned step has run, but these done conditions are false: " +
-                            "; ".join(c["text"] for c in unmet), obj, unmet=[c["text"] for c in unmet])
-            self.awaiting = ev.id
+            moves = [s for s in self.plan.plan["steps"] if obj and s["object"] == obj and P.step_goal(s)]
+            arm = self.plan.arm_of(moves[-1]) if moves else self.primary
+            self.event("plan_done_unmet", "every planned step has run, but these done conditions are false: " +
+                       "; ".join(c["text"] for c in unmet), obj, arms=[arm], gate=True, unmet=[c["text"] for c in unmet])
 
     # ================================================================ decisions
     def _apply_decision(self, ev: Event, out: dict) -> None:
-        self._in_flight -= 1
+        arm = self._arm_of(ev)
+        arm.in_flight -= 1
         c = enforce_gate(out["combined"], self.cfg.stay_local_gate)
         self.r.decisions.append({"t": self.now(), "t_event": ev.t, "event_id": ev.id, "event": ev.kind, "text": ev.text,
-                                 "combined": c, "latency_ms": out.get("latency_ms", 0.0)})
-        self._note("decision", event_id=ev.id, event=ev.kind, right_now=c.right_now, fix=c.fix, route=c.route, reason=c.reason)
-        if ev.id == self.awaiting:
-            self.awaiting = None
+                                 "arm": arm.id, "combined": c, "latency_ms": out.get("latency_ms", 0.0)})
+        self._note("decision", event_id=ev.id, arm=arm.id, event=ev.kind, right_now=c.right_now, fix=c.fix, route=c.route,
+                   reason=c.reason)
+        if ev.id == arm.awaiting:
+            arm.awaiting = None
         if self.mode in END:
             return
         self.plan.done_answers.update(c.done)
-        self._right_now(c.right_now, ev)
+        self._right_now(arm, c.right_now, ev)
         if c.route == "stay_local":
-            self._fix(c.fix, ev)
+            self._fix(arm, c.fix, ev)
         elif c.route in LLM_ROUTES:
-            self._start_replan(c.route, ev.text + ("; plan check: " + "; ".join(c.problems) if c.problems else ""), ev)
+            if self._once(ev, "replan"):
+                self._start_replan(c.route, ev.text + ("; plan check: " + "; ".join(c.problems) if c.problems else ""), ev)
         elif c.route == "ask_user":
-            self._arm_to("paused")
-            self.pause_reason = "waiting for the user's answer to a question"
-            if self.user is not None:
+            self._arm_to(arm, "paused")
+            arm.pause_reason = "waiting for the user's answer to a question"
+            if self.user is not None and self._once(ev, "ask"):
                 self.user.ask(f"About \"{ev.data.get('text', ev.text)}\": what should the end result be?")
-        if self.mode == "holding" and not self.replan_pending:
-            self.hold_until = self.now() + self.cfg.hold_s
+        if arm.mode == "holding" and not self.replan_pending:
+            arm.hold_until = self.now() + self.cfg.hold_s
 
-    def _right_now(self, answer: str, ev: Event) -> None:
-        """Apply the right-now answer. It can hold, pause, resume or retarget; nothing a model says stops."""
-        if self.mode == "waiting" and answer not in ("pause", "back_off"):
+    def _right_now(self, arm: ArmRun, answer: str, ev: Event) -> None:
+        """Apply the right-now answer to the arm it was asked about. It can hold, pause, resume or
+        retarget; nothing a model says stops."""
+        if arm.mode == "waiting" and answer not in ("pause", "back_off"):
             return
         action = RIGHT_NOW_ACTION.get(answer)
-        if action == "holding" and self.mode == "running":
-            self._arm_to("holding")
-        elif action == "paused" and self.mode != "paused":
-            self._arm_to("paused")
+        if action == "holding" and arm.mode == "running":
+            self._arm_to(arm, "holding")
+        elif action == "paused" and arm.mode != "paused":
+            self._arm_to(arm, "paused")
             # the user's own words, not an interpretation (e12v2: "asked to wait" kept a cautious pause paused)
-            self.pause_reason = (f'the user said "{ev.data.get("text", "")}"' if ev.kind == "user_text" else
-                                 "a person's hand came near" if "hand" in ev.text else f"paused after: {ev.text}")
+            arm.pause_reason = (f'the user said "{ev.data.get("text", "")}"' if ev.kind == "user_text" else
+                                "a person's hand came near" if "hand" in ev.text else f"paused after: {ev.text}")
         elif action == "retarget":
-            self.arm.retarget()
-        elif action == "running" and self.mode in ("paused", "holding"):
-            self.hold_until, self.pause_reason = None, None
-            self._arm_to("running")
+            arm.ctl.retarget()
+        elif action == "running" and arm.mode in ("paused", "holding"):
+            arm.hold_until, arm.pause_reason = None, None
+            self._arm_to(arm, "running")
 
-    def _fix(self, fix: str, ev: Event) -> None:
-        other = self._runnable_other(ev) if fix == "another_step_first" else None
-        if self.plan.apply_fix(fix, ev, self.state.arm.holding, other):
-            self.arm.release()
+    def _fix(self, arm: ArmRun, fix: str, ev: Event) -> None:
+        other = self._runnable_other(arm, ev) if fix == "another_step_first" else None
+        if self.plan.apply_fix(fix, ev, arm.id, arm.state.arm.holding, other):
+            arm.ctl.release()
         if fix != "none":
-            self._note("fix", fix=fix, queue=list(self.plan.queue))
+            self._note("fix", arm=arm.id, fix=fix, queue=list(self.plan.queue))
 
     # ================================================================ the planner
     def _ref(self, ev: Event | None) -> dict:
@@ -639,6 +821,13 @@ class Brain:
         self._note("llm_request", request="plan", route="fast_llm")
         self._in_thread(lambda: self.planner.plan(task, said, world, core, ref=ref), lambda res: Planned(seq, t, None, res))
 
+    def _arm_now(self, arm: ArmRun) -> dict:
+        """What an arm is doing, for a replan request."""
+        st, cur = arm.ctl.status(), self.plan.current(arm.id)
+        return {"current_step": cur["id"] if cur else "none",
+                "doing": st.phase_text if st is not None else "between steps",
+                "while_you_plan": {"holding": "holding still", "paused": "paused"}.get(arm.mode, "carrying on")}
+
     def _start_replan(self, route: str, why: str, ev: Event | None) -> None:
         if self.plan.plan is None:
             return                                # the first plan is on its way; it will read user_messages
@@ -648,15 +837,20 @@ class Brain:
         seq = self._new_request()
         if seq is None:
             return
-        st = self.arm.status()
-        arm_now = {"current_step": self.plan.cur["id"] if self.plan.cur else "none",
-                   "doing": st.phase_text if st is not None else "between steps",
-                   "while_you_plan": {"holding": "holding still", "paused": "paused"}.get(self.mode, "carrying on")}
+        arm_now = ({a: self._arm_now(arm) for a, arm in self.arms.items()} if self.multi else
+                   self._arm_now(self.arms[self.primary]))
         args = (route, self.task, list(self.user_messages), self.world, self.state, copy.deepcopy(self.plan.plan),
                 list(self.plan.queue), dict(self.plan.status), arm_now, why)
         ref, t = self._ref(ev), self.now()
         self._note("llm_request", request="replan", route=route, why=why)
         self._in_thread(lambda: self.planner.replan(*args, ref=ref), lambda res: Planned(seq, t, ev, res))
+
+    def _resume_held(self) -> None:
+        """A plan came back: arms holding for it carry on."""
+        for arm in self.arms.values():
+            if arm.mode == "holding":
+                arm.hold_until = None
+                self._arm_to(arm, "running")
 
     def _apply_plan(self, msg: Planned) -> None:
         res = msg.result
@@ -678,19 +872,20 @@ class Brain:
                     self._request_plan()
             else:
                 self.plan.unmet_raised = False
-                if self.mode == "holding":
-                    self._arm_to("running")
+                self._resume_held()
             return
         if res.kind == "plan":
             self.plan.load(res.plan)
-            if self.mode == "waiting":
-                self.mode = "running"
+            self.mode = "running"
+            for arm in self.arms.values():
+                if arm.mode == "waiting":
+                    arm.mode = "running"
             self._note("plan_applied", plan=res.plan)
             self.event("plan_arrived", "the first plan arrived: " + res.plan.get("reading", ""))
             return
-        held = self.state.arm.holding
-        newp, q, check = self.plan.merge(res.diff, msg.t_request, held)
-        errs = P.validate(newp, self.state, held, check)
+        holdings = {a: arm.state.arm.holding for a, arm in self.arms.items()}
+        newp, q, check = self.plan.merge(res.diff, msg.t_request, holdings)
+        errs = self.planner.check(newp, self.state, self.world, check)
         if errs and self.misfits < 2:
             # the world moved on while the LLM worked: ask again from where things stand now
             self.misfits += 1
@@ -699,10 +894,8 @@ class Brain:
             self._start_replan(res.route, txt, Event(0, self.now(), "misfit", txt))
             return
         self.misfits = 0
-        if self.plan.install(newp, q):
-            self.arm.release()
-        if self.mode == "holding":
-            self.hold_until = None
-            self._arm_to("running")
+        for a in self.plan.install(newp, q):
+            self.arms[a].ctl.release()
+        self._resume_held()
         self._note("plan_applied", diff=res.diff, queue=q)
         self.event("plan_arrived", "a new plan arrived: " + (res.diff.get("reading") or ""))

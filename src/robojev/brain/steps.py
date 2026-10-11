@@ -48,6 +48,13 @@ def plannable(manifest: Manifest, arm: str) -> list[SkillSpec]:
             if s.name in CORE_NAME and (not s.arms or arm in s.arms)]
 
 
+def plannable_on(manifest: Manifest, arms: Iterable[str]) -> list[SkillSpec]:
+    """The skills a plan may use on any of `arms`, in manifest order (one arm: `plannable`)."""
+    arms = list(arms)
+    return [catalog.BY_NAME[s.name] for s in manifest.skills
+            if s.name in CORE_NAME and (not s.arms or any(a in s.arms for a in arms))]
+
+
 def extra_fields(skills: Iterable[SkillSpec]) -> list[str]:
     """Step fields beyond e12v2's, one per argument that has no e12v2 slot, in a stable order."""
     return sorted({field_of(a) for s in skills for a in args_of(s)} - set(CORE_FIELDS))

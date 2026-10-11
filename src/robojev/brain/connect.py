@@ -35,13 +35,12 @@ def problems(m: Manifest) -> list[str]:
     return out
 
 
-def connect(server: RobotServer, arm: str | None = None) -> tuple[Manifest, ArmSpec]:
-    """Read and check the manifest; -> (manifest, the arm to drive: `arm`, or the first)."""
+def connect(server: RobotServer, arm: str | None = None) -> tuple[Manifest, tuple[ArmSpec, ...]]:
+    """Read and check the manifest; -> (manifest, the arms to drive: `arm` alone, or every arm)."""
     m = server.manifest()
     found = problems(m)
     if arm is not None and arm not in {a.id for a in m.arms}:
         found.append(f"no arm {arm!r}")
     if found:
         raise ManifestRefused(f"{m.robot}: refused at connect: " + "; ".join(found))
-    spec = next(a for a in m.arms if arm is None or a.id == arm)
-    return m, spec
+    return m, tuple(a for a in m.arms if arm is None or a.id == arm)

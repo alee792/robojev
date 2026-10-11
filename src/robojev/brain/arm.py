@@ -6,6 +6,9 @@ After STOP nothing else is sent (the server refuses a start anyway; this avoids 
 
 `skill_id` is the skill this brain started and still follows. `foreign` marks a skill found on the
 arm at connect (a reconnect: the protocol cannot name it, see loop.py), which the brain lets run.
+
+One ArmControl per driven arm. Arms of one robot share one `stopped` flag: STOP is the server's
+stop(), which parks every arm, so it is sent once and silences them all.
 """
 from __future__ import annotations
 
@@ -17,11 +20,11 @@ MOTION_TOOL = {"holding": "hold", "paused": "pause", "running": "resume"}
 
 
 class ArmControl:
-    def __init__(self, server: RobotServer, arm: str):
+    def __init__(self, server: RobotServer, arm: str, stopped: threading.Event | None = None):
         self.server, self.arm = server, arm
         self.skill_id: str | None = None
         self.foreign = False
-        self.stopped = threading.Event()        # set by STOP from any thread
+        self.stopped = stopped or threading.Event()     # set by STOP from any thread; shared by a robot's arms
 
     @property
     def busy(self) -> bool:
@@ -65,6 +68,7 @@ class ArmControl:
         self.skill_id = None
 
     def stop(self) -> None:
-        """STOP. Any thread; called only by the STOP path (the button, a typed "stop")."""
+        """STOP: every arm of the robot parks. Any thread; called only by the STOP path (the button, a
+        typed "stop"), once per robot."""
         self.stopped.set()
         self.server.stop()

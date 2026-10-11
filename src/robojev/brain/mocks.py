@@ -11,6 +11,10 @@ that from the stub server, and make them behave as models would behind this brai
                    distance); a real LLM given the brain's schema writes the catalog's. This renames
                    steps and fills fields the schema has and the mock lacks with null.
   - ScriptedLLM    fixed answers in turn, for robots the oracle cannot plan for (the push-only arm).
+  - PerArmDecider  one oracle decider per arm, chosen by the arm a multi-arm brain's event is for:
+                   e12v2's oracle judges from one arm's side of the world (its gripper, its hand).
+  - PairLLM        e12v2's oracle plan for one arm, given to several (`give_arms`): each step to an
+                   arm that reaches it, the rest as hand-overs through a shared-zone slot.
   - ScriptedUser   lines typed at times or when conditions hold; the STOP button as a line.
   - ScriptedPerception  a RobotServer in front of another: everything passes through, every tool
                    call and every arm mode is logged with the wall time, and a scripted hand can be
@@ -28,14 +32,20 @@ import time
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 
+import random
+from collections.abc import Mapping
+
+from .core import plan as P
 from .core.combine import Gates, JevDecider
 from .core.data import WorldState
 from .eval.mocks import MockJev, MockLLM
-from .eval.oracle import Goal
+from .eval.oracle import Goal, oracle_plan
 from .eval.scenarios import Scenario, Utt
 
-from ..protocol import HandObs, RobotEvent, RobotServer
+from ..protocol import HandObs, Manifest, RobotEvent, RobotServer
+from ..protocol import WorldState as RobotWorld
 from .adapt import core_state, geometry
+from .arms import NO_OBJECT, Reach
 from .steps import to_catalog
 
 PRESS_STOP = "<the STOP button>"      # a ScriptedUser line that presses STOP instead of typing
@@ -150,6 +160,112 @@ def oracle_models(server: RobotServer, versions: Sequence[Goal], utts: dict[str,
     sc, truth = oracle_scenario(versions, utts), StubTruth(server, arm, lookahead_s)
     llm = CatalogLLM(TimedLLM(MockLLM(sc, truth, seed=seed, median_ms=llm_median_ms)))
     decider = oracle_decider(server, versions, utts, arm=arm, seed=seed, lookahead_s=lookahead_s)
+    return decider, {"fast_llm": llm, "capable_llm": llm}
+
+
+class PerArmDecider:
+    """A Decider that hands each event to the decider for its arm (Event.data["arm"], which a
+    multi-arm brain sets; `default` otherwise). Only the mock needs this: its oracle reads the true
+    world from one arm's side. A real decider reads that side from the view and needs no routing."""
+
+    def __init__(self, deciders: Mapping[str, object], default: str):
+        self.deciders, self.default = dict(deciders), default
+        self.name = "per-arm"
+
+    def decide(self, ev, view) -> dict:
+        return self.deciders[ev.data.get("arm", self.default)].decide(ev, view)
+
+
+def give_arms(steps: Sequence[dict], world: RobotWorld, manifest: Manifest) -> list[dict]:
+    """One-arm steps (e12v2 names, in a valid order) -> the same work for several arms, renumbered.
+
+    Each step goes to an arm that reaches its object (where it is by then) and its destination
+    (arms.Reach). A step no single arm can do becomes the hand-over pattern: the arm that reaches the
+    object puts it in a free shared-zone slot (alternating slots while both are free), then the arm
+    that reaches the destination does the step from there. An arm already holding an object puts it
+    down first, at its step's destination if that is in reach and free now, else in a zone slot."""
+    specs = {a.id: a for a in manifest.arms}
+    first = manifest.arms[0].id
+    reach, out = Reach(world, specs), []
+    where = {o.id: o.where for o in world.objects.values()}
+    zone = [q for p in world.places.values() if p.kind == "zone" for q in p.members]
+    last: list[str | None] = [None]
+
+    def emit(arm: str, s: dict, **change) -> None:
+        step = {**s, **change, "id": f"s{len(out) + 1}", "arm": arm}
+        out.append(step)
+        reach.apply(step, arm)
+        g = P.step_goal(step)
+        if g:
+            where[g[0]] = g[1]
+
+    def zone_slot() -> str | None:
+        free = [z for z in zone if z not in where.values()]
+        last[0] = next((z for z in free if z != last[0]), free[0] if free else None)
+        return last[0]
+
+    def give(s: dict) -> None:
+        if s["skill"] in NO_OBJECT:
+            emit(first, s)
+            return
+        src, dst = reach.object_arms(s["object"]), reach.target_arms(s)
+        both = [a for a in src if a in dst]
+        z = None if both or not (src and dst) else zone_slot()
+        if both or z is None:
+            emit(both[0] if both else (src or [first])[0], s)
+            return
+        emit(src[0], s, skill="move_object", target=z, direction=P.NONE)
+        emit(next((a for a in dst if a in reach.place_arms(z)), dst[0]), s)
+
+    todo = list(steps)
+    for arm, a in world.arms.items():
+        s = next((x for x in todo if a.holding and x["object"] == a.holding and P.step_goal(x)), None)
+        if s is None:
+            continue
+        goal = P.step_goal(s)[1]
+        if arm in reach.target_arms(s) and goal not in where.values():
+            todo.remove(s)
+            emit(arm, s)
+        elif (z := zone_slot()) is not None:
+            emit(arm, s, skill="move_object", target=z, direction=P.NONE)
+    for s in todo:
+        give(s)
+    return out
+
+
+class PairLLM:
+    """e12v2's oracle planner for a robot with several arms: the oracle's plan for the task version
+    the user messages imply, from the true world, through `give_arms`; replans as diffs
+    (core.plan.make_diff). Reports a lognormal latency around `median_ms`; wrap in TimedLLM to wait it."""
+
+    def __init__(self, server: RobotServer, scenario: Scenario, seed: int = 0, median_ms: float = 300.0):
+        self.server, self.sc, self.median_ms = server, scenario, median_ms
+        self.truth = StubTruth(server, server.manifest().arms[0].id)
+        self.rng = random.Random(seed)
+
+    def call(self, req, ref=None):
+        ctx, _attempt = ref if ref else (None, 0)
+        body = json.loads(req.input.split("\n\nYour previous answer was:")[0])
+        said = body.get("user_messages", [])
+        w = self.server.world()
+        ts = core_state(w, self.truth.arm, self.truth.geom, self.truth.lookahead_s)
+        reading = body.get("task", "") + (" As corrected: " + "; ".join(said) if said else "")
+        plan = oracle_plan(self.sc.goal_for(said), ts, ts.arm.holding, reading=reading)
+        plan["steps"] = give_arms(plan["steps"], w, self.server.manifest())
+        if req.kind != "plan":
+            ep = ctx["episode"]
+            plan = P.make_diff(ep.plan, ep.queue, plan, reading=plan["reading"])
+        return LLMReply(json.dumps(plan), math.exp(self.rng.gauss(math.log(self.median_ms), 0.35)), model="mock-pair")
+
+
+def pair_models(server: RobotServer, versions: Sequence[Goal], utts: dict[str, Utt] | None = None, *,
+                llm_median_ms: float = 300.0, seed: int = 0, lookahead_s: float = 0.2) -> tuple[PerArmDecider, dict]:
+    """oracle_models() for a robot with several arms: an oracle decider per arm (PerArmDecider) and
+    PairLLM for both planner routes. -> (decider, planner backends)."""
+    arms = [a.id for a in server.manifest().arms]
+    decider = PerArmDecider({a: oracle_decider(server, versions, utts, arm=a, seed=seed + i, lookahead_s=lookahead_s)
+                             for i, a in enumerate(arms)}, arms[0])
+    llm = CatalogLLM(TimedLLM(PairLLM(server, oracle_scenario(versions, utts), seed=seed, median_ms=llm_median_ms)))
     return decider, {"fast_llm": llm, "capable_llm": llm}
 
 
