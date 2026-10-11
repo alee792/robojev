@@ -46,12 +46,10 @@ not added for show.
 
 ### Crawl: one brain, two arms
 
-**Status (2026-10-11):** the brain half is done on a physics-free two-arm stub (H2 in
-`docs/harness-spikes.md`): steps name their arm, each arm runs its own steps in parallel unless
-they share an object or a slot, and every event is decided once per arm. The physics half (two
-WidowX in one MuJoCo scene with the shared-zone lock in the server, K5) is in progress; the crawl
-slice (this brain on that sim) follows.
-
+**Status (2026-10-11): crawl passes in simulation with mock decisions.** The brain half (H2) and the
+physics half (K5) are done, and the crawl slice runs end to end: a 3-block sort across the table with
+every block handed over through the shared zone, a mid-run correction, a hand near one arm, and STOP
+(`experiments/results/crawl_slice.txt`). Live decisions on the Mac and the real pair remain.
 
 - One harness, one planner. Each plan step names its arm: `pick_and_place(arm=follower, block 5,
   shared_zone)`, then `pick_and_place(arm=leader, block 5, slot 2)`.

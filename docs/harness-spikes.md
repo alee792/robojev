@@ -64,6 +64,7 @@ sim.
 |---|---|---|---|
 | L1 ✔ (mock decisions) | The e12v2 harness driving K2-K4 skills on the MuJoCo WidowX, with ground-truth positions | Done 2026-10-10 (`tests/test_l1_slice.py`, `experiments/results/l1_slice.txt`): 3-block sort 22.9 s; correction mid-carry → hold in 0.10 s, order reversed, no drops; hand mid-carry → pause in 0.11 s, 12 cm clearance, resume 0.17 s after it leaves; STOP mid-carry → parked in 2.5 s, block held. Live decisions on the Mac remain | Here (mock decisions), Mac (live) |
 | L2 | The same with perception (P1-P3) instead of ground truth | Same bar, with noise from real rendering | Mac |
+| L1-pair ✔ (mock decisions) | The two-arm brain on the two-arm physics sim (the crawl slice) | Done 2026-10-11 (`tests/test_crawl_slice.py`, `experiments/results/crawl_slice.txt`): 3-block sort across the table through the zone, 51.5 s, both arms in flight 17.6 s, 0 trips; correction → both arms' decisions in 0.17 / 0.24 s, order reversed, no drops; hand → arm_1 pauses in 0.27 s at 9.9 cm while arm_0 works; STOP parks both in 5.9 s with both blocks held. One bug found: the sim reported headings in the arm's frame, not the common one | Here |
 
 ### Day-one hardware kit (prepare now, run on the arm)
 

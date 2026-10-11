@@ -313,7 +313,8 @@ class ScriptedPerception:
     Pass-through for the whole protocol, plus three things a test wants from the outside:
       - `calls`: every tool call (start/hold/pause/resume/retarget/stop) with the wall time;
       - `history`: the arm's mode, what it holds and every object's (where, z), sampled on a thread
-        at `poll_s` and recorded on change, with the wall time;
+        at `poll_s` and recorded on change, with the wall time; `arm_log` is the same for every arm
+        of the robot, (t, arm, mode, holding) on each change, for a two-arm slice;
       - `hand_when(cond, ...)`: a PERCEPTION OVERRIDE. The MuJoCo server has no hands: nothing in
         its scene is a person and its world() reports none. On the real robot a hand is a perception
         output (P3) laid over the robot's own state, in front of the motion stack: that is where this
@@ -327,6 +328,7 @@ class ScriptedPerception:
         self.inner, self.arm, self.poll_s = server, arm, poll_s
         self.calls: list[tuple[float, str, tuple]] = []
         self.history: list[tuple[float, str, str | None, dict]] = []
+        self.arm_log: list[tuple[float, str, str, str | None]] = []
         self.hand_log: list[tuple[float, str]] = []
         self.min_hand_dist = math.inf
         self._hands: list[HandObs] = []
@@ -409,6 +411,10 @@ class ScriptedPerception:
             rec = (a.mode, a.holding, objs)
             if not self.history or self.history[-1][1:] != rec:
                 self.history.append((now, *rec))
+            for arm in w.arms.values():
+                last = next(((m, h) for t, i, m, h in reversed(self.arm_log) if i == arm.id), None)
+                if last != (arm.mode, arm.holding):
+                    self.arm_log.append((now, arm.id, arm.mode, arm.holding))
             with self._lock:
                 hands, until, pending = list(self._hands), self._hand_until, list(self._pending)
             if hands:

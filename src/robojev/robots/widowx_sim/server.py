@@ -672,6 +672,15 @@ class SimRobotServer(SkillServer):
                                  description="WidowX AI follower in MuJoCo, 6 joints plus a parallel gripper, grasping straight down" + where))
         return Manifest(self.robot, tuple(specs), skills.SPECS, catalog=catalog.CATALOG_VERSION)
 
+    def status(self, skill_id: str):
+        """The skill's status with its heading in the common frame: a skill works in its arm's own
+        frame (its ArmIO), and the protocol's resources speak the common one."""
+        st = super().status(skill_id)
+        a = self.arms.get(st.arm)
+        if st.heading is not None and a is not None and a.base is not scene.ORIGIN:
+            st.heading = a.base.to_common(st.heading)[:2]
+        return st
+
     def world(self) -> WorldState:
         with self._lock:
             held = self._held_by()
