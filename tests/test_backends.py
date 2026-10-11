@@ -77,11 +77,11 @@ def test_decisions_answers_come_back_in_jevs_shape_with_both_confidences():
     assert a["right_now"]["choice"] == "hold" and a["right_now"]["probabilities"] == {"carry_on": 0.04, "hold": 0.9, "pause": 0.06}
     assert a["right_now"]["confidence_api"] == 0.85
     assert a["right_now"]["confidence_formula"] == pytest.approx((0.9 - 1 / 3) / (2 / 3))
-    assert a["right_now"]["confidence"] == a["right_now"]["confidence_formula"]          # default: the formula the gates were set on
+    assert a["right_now"]["confidence"] == 0.85                                         # default: the API's field
     assert a["check.block_2"] == {"type": "noul", "noul": 0.1}
     assert r["in_tok"] == 312 and r["meta"]["request_id"] == "req_1" and r["meta"]["upstream_ms"] == 69.0
-    api = DecisionsAPI(client=client(decisions_reply(ANSWERS)), confidence="api").answer(STATE, QUESTIONS)
-    assert api["answers"]["route"]["confidence"] == 0.9
+    f = DecisionsAPI(client=client(decisions_reply(ANSWERS)), confidence="formula").answer(STATE, QUESTIONS)
+    assert f["answers"]["route"]["confidence"] == pytest.approx(0.9)
 
 
 def test_decisions_answers_feed_combine():
@@ -131,6 +131,7 @@ def test_decisions_budget():
 
 def test_translation_helpers():
     assert choice_confidence({"a": 0.5, "b": 0.5}) == 0.0 and choice_confidence({"a": 1.0}) == 0.0
+    assert choice_confidence({"a": 0.85, "b": 0.05, "c": 0.05, "d": 0.05}) >= 0.8        # not 0.7999999999999999
     with pytest.raises(ValueError):
         to_questions({"s": {"type": "score", "instructions": "x"}})
     out, refused = from_answers([{"type": "choice", "name": "x", "choice": "a", "probabilities": [{"value": "a", "probability": 1.0},

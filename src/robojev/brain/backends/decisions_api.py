@@ -24,8 +24,11 @@ Confidence. Jev's choice confidence is (p_max - 1/n)/(1 - 1/n) over the offered 
 .choice_confidence); the gates in core/combine.py were set on that. The Decisions API returns its own
 `confidence` field next to the distribution and does not document how it is computed. Both are kept
 (`confidence_api`, `confidence_formula`); `confidence` (what combine reads) is the one picked by
-`confidence=` ("formula" by default, so the 0.8 gate means what it meant for Jev; see
-docs/live-results.md for whether the two ever differ).
+`confidence=`. They are the same number: over 1,371 replayed answers the API's field is the formula
+rounded to two places (docs/live-results.md), so the gates set on Jev apply unchanged. The default is
+"api": computed from the two-decimal probabilities, the formula came out 0.7999999999999999 where the
+API says 0.80, putting 13 of 1,520 answers just under a gate; the formula is rounded here for the same
+reason.
 """
 from __future__ import annotations
 
@@ -47,7 +50,8 @@ def choice_confidence(probs: dict) -> float:
     n = len(probs)
     if n < 2:
         return 0.0
-    return max(0.0, (max(probs.values()) - 1 / n) / (1 - 1 / n))
+    # rounded: from two-decimal probabilities the formula gives 0.7999999999999999 where the API says 0.80
+    return round(max(0.0, (max(probs.values()) - 1 / n) / (1 - 1 / n)), 6)
 
 
 def _instructions(ins) -> str:
@@ -108,7 +112,7 @@ def to_input(state, images=()) -> list[dict]:
     return [{"role": "user", "content": [{"type": "input_text", "text": text}, *(image_part(i) for i in images)]}]
 
 
-def from_answers(answers: list, confidence: str = "formula") -> tuple[dict, list]:
+def from_answers(answers: list, confidence: str = "api") -> tuple[dict, list]:
     """The Decisions API's answers array -> (Jev-shaped answers dict, refused question names)."""
     out, refused = {}, []
     for a in answers:
@@ -131,7 +135,7 @@ def from_answers(answers: list, confidence: str = "formula") -> tuple[dict, list
 class DecisionsAPI:
     live = True
 
-    def __init__(self, model: str = MODEL, timeout_s: float = 5.0, confidence: str = "formula",
+    def __init__(self, model: str = MODEL, timeout_s: float = 5.0, confidence: str = "api",
                  max_requests: int | None = None, client: httpx.Client | None = None, url: str = URL):
         if confidence not in ("formula", "api"):
             raise ValueError("confidence is 'formula' or 'api'")
