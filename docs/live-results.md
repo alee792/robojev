@@ -27,7 +27,7 @@ to two places: over 1,371 choice answers the largest difference is 0.005. Both a
 number, so the gates set on Jev apply unchanged. But computed from the two-decimal probabilities, the
 formula comes out 0.7999999999999999 where the API says 0.80, and that put 13 of 1,520 replayed
 answers just under the 0.8 or 0.5 gate. The backend now defaults to the API field and rounds the
-formula (commit after these runs; the runs below used the unrounded formula; no slice decision fell
+formula (commit 2814046; the runs below used the unrounded formula; no slice decision fell
 on a gate edge).
 
 A fifth scenario was added to the slice: **(e)** "hang on a second" typed mid-carry, then "ok, go on"
