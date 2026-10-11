@@ -31,9 +31,9 @@ sim.
 |---|---|---|---|
 | H1 ✔ | Can e12v2's core run on wall-clock time with real async events instead of simulated ticks? | Done 2026-10-10: a new asyncio loop around e12v2's pure functions (now `src/robojev/brain/`), 34 tests with ~150 ms mock latency | Here |
 | H2 ✔ | Can the harness treat "the arm" as a list of one or two arms with no other change? | Done 2026-10-11: plan steps carry `arm` only when the manifest has more than one (single-arm planner requests hash-identical to before); reach checked per arm; parallel steps unless they share an object or slot; one decision per arm per event; STOP parks all. 18 tests on the two-arm stub | Here |
-| H3 | Does the OpenAI Decisions API work as a decision backend, and does the 0.8 gate still work on its confidence? | Replay of e12v2 scenarios: answers within a few points of Jev's, gate catches the same share of wrong answers, p95 under ~400 ms | Mac |
-| H4 | Can the plan check stop sending good plans back (39% today)? | Under 10% of good plans rejected, with planted bad plans still caught | Mac |
-| H5 | Can a transient "wait" stop leaking into the restated task? | No restated task contains a transient command across the scenarios | Mac |
+| H3 ✔ | Does the OpenAI Decisions API work as a decision backend, and does the 0.8 gate still work on its confidence? | Done 2026-10-11 on the Mac (`docs/live-results.md`): its `confidence` field is Jev's formula, so the gate carries over. Accuracy similar (right-now 90% vs Jev 87%; better on user text, 51/53 vs 45/53); latency p50 129 / p95 254 ms in the loop vs Jev 102 / 130, with a 1.1 s outlier; it escalates more (45% vs 31%). Default decider: Jev for now | Mac |
+| H4 ◐ | Can the plan check stop sending good plans back (39% today)? | Measured live: 49% (Jev) / 66% (Decisions API) of good plans sent back, all from the generic route question on a new plan; the per-object plan-check questions never flag a good plan and catch 59/60 planted bad ones. Fix in progress: route a new plan by the plan-check answers alone, as `docs/v2.md` already says | Mac |
+| H5 ◐ | Can a transient "wait" stop leaking into the restated task? | Measured live: leaks whenever a wait reaches the planner (1/3 Decisions API runs; 15 cases in the September logs, every one after a replan). Fix in progress: planner told a restatement holds only the end result, plus a code guard that keeps the previous reading if the new one mentions the transient command | Mac |
 | H6 ✔ | Can the harness record episodes in a LeRobot-style format? | Done 2026-10-10: `recorder.py` (per-tick JSONL in the server) + `lerobot_export.py` (LeRobot v2.1 layout, npz columns until pyarrow is in the venv, per-episode tasks and events, frame-accurate replay check). The committed K2 recording exports to 20 episodes / 7014 frames / 1.1 MB, byte-identical on re-export | Here |
 | M1 ✔ | Is the brain hardware-agnostic? | Done: the same brain runs on the stub's WidowX-like and push-only manifests and on the physics sim; the planner schema and robot description are generated from each, a non-conforming manifest is refused | Here |
 
@@ -55,7 +55,7 @@ sim.
 | P1 | Block positions from the rendered scene camera | Within ~1 cm of MuJoCo ground truth | Mac |
 | P2 | Reading block labels (numbers or letters) from a frame: local detector vs OpenAI vision vs the Decisions API with an image | Right on 95% of frames; latency per update recorded | Mac |
 | P3 | A hand entering the frame, fast enough to pause | Detected within ~300 ms of entering | Mac |
-| V1 | The Decisions API with a camera frame: latency, and accuracy on hand-near-gripper, grasp-succeeded and block-knocked-over, against text-only | Accuracy at least matches text-only on each; latency recorded (sets the visual loop's rate) | Mac |
+| V1 ◐ | The Decisions API with a camera frame: latency, and accuracy on hand-near-gripper, grasp-succeeded and block-knocked-over, against text-only | Preview 2026-10-11: a 512×384 frame costs ~230 tokens and ~20 ms (p50 150 ms). Accuracy not measurable yet: the sim has no person and a drawn-in hand isn't one. Needs real frames (the bay camera, or a hand mesh in the twin) | Mac |
 | V2 | The planner with an annotated frame (object ids drawn on): does it catch planted disagreements between the written state and the picture? | 9 of 10 planted disagreements caught, no false alarms on 10 clean frames | Mac |
 
 ### Closed loop
@@ -153,6 +153,16 @@ a port of its tick loop.
   zone work. Also found: a carry that keeps the pick's wrist yaw can roll the 19 cm gripper bar into
   the folded upper arm at a close destination; the carry now re-aims the closing axis for the
   destination (one-arm trials unchanged).
+- **Live models on the slice (Mac, 2026-10-11; `docs/live-results.md`).** Sort, hand and STOP pass
+  with both deciders; the planner replans in 3.9 s p50 / 6.4 s p95, so a correction holds the arm
+  ~4 s, not the mock's 0.3 s. Three design problems, all brain-side: (1) Jev confidently said
+  "carry on" (0.83) to "actually, highest on the left" because the decision saw the planner's
+  restatement ("ascending numeric order"), not the user's words; with the user's wording it holds 5/5;
+  (2) half of good plans go back to the planner, all from the generic route question on a new plan;
+  (3) a "wait" leaks into the restatement whenever it reaches the planner. Fixes in progress (H4, H5
+  rows and P1 in the next entry). The top risks for the real arm, from that run: a confident wrong
+  answer no gate catches; latency tails and missing hand detection (the code's stop distance is the
+  day-one safety); replan churn.
 - **Sim grasp numbers are logic-checks only.** The sim actuator allows 400 N against a real grip of
   tens of N, and pad friction here is hand-tuned. K2's 19/20 proves phases and geometry; real grasp
   reliability is D1's bar, with the same script pointed at the real backend.
@@ -192,3 +202,7 @@ Small, recorded so they aren't lost; none blocks the next spike.
   travel height with `unreachable`.
 - Across processes, `RobotEvent.t` and `WorldState.t` sit on the server's private clock; expose
   the epoch so a client can place events on its own clock without calibrating.
+- `tests/test_robots_widowx_real.py::test_pick_and_place_end_to_end_and_recorded` failed 2 of 5
+  times on the Mac while a trial run shared the machine (0 of 6 here): the fake driver runs on
+  v1's wall-clock arm thread, so it is load-sensitive. Make the test's waits relative to the fake
+  clock, or mark the timing assertion generous under load.
