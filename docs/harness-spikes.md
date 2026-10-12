@@ -153,6 +153,15 @@ a port of its tick loop.
   zone work. Also found: a carry that keeps the pick's wrist yaw can roll the 19 cm gripper bar into
   the folded upper arm at a close destination; the carry now re-aims the closing axis for the
   destination (one-arm trials unchanged).
+- **The evaluation was mis-weighted, and the task was wrong (2026-10-12).** The hand-to-pause number
+  led every report because it is easy to time, yet a hand near the gripper is the one event where a
+  model adds least (the code stop distance and perception own it); the fast loop's real job is
+  cheap judgment on language and scene events, and that was the weak part live. And the numbered
+  sort into a tray was inherited from old experiments; the demo spells words with letter blocks.
+  Replaced by `src/robojev/battery` (`docs/battery.md`): generated spelling episodes, judged on
+  outcomes only (no expected actions anywhere), with always-LLM and rules-only controls. Offline on
+  the stub the fast loop reacts in 0.1-0.3 s vs always-LLM 0.4-0.8 s with half the planner calls.
+  The battery also found that `object_gone` could never fire in the change detector (fixed).
 - **Live models on the slice (Mac, 2026-10-11; `docs/live-results.md`).** Sort, hand and STOP pass
   with both deciders; the planner replans in 3.9 s p50 / 6.4 s p95, so a correction holds the arm
   ~4 s, not the mock's 0.3 s. Three design problems, all brain-side: (1) Jev confidently said
