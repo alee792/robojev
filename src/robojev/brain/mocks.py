@@ -372,6 +372,10 @@ class ScriptedPerception:
         with self._lock:
             self._pending.append((cond, for_s, dist, speed, notify))
 
+    def hand_now(self, for_s: float = 1.5, dist: float = 0.15, speed: float = 0.1) -> None:
+        """A hand appears now (as `hand_when` would place it), and leaves `for_s` later."""
+        self._place_hand(for_s, dist, speed)
+
     def _place_hand(self, for_s: float, dist: float, speed: float) -> None:
         w = self.inner.world()
         a = w.arms[self.arm]

@@ -145,5 +145,29 @@ def out_path(test_name: str) -> Path:
     return LIVE_DIR / f"slice_{tag()}_{test_name}_{time.strftime('%Y%m%d-%H%M%S')}.jsonl"
 
 
+# ---------------------------------------------------------------- the battery (robojev.battery)
+
+
+def battery_models() -> tuple[str, str]:
+    """The battery's decider and planner names for this run: the same environment switches
+    (ROBOJEV_DECIDER=mock|live|jev|decisions, ROBOJEV_PLANNER=mock|openai). The battery builds the
+    backends itself (robojev.battery.models); offline that is its spelling stand-ins, never the
+    sort oracle."""
+    return DECIDER, PLANNER
+
+
+def battery_split() -> str:
+    """Held-out phrasings whenever anything live runs, else the train half (docs/battery.md)."""
+    return "held_out" if LIVE else "train"
+
+
+def battery_out(test_name: str) -> Path | None:
+    """Where a live battery test writes its episode files (None offline: nothing is kept)."""
+    if not LIVE:
+        return None
+    LIVE_DIR.mkdir(parents=True, exist_ok=True)
+    return LIVE_DIR / f"battery_{tag()}_{test_name}_{time.strftime('%Y%m%d-%H%M%S')}"
+
+
 def dumps(x) -> str:
     return json.dumps(jsonable(x))

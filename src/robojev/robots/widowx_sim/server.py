@@ -170,15 +170,16 @@ class SimWorld:
         self.hands: list[HandObs] = []
         self.arms: list[SimArm] = []
         self.blocks: dict[str, _Body] = {}
-        for b in spec.blocks:
+        labels = [scene.label_of(b) for b in spec.blocks]
+        for b, label, letter in zip(spec.blocks, labels, scene.letter_names(labels)):
             bid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, b.name)
             jid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, b.name + "_free")
             gid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, b.name + "_g")
-            tail = b.name.rsplit("_", 1)[-1]
-            self.blocks[b.name] = _Body(b.name, b.name.replace("_", " "), tail if len(tail) == 1 or tail.isdigit() else None,
+            self.blocks[b.name] = _Body(b.name, scene.block_name(b, letter), label,
                                         bid, gid, model.jnt_qposadr[jid], model.jnt_dofadr[jid], b.size)
         self.geom_to_block = {h.geom: oid for oid, h in self.blocks.items()}
         self.zone = spec.zone()
+        self.spec = spec
         self.places: dict[str, PlaceObs] = spec.places()
 
     # -- reads ---------------------------------------------------------------------------------------
@@ -237,17 +238,39 @@ class SimWorld:
                                  claimed_by=(claimed_by or {}).get(oid))
         return out
 
-    def place_xy(self, pid: str, held_by: dict[str, str]) -> tuple[float, float] | None:
+    def place_xy(self, pid: str, held_by: dict[str, str], arm: str | None = None) -> tuple[float, float] | None:
         """Where to set something down for a place id: a slot's centre, a group's or the zone's first
-        free spot."""
+        free spot, or for the "table" place (scene.FreeSpots) a free spot on the table, in `arm`'s
+        half when the scene has two arms."""
         pl = self.places.get(pid)
         if pl is None:
             return None
         if pl.kind in ("group", "zone"):
             taken = {self.where(oid, held_by) for oid in self.blocks}
             free = next((m for m in pl.members if m not in taken), None)
-            return self.place_xy(free, held_by) if free else None
+            return self.place_xy(free, held_by, arm) if free else None
+        if pl.kind == "table":
+            return self.free_spot(held_by, arm)
         return (pl.x, pl.y)
+
+    def free_spot(self, held_by: dict[str, str], arm: str | None = None) -> tuple[float, float] | None:
+        """The FreeSpots candidate (in `arm`'s half, if the scene has halves) farthest from every
+        block not in a gripper and from every slot, if that is at least the clearance; else None."""
+        fs = self.spec.free_spots
+        if fs is None:
+            return None
+        cands = fs.candidates()
+        if arm is not None and not self.spec.single:
+            x0, x1 = self.spec.half(arm)
+            cands = [c for c in cands if x0 <= c[0] <= x1]
+        others = [(p.x, p.y) for oid in self.blocks if oid not in held_by for p in [self.pose(oid)]]
+        others += [(pl.x, pl.y) for pl in self.places.values() if pl.kind == "slot"]
+        best, best_d = None, 0.0
+        for c in cands:
+            d = min((math.hypot(c[0] - x, c[1] - y) for x, y in others), default=math.inf)
+            if d > best_d:
+                best, best_d = c, d
+        return best if best is not None and best_d >= fs.clearance else None
 
     def occupant(self, pid: str, held_by: dict[str, str]) -> str | None:
         return next((oid for oid in self.blocks if self.where(oid, held_by) == pid), None)
@@ -377,7 +400,7 @@ class SimArm:
         return self.world.where(oid, self.world.held_by())
 
     def place(self, pid: str) -> tuple[float, float] | None:
-        xy = self.world.place_xy(pid, self.world.held_by())
+        xy = self.world.place_xy(pid, self.world.held_by(), self.id)
         return xy if xy is None or self.base is scene.ORIGIN else self.base.to_local(xy)[:2]
 
     def hands(self) -> list[HandObs]:
@@ -699,6 +722,12 @@ class SimRobotServer(SkillServer):
         from now on (common frame). The scene has no hands; hand_over is exercised by injecting one."""
         with self._lock:
             self.sim_world.hands = list(hands)
+
+    def move(self, oid: str, x: float, y: float, yaw: float | None = None) -> None:
+        """Not protocol: a scripted person moves a block on the table (common frame). Nothing is
+        announced; whoever plays the person reports the change as perception would."""
+        with self._lock:
+            self.sim_world.move(oid, x, y, yaw)
 
     def stop(self) -> None:
         evs: list[RobotEvent] = []

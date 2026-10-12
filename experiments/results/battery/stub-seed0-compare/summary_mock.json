@@ -1,0 +1,36 @@
+{
+ "decider": "mock",
+ "planner": "mock",
+ "world": "stub",
+ "n": 20,
+ "mean_score": 0.974,
+ "finish_rate": 0.947,
+ "judged": 19,
+ "time_to_change_s": {
+  "chatter": 0.354,
+  "go_on": 0.151,
+  "hand_near": 0.152,
+  "letter_added": 0.452,
+  "letter_nudged": 0.432,
+  "letter_placed": 0.15,
+  "letter_returned": 0.231,
+  "letter_taken": 0.163,
+  "new_word": 0.151,
+  "stop": 0.006,
+  "wait_go_on": 0.151
+ },
+ "planner_calls": 1.7,
+ "replans": 0.7,
+ "decisions": 9.4,
+ "decision_ms_p50": 150.0,
+ "drops": 0,
+ "hands": 3,
+ "contacts": 0,
+ "stops": 1,
+ "stops_ok": 1,
+ "wall_s": 6.2,
+ "outcomes": {
+  "done": 19,
+  "stopped": 1
+ }
+}

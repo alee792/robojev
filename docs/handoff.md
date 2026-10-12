@@ -463,23 +463,39 @@ send-backs at 0% for both deciders; what it cannot show is whether Jev now holds
 highest on the left".
 
 **Setup:** `git fetch origin claude/widowx-pair && git checkout claude/widowx-pair && uv sync --extra sim --extra mcp`;
-`uv run --frozen --extra mcp python -m pytest -q` (expect ~559 passed, 4 skipped; one known
-load-sensitive test in `test_robots_widowx_real.py`). Read `docs/live-results.md` and
-`tests/live_models.py` (`ROBOJEV_DECIDER=jev|decisions`, `ROBOJEV_PLANNER=openai`).
+`uv run --frozen --extra mcp python -m pytest -q` (expect ~586 passed, 4 skipped). Read
+`docs/live-results.md`, `docs/battery.md` and `tests/live_models.py` (`ROBOJEV_DECIDER=jev|decisions`,
+`ROBOJEV_PLANNER=openai`).
 
-**Run**, recording to `experiments/results/live/` as before, 5 runs each:
-1. Scenario (b), the correction mid-carry, with Jev and with the Decisions API.
-2. Scenario (e), wait then go on, with both.
-3. Then the full five scenarios once per decider, so nothing regressed.
+**Run.** The spelling battery (`docs/battery.md`: the demo's task, generated episodes, judged on
+outcomes only, two controls), live, on held-out phrasings rewritten by a model (`--paraphrase`),
+the same seed for every table so they share their episodes:
+1. `uv run --frozen robojev-battery --world sim --n 10 --seed 1 --decider jev --planner openai --paraphrase`
+2. `uv run --frozen robojev-battery --world sim --n 10 --seed 1 --decider decisions --planner openai --paraphrase`
+3. The two controls with the real planner: `... --decider rules --planner openai --paraphrase` and
+   `... --decider always_llm --planner openai --paraphrase`.
+4. The original re-runs, as a sub-item, recording to `experiments/results/live/` as before, 5 runs
+   each: scenario (b), the correction mid-carry, with Jev and with the Decisions API; scenario (e),
+   wait then go on, with both; then the full five scenarios once per decider, so nothing regressed
+   (`ROBOJEV_DECIDER=jev|decisions ROBOJEV_PLANNER=openai uv run --frozen python -m pytest -s tests/test_slice.py`).
+Each battery run prints its table and writes `experiments/results/battery/<stamp>-sim-<decider>/`
+(one JSONL per episode, a summary JSON); commit those directories.
 
 **Report, with numbers, as a comment on PR #3 and a new section in `docs/live-results.md`:**
-1. On (b): does the decider now say hold, with what confidence, and text-to-hold time; the final
+1. The battery's side-by-side table: Jev, the Decisions API, rules, always_llm, each with the real
+   planner, on the same ten episodes: mean outcome score, finish rate, median time to first change
+   per event kind, planner calls, drops, hand contacts, STOPs. Offline on the stub and the sim the
+   mock decider, rules and always_llm all finish (`docs/battery.md`, "Results so far"); what the
+   live deciders add or cost is the question.
+2. Which episodes a live decider did not finish, and what the row read (the episode files hold the
+   brain's log; say what happened, not what it "should" have decided).
+3. On (b): does the decider now say hold, with what confidence, and text-to-hold time; the final
    order; drops. Before: Jev 0/3 (carry on at 0.83), Decisions API 2/3.
-2. On (e): any wait in the restated task; whether the guard fired (`reading_kept` notes in the log).
-3. Good new plans sent back to the planner across all runs, per decider (offline: 0%).
-4. Anything the fixes made worse: more escalations, slower decisions, a plan the plan check should
+4. On (e): any wait in the restated task; whether the guard fired (`reading_kept` notes in the log).
+5. Good new plans sent back to the planner across all runs, per decider (offline: 0%).
+6. Anything the fixes made worse: more escalations, slower decisions, a plan the plan check should
    have caught and didn't (the Decisions API's plan-check predicate was the weak part offline).
-5. Your default-decider recommendation again, given the new numbers.
+7. Your default-decider recommendation again, given the new numbers.
 
 **Rules:** never print API keys; don't change brain rules to improve numbers; fix real bugs in their
 own commits and say so; commit to `claude/widowx-pair`, no history rewriting.

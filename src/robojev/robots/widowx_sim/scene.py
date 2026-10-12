@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import math
 import os
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -95,6 +96,84 @@ class Block:
     size: float = 0.04                # edge, m
     mass: float = 0.03                # kg (a 4 cm wooden cube)
     rgba: tuple = (0.85, 0.25, 0.2, 1)
+    label: str | None = None          # what is read off it: a letter ("A") or a number; None = from the name's tail
+
+
+def label_of(block: Block) -> str | None:
+    """The label the world reports: the block's own, else the name's tail when it is one character
+    or a number ("block_5" -> "5"), as K1 named things."""
+    if block.label is not None:
+        return block.label
+    tail = block.name.rsplit("_", 1)[-1]
+    return tail if len(tail) == 1 or tail.isdigit() else None
+
+
+def letter_names(labels: Sequence[str | None]) -> list[str]:
+    """How people call each block, in order: "the letter A"; duplicates "the second letter A", "the
+    third letter A"; anything that is not a single letter keeps no name here (None)."""
+    ordinal = ("", "second ", "third ", "fourth ", "fifth ", "sixth ")
+    seen: dict[str, int] = {}
+    out: list[str | None] = []
+    for lab in labels:
+        if lab is None or len(lab) != 1 or not lab.isalpha():
+            out.append(None)
+            continue
+        k = seen.get(lab, 0)
+        seen[lab] = k + 1
+        out.append(f"the {ordinal[k] if k < len(ordinal) else f'{k + 1}th '}letter {lab}")
+    return out
+
+
+def block_name(block: Block, letter_name: str | None) -> str:
+    """The name the world reports for a block: its letter name when it has one, else the K1 form
+    ("block_5" -> "block 5")."""
+    return letter_name if letter_name is not None else block.name.replace("_", " ")
+
+
+# The letter layout (docs/showcase-demo.md: letter cubes in the arm's half, a row of positions in
+# front). Two rows of up to 6 cubes at the slot pitch (8 cm: the jaws open to block + 3 cm), 8 cm
+# apart in x, so any cube can be picked with its neighbours in place. Cubes "not on the table yet"
+# (a letter the person adds later) are parked on the far corner of the table, out of every arm's
+# reach, one spot each so they never overlap.
+LETTER_ROWS = (0.19, 0.27)            # x of the two rows (one arm; the positions row sits at x 0.36)
+LETTER_Y0, LETTER_PITCH, LETTERS_PER_ROW = 0.20, 0.08, 6
+PARK = tuple((0.75, 0.45 - 0.08 * i) for i in range(6))     # off-workspace spots for parked cubes
+
+
+def letter_spots(rows: tuple[float, ...] = LETTER_ROWS, y0: float = LETTER_Y0, pitch: float = LETTER_PITCH,
+                 per_row: int = LETTERS_PER_ROW) -> list[tuple[float, float]]:
+    """Every spot of the letter layout, row by row, left (+y) to right: where `letters` puts the
+    cubes, and where a cube may be put back."""
+    return [(rows[i // per_row], round(y0 - pitch * (i % per_row), 4)) for i in range(len(rows) * per_row)]
+
+
+def letters(pool: str, parked: str = "", rows: tuple[float, ...] = LETTER_ROWS, y0: float = LETTER_Y0,
+            pitch: float = LETTER_PITCH, per_row: int = LETTERS_PER_ROW, park: tuple[tuple[float, float], ...] = PARK,
+            rgba: tuple = (0.9, 0.85, 0.6, 1)) -> list[Block]:
+    """Letter cubes for the letters of `pool` (duplicates allowed: "OPENAAID"), laid out row by row,
+    left (+y) to right, in the arm's half, plus `parked` letters on the park spots. Ids are
+    `letter_<L>` for the first of a letter and `letter_<L>2`, `letter_<L>3`... for its duplicates
+    (across pool and parked); `label` is the letter; the world names them "the letter A", "the
+    second letter A" (letter_names)."""
+    if len(pool) > len(rows) * per_row:
+        raise ValueError(f"{len(pool)} letters do not fit {len(rows)} rows of {per_row}")
+    if len(parked) > len(park):
+        raise ValueError(f"{len(parked)} parked letters but {len(park)} park spots")
+    counts: dict[str, int] = {}
+    out: list[Block] = []
+
+    def make(ch: str, xy: tuple[float, float]) -> Block:
+        if len(ch) != 1 or not ch.isalpha():
+            raise ValueError(f"a letter cube needs one letter, not {ch!r}")
+        ch = ch.upper()
+        k = counts.get(ch, 0) + 1
+        counts[ch] = k
+        return Block(f"letter_{ch}" + (str(k) if k > 1 else ""), xy, label=ch, rgba=rgba)
+    for ch, xy in zip(pool, letter_spots(rows, y0, pitch, per_row)):
+        out.append(make(ch, xy))
+    for i, ch in enumerate(parked):
+        out.append(make(ch, park[i]))
+    return out
 
 
 @dataclass
@@ -108,6 +187,7 @@ class Tray:
     id: str = "tray"
     slot_id: str = "slot"
     label: str = "tray slot"                       # how a person calls one: "tray slot 3", "staging spot 1"
+    suffix: str = ""                               # after the index: "position 2, counting from the left"
 
     def slot_xy(self, i: int) -> tuple[float, float]:
         return (self.origin[0] + i * self.step[0], self.origin[1] + i * self.step[1])
@@ -120,12 +200,39 @@ class Tray:
             x, y = self.slot_xy(i)
             tag = " (the leftmost slot)" if i == 0 else " (the rightmost slot)" if i == self.n - 1 else ""
             sid = f"{self.slot_id}_{i}"
-            out[sid] = PlaceObs(sid, f"{self.label} {i}{tag}", "slot", x, y, 1, radius=self.slot / 2)
+            out[sid] = PlaceObs(sid, f"{self.label} {i}{self.suffix}{tag}", "slot", x, y, 1, radius=self.slot / 2)
         ids = tuple(out)
         cx = sum(out[i].x for i in ids) / len(ids)
         cy = sum(out[i].y for i in ids) / len(ids)
         out[self.id] = PlaceObs(self.id, f"the {self.id} (any free slot)", "group", cx, cy, self.n, ids)
         return out
+
+
+def positions(n: int = 6, origin: tuple[float, float] = (0.36, 0.20), step: tuple[float, float] = (0.0, -0.08)) -> Tray:
+    """The row of `n` positions a word is spelled into (docs/showcase-demo.md), left (+y) to right:
+    the K1 tray with its ids kept (`slot_i`, group `tray`) and its slots named "position i, counting
+    from the left"."""
+    return Tray(origin, step, n, label="position", suffix=", counting from the left")
+
+
+@dataclass(frozen=True)
+class FreeSpots:
+    """The "table" place: a free spot on the table, chosen when something is to be put down there
+    (SimWorld.free_spot) from a grid of candidates, the one farthest from every block, at least
+    `clearance` from each (a 4 cm cube's half-diagonal plus the open jaws' reach past it). With two
+    arms the candidates are filtered to the asking arm's half. As a PlaceObs it is kind "table",
+    capacity 0, centred on the grid."""
+    xs: tuple[float, ...] = (0.16, 0.20, 0.24, 0.28, 0.32)
+    ys: tuple[float, ...] = tuple(round(0.24 - 0.04 * i, 2) for i in range(13))
+    clearance: float = 0.075
+    id: str = "table"
+
+    def candidates(self) -> list[tuple[float, float]]:
+        return [(x, y) for x in self.xs for y in self.ys]
+
+    def place(self) -> PlaceObs:
+        return PlaceObs(self.id, "the table (a free spot)", "table", sum(self.xs) / len(self.xs), sum(self.ys) / len(self.ys), 0,
+                        radius=max(self.xs[-1] - self.xs[0], self.ys[0] - self.ys[-1]) / 2)
 
 
 @dataclass(frozen=True)
@@ -191,6 +298,7 @@ class SceneSpec:
     spacing: float = PAIR_SPACING
     zone_width: float | None = PAIR_ZONE_WIDTH
     stage: Tray | None = None
+    free_spots: FreeSpots | None = None      # a "table" place for putting things down anywhere free (the spelling demo)
 
     @property
     def single(self) -> bool:
@@ -230,6 +338,8 @@ class SceneSpec:
         z = self.zone()
         if z is not None:
             out.update(z.places())
+        if self.free_spots is not None:
+            out[self.free_spots.id] = self.free_spots.place()
         return out
 
     def trays(self) -> tuple[Tray, ...]:

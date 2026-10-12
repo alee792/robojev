@@ -179,6 +179,8 @@ later. One line: standard skills and a reactive loop, on top of MHS, exposed thr
    - `robojev.recording`: the server-side JSONL recorder and the LeRobot-style export.
    - `robojev.conformance` (`robojev-conformance`): N trials of a standard skill judged from the
      world state; D1 points it at the real backend.
+   - `robojev.battery` (`robojev-battery`): the spelling demo's evaluation battery (`docs/battery.md`):
+     generated episodes, judged on outcomes only, the fast loop beside two controls.
    - `robojev.arm`, `robojev.config`, `robojev.perception`: v1's motion code (`Mover`, `Workspace`,
      the effort watchdog; `RealArm` backs the real server at D1), limits, and perception, reused.
    - v1's per-tick system (`v1_brain`, `loop`, `skills`, `questions`, `state`, `world`, `events`,

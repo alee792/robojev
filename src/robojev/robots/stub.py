@@ -292,6 +292,15 @@ class StubRobotServer:
                              if len(self._arms) > 1 else f"a person's hand appeared {dist:.2f} m from the gripper")]
         self.at(when, "person's hand appears", act)
 
+    def move(self, oid: str, x: float, y: float, yaw: float | None = None) -> None:
+        """Not protocol: a scripted person moves an object to (x, y) now, into whichever slot or bin
+        holds that point, else onto the table. Nothing is announced (unlike person_moves): whoever
+        plays the person reports it, as perception would. Same shape as the sim server's move()."""
+        with self._lock:
+            o = self._objs[oid]
+            o.x, o.y = x, y
+            o.where = self._landed(o)
+
     def trip(self, when, text: str = "effort limit exceeded", arm: str = "arm_0") -> None:
         """The safety filter trips on `arm`: its skill holds where it is and the arm reports "tripped"."""
         def act() -> list[RobotEvent]:
@@ -502,14 +511,21 @@ class StubRobotServer:
             b = self._objs[r.args["onto"]]
             return (b.x, b.y)
         p = self._places[r.args["place"]]
-        if p.kind == "table":                     # a free spot near the table place's centre, in this arm's reach
-            if _inside(self._specs[r.arm].workspace, p.x, p.y):
-                n = sum(1 for o in self._objs.values() if o.where == "table")
-                return (p.x, p.y + 0.06 * n)
-            hx = self._homes[r.arm][0]            # out of reach: in front of the arm's own home instead
-            n = sum(1 for o in self._objs.values() if o.where == "table" and abs(o.x - hx) < 0.05)
-            return (hx, p.y + 0.06 * n)
+        if p.kind == "table":                     # a free spot: near the table place's centre, in this arm's reach
+            cx = p.x if _inside(self._specs[r.arm].workspace, p.x, p.y) else self._homes[r.arm][0]
+            return self._free_spot(r.arm, cx, p.y, but=r.args.get("object"))
         return (p.x, p.y)
+
+    def _free_spot(self, arm: str, cx: float, cy: float, but: str | None, pitch: float = 0.06) -> tuple[float, float]:
+        """The grid point around (cx, cy), nearest first, inside the arm's workspace with no other
+        object within `pitch`; failing all, the centre."""
+        others = [(o.x, o.y) for o in self._objs.values() if o.id != but and not o.where.startswith("gripper:")]
+        cands = sorted(((cx + i * pitch, cy + j * pitch) for i in range(-2, 3) for j in range(-4, 5)),
+                       key=lambda c: (c[0] - cx) ** 2 + (c[1] - cy) ** 2)
+        for x, y in cands:
+            if _inside(self._specs[arm].workspace, x, y) and all(math.hypot(x - ox, y - oy) >= pitch for ox, oy in others):
+                return (x, y)
+        return (cx, cy)
 
     def _finish(self, r: _Run) -> RobotEvent:
         oid = r.args.get("object")
