@@ -202,7 +202,8 @@ Small, recorded so they aren't lost; none blocks the next spike.
   travel height with `unreachable`.
 - Across processes, `RobotEvent.t` and `WorldState.t` sit on the server's private clock; expose
   the epoch so a client can place events on its own clock without calibrating.
-- `tests/test_robots_widowx_real.py::test_pick_and_place_end_to_end_and_recorded` failed 2 of 5
-  times on the Mac while a trial run shared the machine (0 of 6 here): the fake driver runs on
-  v1's wall-clock arm thread, so it is load-sensitive. Make the test's waits relative to the fake
-  clock, or mark the timing assertion generous under load.
+- ~~`test_robots_widowx_real.py` was load-sensitive~~: fixed 2026-10-12. The test counted recorded
+  frames, which only held when the machine kept up with real time (a starved box dropped the 50 Hz
+  policy to 11 Hz). The real-arm tests now run on a lockstep virtual clock that only the test
+  advances (`widowx_real/clock.py`); assertions unchanged, the frame trace byte-identical every run,
+  10/10 under the load that reproduced the failure, and the file runs in 11 s instead of 50.

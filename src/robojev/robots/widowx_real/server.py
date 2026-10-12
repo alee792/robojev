@@ -14,7 +14,10 @@ Layers, top down:
 
 Time: the server's clock is wall time since `open()`. `tick()` runs one policy period; the thread
 `open()` starts calls it at `policy_hz`. `run_until`/`run_for` wait on the wall clock, so
-conformance's trial loop reads the same on both servers.
+conformance's trial loop reads the same on both servers. Tests may pass a `clock.LockstepClock`
+instead: no policy thread is started, `run_until`/`run_for` tick the policies themselves and step
+virtual time, and RealArm's I/O thread follows the same virtual time (see clock.py), so a test's
+outcome does not depend on how loaded the machine is.
 
 What is not the sim's, and why:
   - `world()` is bookkeeping, not observation (world.StaticWorld): the arm is trusted to have done
@@ -41,6 +44,7 @@ from robojev.config import Config
 from robojev.protocol import ArmObs, ArmSpec, GripperSpec, HandObs, Manifest, Recorder, RobotEvent, WorldState
 from robojev.robots.widowx_real.arm import (ARM_ID, BASE_FRAME, MAX_WIDTH, REAL_LIMITS, REAL_PARAMS, TRAVEL_ABOVE_TABLE,
                                             OrientingDriver, RealArmIO, RealLimits)
+from robojev.robots.widowx_real.clock import WALL, LockstepClock, WallClock
 from robojev.robots.widowx_real.world import WorldSource
 from robojev.robots.widowx_sim import skills
 from robojev.robots.widowx_sim.base import SkillServer
@@ -80,8 +84,10 @@ class RealRobotServer(SkillServer):
     def __init__(self, ip: str, world_source: WorldSource, cfg: Config, recorder: Recorder | None = None,
                  driver_factory: Callable | None = None, *, heartbeat_timeout_s: float = 0.5,
                  params: skills.Params = REAL_PARAMS, limits: RealLimits = REAL_LIMITS, policy_hz: float = POLICY_HZ,
-                 robot: str = ROBOT, arrive_tol: float | None = None, live_timeout_s: float = LIVE_TIMEOUT_S):
+                 robot: str = ROBOT, arrive_tol: float | None = None, live_timeout_s: float = LIVE_TIMEOUT_S,
+                 clock: WallClock | LockstepClock = WALL):
         super().__init__(recorder, params, heartbeat_timeout_s)
+        self.clock = clock
         self.ip, self.cfg, self.limits, self.robot = ip, cfg, limits, robot
         self.world_src = world_source
         self.world_view = world_source
@@ -112,7 +118,7 @@ class RealRobotServer(SkillServer):
 
     @property
     def t(self) -> float:
-        return 0.0 if self._t0 is None else time.monotonic() - self._t0
+        return 0.0 if self._t0 is None else self.clock.now() - self._t0
 
     def open(self) -> "RealRobotServer":
         """Connect, stage (RealArm.start: joint move to STAGED, blocking move to the hover start),
@@ -126,37 +132,42 @@ class RealRobotServer(SkillServer):
             raise PreflightError("preflight: " + "; ".join(problems))
         if self.arm is not None:
             return self
-        self._t0 = time.monotonic()
+        self._t0 = self.clock.now()
 
         def factory(ip: str):
-            self.orient = OrientingDriver(self._driver_factory(ip), self.limits.yaw_rate)
+            self.orient = OrientingDriver(self._driver_factory(ip), self.limits.yaw_rate, clock=self.clock.now)
             return self.orient
 
         self.arm = RealArm(self.cfg, self.ip, driver_factory=factory)
         self.arm.start()
+        self.clock.adopt(self.arm._thread)
         if not self.arm.pitch_ok:
+            self.clock.release()
             self.arm.stop()
             raise RuntimeError("the arm did not reach the hover orientation; RealArm would stream the reached one and never "
                                "the 90 deg pitch the grasps need: " + "; ".join(t for _, t in self.arm.events))
-        deadline = time.monotonic() + self.live_timeout_s
+        deadline = self.clock.now() + self.live_timeout_s
         while self.arm.snapshot().status != "live":
             s = self.arm.snapshot()
             if s.status in ("error", "stopped"):
                 raise RuntimeError(f"the arm's I/O thread ended during staging: {s.status} {s.error or ''}".strip())
-            if time.monotonic() > deadline:
+            if self.clock.now() > deadline:
+                self.clock.release()
                 self.arm.stop()
                 raise RuntimeError(f"the arm did not read live within {self.live_timeout_s:.0f} s (status {s.status})")
-            time.sleep(0.02)
+            self.clock.sleep(0.02)
         io = RealArmIO(self.arm, self.orient, self.world_src, self.cfg, self.limits, ARM_ID, self._arrive_tol)
         self.arms = {ARM_ID: io}
         self._record_arm_events()
-        self._thread = threading.Thread(target=self._loop, name="real-robot", daemon=True)
-        self._thread.start()
+        if not self.clock.stepped:
+            self._thread = threading.Thread(target=self._loop, name="real-robot", daemon=True)
+            self._thread.start()
         return self
 
     def close(self) -> None:
         """Stop the policy thread and park the arm (if STOP has not already)."""
         self._stop_evt.set()
+        self.clock.release()                          # RealArm.stop() joins its thread and parks on the wall clock
         if self._thread is not None:
             self._thread.join(timeout=2.0)
             self._thread = None
@@ -189,16 +200,32 @@ class RealRobotServer(SkillServer):
         self._emit(evs)
 
     def run_for(self, seconds: float) -> None:
-        time.sleep(max(0.0, seconds))
+        if not self.clock.stepped:
+            time.sleep(max(0.0, seconds))
+            return
+        end = self.clock.now() + seconds
+        while self.clock.now() < end:
+            self._step()
 
     def run_until(self, cond: Callable[[], bool], timeout_s: float) -> bool:
-        """Wait (wall clock) until `cond()` holds or `timeout_s` has passed. True if it held."""
-        deadline = time.monotonic() + timeout_s
-        while time.monotonic() < deadline:
+        """Wait until `cond()` holds or `timeout_s` has passed (on the server's clock). True if it held.
+        On a stepped clock this ticks the policies itself, one period per check."""
+        deadline = self.clock.now() + timeout_s
+        while self.clock.now() < deadline:
             if cond():
                 return True
-            time.sleep(self.tick_s)
+            if self.clock.stepped:
+                self._step()
+            else:
+                time.sleep(self.tick_s)
         return cond()
+
+    def _step(self) -> None:
+        """One policy period on a stepped clock: tick, then let `tick_s` of virtual time pass (the arm's
+        I/O thread runs every tick of its own that falls due in it)."""
+        if not self._stop_evt.is_set():
+            self.tick()
+        self.clock.sleep(self.tick_s)
 
     def finished(self, skill_id: str) -> Callable[[], bool]:
         return lambda: self._runs[skill_id].finished
@@ -246,6 +273,7 @@ class RealRobotServer(SkillServer):
                 return
             self._fail_all("stopped: STOP pressed; the arm is parking", evs)
             self._stop_evt.set()
+            self.clock.release()                      # RealArm.stop() joins its thread and parks on the wall clock
             if self.arm is not None and self._parking is None:
                 self._parking = threading.Thread(target=self.arm.stop, name="real-robot-park", daemon=True)
                 self._parking.start()

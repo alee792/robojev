@@ -147,15 +147,17 @@ class FakeDriverFactory:
     """A `driver_factory` for RealArm / RealRobotServer that builds a FakeTrossenDriver over `world`
     (a StaticWorld or a callable returning the current one) and keeps the last one built in
     `driver`, so a test can set its `efforts` or inspect its `calls`. Building one installs the
-    trossen_arm stand-in when the real package is absent."""
+    trossen_arm stand-in when the real package is absent. `clock` is the drivers' time source (a
+    test on a `clock.LockstepClock` passes its `now`)."""
 
-    def __init__(self, world: StaticWorld | Callable[[], StaticWorld] | None = None):
+    def __init__(self, world: StaticWorld | Callable[[], StaticWorld] | None = None, clock: Callable[[], float] = time.perf_counter):
         install_fake_trossen_arm()        # RealArm.start() imports trossen_arm before it calls the factory
         self.world = world
+        self.clock = clock
         self.driver: FakeTrossenDriver | None = None
 
     def __call__(self, ip: str) -> FakeTrossenDriver:
-        self.driver = FakeTrossenDriver(self.world)
+        self.driver = FakeTrossenDriver(self.world, clock=self.clock)
         self.driver.configure(None, None, ip, True)
         return self.driver
 

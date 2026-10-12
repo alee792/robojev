@@ -7,5 +7,6 @@ in the docstrings and collected in docs/day-one.md.
 
 Modules: orientation (yaw to the driver's angle-axis), world (typed-in block positions with the
 server's own grasp/place bookkeeping; a perception stub), arm (the ArmIO adapter and the real-arm
-tolerances), fake_driver (the driver stand-in), server (RealRobotServer).
+tolerances), fake_driver (the driver stand-in), clock (wall time, or lockstep virtual time for tests),
+server (RealRobotServer).
 """

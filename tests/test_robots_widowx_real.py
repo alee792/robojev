@@ -1,17 +1,21 @@
 """D1: the real WidowX server (robots/widowx_real) built and tested against the fake driver. The
-policies are the sim's; the arm is v1's RealArm with FakeTrossenDriver under it, so these tests run
-on the wall clock (RealArm's own thread does) and take a few seconds each. Tests of the real driver
-path skip when trossen_arm is not installed."""
+policies are the sim's; the arm is v1's RealArm with FakeTrossenDriver under it. The `server`
+fixture runs the server, RealArm's own I/O thread and the fake driver on one virtual clock that only
+the test advances (robots/widowx_real/clock.py: `run_until`/`run_for` tick the policies and step
+time), so every outcome, down to the number of frames recorded, is the same however loaded the
+machine is; on the wall clock a busy machine starved the 50 Hz policy thread and the 20 Hz arm thread.
+The threaded wall-clock server is exercised by the pre-flight and conformance tests. Tests of the real
+driver path skip when trossen_arm is not installed."""
 from __future__ import annotations
 
 import json
 import math
-import time
 from dataclasses import replace
 
 import numpy as np
 import pytest
 
+import robojev.arm.real
 from robojev import catalog
 from robojev import conformance as trials
 from robojev.arm.real import STAGED, SLEEP
@@ -20,6 +24,7 @@ from robojev.recording.recorder import JsonlRecorder
 from robojev.robots.widowx_real import orientation as ori
 from robojev.robots.widowx_real.arm import (ARM_ID, MAX_WIDTH, OPEN_Q_MIN, REAL_PARAMS, TRAVEL_ABOVE_TABLE, OrientingDriver,
                                             day_one_config)
+from robojev.robots.widowx_real.clock import LockstepClock
 from robojev.robots.widowx_real.fake_driver import (GRIP_MAX, FakeDriverFactory, FakeTrossenDriver, install_fake_trossen_arm,
                                                     real_driver_available)
 from robojev.robots.widowx_real.server import PreflightError, RealRobotServer
@@ -39,13 +44,15 @@ def config():
 
 
 @pytest.fixture
-def server():
+def server(monkeypatch):
     made = []
 
     def make(blocks=(BLOCK,), recorder=None, **kw) -> RealRobotServer:
+        clock = LockstepClock()
+        monkeypatch.setattr(robojev.arm.real, "time", clock.time)    # RealArm reads its module's `time`; undone after close
         world = StaticWorld(list(blocks), table_z=TABLE_Z)
-        fac = FakeDriverFactory(lambda: srv.world_src)
-        srv = RealRobotServer("127.0.0.1", world, config(), recorder=recorder, driver_factory=fac, **kw)
+        fac = FakeDriverFactory(lambda: srv.world_src, clock=clock.now)
+        srv = RealRobotServer("127.0.0.1", world, config(), recorder=recorder, driver_factory=fac, clock=clock, **kw)
         srv.factory = fac
         srv.events = []
         srv.subscribe(srv.events.append)
@@ -291,12 +298,12 @@ def test_hold_and_resume_mid_carry_keep_the_grip(server):
     sid = srv.start(ARM_ID, "pick_and_place", ARGS)
     assert srv.run_until(in_phase(srv, sid, "carry"), 15) and phase(srv, sid) == "carry"
     srv.hold(ARM_ID)
-    time.sleep(0.15)
+    srv.run_for(0.15)
     sp0 = srv.arm.mover.setpoint
     st = srv.status(sid)
     assert st.state == "holding" and st.phase_text.startswith("held: carrying block_1")
     assert srv.world().arms[ARM_ID].mode == "holding" and srv.world().objects["block_1"].where == f"gripper:{ARM_ID}"
-    time.sleep(0.4)
+    srv.run_for(0.4)
     assert srv.arm.mover.setpoint == sp0 and srv.arm.mover.frozen         # not moving
     assert srv.status(sid).phase == "carry"
     srv.resume(ARM_ID)
@@ -317,11 +324,11 @@ def test_effort_trip_holds_and_reports_a_safety_trip(server):
     assert st.state == "holding" and st.phase_text.startswith("safety trip (external force deviation")
     assert srv.world().arms[ARM_ID].mode == "tripped"
     sp0 = srv.arm.mover.setpoint
-    time.sleep(0.3)
+    srv.run_for(0.3)
     assert srv.arm.mover.setpoint == sp0 and srv.arm.mover.frozen
     assert [e.kind for e in srv.events].count("safety_trip") == 1               # one trip, not one per tick
     srv.factory.driver.efforts = [0.0] * 6
-    time.sleep(0.3)
+    srv.run_for(0.3)
     assert srv.status(sid).state == "holding"                                   # a fresh reading resumes nothing
     srv.resume(ARM_ID)
     assert srv.run_until(lambda: srv.arm.mover.setpoint != sp0, 2.0)
@@ -332,12 +339,12 @@ def test_heartbeat_loss_holds_every_arm(server):
     srv = server(heartbeat_timeout_s=0.3)
     sid = srv.start(ARM_ID, "pick_and_place", ARGS)
     srv.heartbeat()
-    time.sleep(0.15)
+    srv.run_for(0.15)
     assert srv.status(sid).state == "running" and not srv.events
     assert srv.run_until(lambda: any(e.kind == "heartbeat_lost" for e in srv.events), 1.0)
     assert srv.status(sid).state == "holding" and srv.world().arms[ARM_ID].mode == "holding"
     srv.heartbeat()
-    time.sleep(0.1)
+    srv.run_for(0.1)
     assert srv.status(sid).state == "holding"                                   # a heartbeat does not resume
     srv.resume(ARM_ID)
 
