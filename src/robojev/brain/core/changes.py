@@ -69,6 +69,7 @@ class ChangeDetector:
             if p is None:
                 if oid not in self.missing:
                     out.append({"what": "object_appeared", "object": oid, "to": o.where})
+                    self.ref[oid] = (o.x, o.y, o.where)      # anchor it, so a later disappearance is counted
                 self.missing.pop(oid, None)
                 continue
             self.missing.pop(oid, None)
@@ -89,11 +90,17 @@ class ChangeDetector:
                     self.cand.pop(oid, None)
             else:
                 self.cand.pop(oid, None)
-        for oid in prev.objects:
-            if oid not in state.objects and oid not in touched:
-                self.missing[oid] = self.missing.get(oid, 0) + 1
-                if self.missing[oid] == 3:   # gone for 3 ticks, not a perception drop-out
-                    out.append({"what": "object_gone", "object": oid, "from": prev.objects[oid].where})
+        # Count absence against the last-known set (self.ref), not prev.objects: the frame after an
+        # object vanishes no longer lists it, so a prev-based count stopped at 1 and "gone" never fired.
+        for oid, r in list(self.ref.items()):
+            if oid in state.objects or oid in touched:
+                continue
+            self.missing[oid] = self.missing.get(oid, 0) + 1
+            if self.missing[oid] == 3:   # gone for 3 ticks, not a perception drop-out
+                out.append({"what": "object_gone", "object": oid, "from": r[2]})
+                self.ref.pop(oid, None)
+                self.missing.pop(oid, None)
+                self.cand.pop(oid, None)
         key = self._hkey(state, path_to)
         if key != self.hand_key:
             old = self.hand_key
