@@ -297,6 +297,13 @@ def _paraphrased(ep: Episode, para: Paraphrase) -> Episode:
                    tuple(events), text(ep.reply, "reply"), ep.expected_word, ep.arms)
 
 
+def episode_from_dict(d: dict) -> Episode:
+    """An Episode back from its asdict() form (an episodes file, or the `episode` line of an episode JSONL)."""
+    d = {k: v for k, v in d.items() if k != "type"}
+    events = tuple(Event(**{**e, "when": When(**e["when"])}) for e in d["events"])
+    return Episode(**{**d, "events": events})
+
+
 def episodes(n: int, seed: int, split: str = "train", grammar: Grammar | None = None,
              paraphrase: Paraphrase | None = None) -> list[Episode]:
     return Generator(grammar).episodes(n, seed, split, paraphrase)

@@ -6,21 +6,23 @@
     uv run --frozen robojev-battery --world stub --arms 2 --n 5 --decider mock
 
 Phrasings: `train` offline, `held_out` whenever a live decider or planner runs or --paraphrase is on
-(the Mac), unless --phrasings says otherwise. Episode files go under --out (default
-experiments/results/battery/<stamp>-<world>-<decider>/).
+(the Mac), unless --phrasings says otherwise. Every run writes the episodes it ran to episodes.json in
+its directory; --episodes FILE runs those again (the same paraphrases for every decider). Episode
+files go under --out (default experiments/results/battery/<stamp>-<world>-<decider>/).
 """
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 import time
 from pathlib import Path
 
-from .generate import Grammar
+from .generate import Grammar, episode_from_dict, episodes
 from .models import DECIDERS, PLANNERS, is_live
 from .paraphrase import hook
 from .phrasings import SPLITS
-from .run import CONTROLS, WORLDS, Options, compare, run, table
+from .run import CONTROLS, WORLDS, Options, _jsonable, compare, run, table
 
 RESULTS = Path(__file__).resolve().parents[3] / "experiments" / "results" / "battery"
 
@@ -39,6 +41,9 @@ def parse(argv=None) -> argparse.Namespace:
     ap.add_argument("--paraphrase", action="store_true", help="rewrite every line with a model first (OPENAI_API_KEY)")
     ap.add_argument("--phrasings", choices=SPLITS, default=None, help="default: held_out when live or paraphrasing, else train")
     ap.add_argument("--opening", default=None, help="the word the opening ask spells (default OPENAI)")
+    ap.add_argument("--episodes", type=Path, default=None,
+                    help="run the episodes in this file (another run's episodes.json) instead of generating them: "
+                         "paraphrases are model calls, so this is how several runs share the same wording")
     ap.add_argument("--quiet", action="store_true")
     return ap.parse_args(argv)
 
@@ -50,9 +55,17 @@ def main(argv=None) -> int:
     out = a.out or RESULTS / f"{time.strftime('%Y%m%d-%H%M%S')}-{a.world}-{'compare' if a.compare else a.decider}"
     grammar = Grammar(arms=a.arms) if a.opening is None else Grammar(opening=a.opening, arms=a.arms)
     opts = Options(a.n, a.seed, a.world, a.decider, a.planner, a.arms, split, out, hook(a.paraphrase), grammar, quiet=a.quiet)
-    print(f"battery: {a.n} episodes, seed {a.seed}, {a.world}, {a.arms} arm(s), {split} phrasings"
-          f"{', paraphrased' if a.paraphrase else ''}; files under {out}")
-    summaries = compare(opts) if a.compare else [run(opts)]
+    if a.episodes is None:
+        print(f"battery: {a.n} episodes, seed {a.seed}, {a.world}, {a.arms} arm(s), {split} phrasings"
+              f"{', paraphrased' if a.paraphrase else ''}; files under {out}")
+    if a.episodes is not None:
+        eps = [episode_from_dict(d) for d in json.loads(a.episodes.read_text())]
+        print(f"battery: {len(eps)} episodes from {a.episodes}, {a.world}, {a.arms} arm(s); files under {out}")
+    else:
+        eps = episodes(opts.n, opts.seed, opts.split, opts.grammar, opts.paraphrase)
+    Path(out).mkdir(parents=True, exist_ok=True)
+    (Path(out) / "episodes.json").write_text(json.dumps(_jsonable(eps), indent=1))
+    summaries = compare(opts, eps=eps) if a.compare else [run(opts, eps)]
     print()
     print(table(summaries))
     return 0

@@ -365,3 +365,10 @@ def test_generated_episodes_on_the_physics_sim(kinds, request):
     assert r.score >= 0.9, (r.row, r.word)
     assert r.drops == 0
     assert all(e.what != "skipped" for e in r.events), r.notes
+
+
+def test_episodes_round_trip_through_json_so_runs_can_share_paraphrases():
+    from robojev.battery.generate import episode_from_dict
+    from robojev.battery.run import _jsonable
+    eps = episodes(12, 1, "held_out")
+    assert [episode_from_dict(d) for d in json.loads(json.dumps(_jsonable(eps)))] == eps
