@@ -1,0 +1,25 @@
+{
+ "decider": "rules",
+ "planner": "openai",
+ "world": "sim",
+ "n": 1,
+ "mean_score": 1.0,
+ "finish_rate": 1.0,
+ "judged": 1,
+ "time_to_change_s": {
+  "new_word": 0.004
+ },
+ "planner_calls": 2,
+ "replans": 1,
+ "decisions": 8,
+ "decision_ms_p50": 1.0,
+ "drops": 0,
+ "hands": 0,
+ "contacts": 0,
+ "stops": 0,
+ "stops_ok": 0,
+ "wall_s": 52.6,
+ "outcomes": {
+  "done": 1
+ }
+}

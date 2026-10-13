@@ -1,0 +1,14 @@
+# Recorded runs under the rules added after the live re-run (offline count; module doc has the columns)
+
+| run | files | step_done | step_done replans | routine: now local | paused_idle re-asks | stayed paused | hand (code resumes) | other (user asked) | plans sent back | unsure-only (spare) | words: unsure lines | failed replans |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| battery jev | 10 | 56 | 0 | 0 | 0 | 0 | 0 | 0 | 4 | 3 | 2 | 0 |
+| battery decisions | 10 | 59 | 17 | 0 | 2 | 2 | 0 | 2 | 7 | 5 | 4 | 0 |
+| battery rules | 10 | 59 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| battery always_llm | 10 | 66 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 1 |
+| battery rules-ep7-after-fix | 1 | 5 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| slice decisions | 15 | 24 | 6 | 0 | 64 | 55 | 0 | 55 | 0 | 0 | 2 | 2 |
+| slice jev | 15 | 42 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+
+- battery decisions: episodes with 2+ paused_idle re-asks that stayed paused: ep_1_006_decisions.jsonl (2)
+- slice decisions: episodes with 2+ paused_idle re-asks that stayed paused: slice_decisions-openai_test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task_20261013-110038.jsonl.gz (12), slice_decisions-openai_test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task_20261013-110248.jsonl.gz (10), slice_decisions-openai_test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task_20261013-110444.jsonl.gz (10), slice_decisions-openai_test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task_20261013-110630.jsonl.gz (12), slice_decisions-openai_test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task_20261013-110830.jsonl.gz (10), slice_decisions-openai_test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task_20261013-111332.jsonl.gz (10)

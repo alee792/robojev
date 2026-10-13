@@ -468,3 +468,157 @@ and each has a test that fails without it. What only a live run can show: the sp
 with the count question, the post-correction route with `user_words_in_task`, and whether the
 remark-as-hand-pause rule misfires on a correction typed while a hand is in view (then the pause
 ends when the hand goes, which is what a hand pause should do; the correction's replan is separate).
+
+## Handoff 8: the battery and the slice under the liveness rules (2026-10-13, live)
+
+The six rules of the previous section, live. AC power, `caffeinate -dims`, and a TLS check to both
+providers before every run (at 10:38 something on the network started intercepting TLS, "self-signed
+certificate", which killed the first always_llm attempt from its episode 2 and the first slice
+block; both were run again whole; the failed attempt's log is `pytest_slice_runs_20261013_tls_failed.txt`).
+All four battery tables ran the previous run's `episodes.json`, so the episodes and their
+paraphrases are the same as section 1 above, word for word. Files: `experiments/results/battery/20261013-1*-sim-*/`,
+`live_tables_20261013-100540.txt`, `experiments/results/live/slice_*20261013-1[01]*.jsonl.gz`,
+`pytest_slice_runs_20261013.txt`, `results/battery/replay_rules_after_20261013-095000.txt`.
+
+Two fixes in their own commits: `replay_rules.py --after STAMP` (16ed045; it grouped by decider only,
+so `--write` would have merged this run with the last and overwritten its table), and a brain bug
+(a597da3, below).
+
+### 1. The battery side by side (sim, seed 1, the same 10 episodes)
+
+| | Jev | Decisions API | rules | always_llm |
+|---|---|---|---|---|
+| mean outcome score (9 judged) | **1.000** (0.907) | **1.000** (0.907) | 0.889 (1.000) | 0.978 (1.000) |
+| finish rate | 1.00 (0.89) | 1.00 (0.89) | 0.89 (1.00) | 0.89 (1.00) |
+| s to first change: new_word / wait / go-on / hand | 0.15 / 0.10 / 0.10 / 0.13 | 0.13 / 0.18 / **14.77** / 0.14 | 0.01 / 0.00 / 0.00 / 0.01 | 4.54 / 3.80 / 1.80 / 6.15 |
+| s to first change: taken / added / nudged / placed | 1.42 / 3.02 / 5.89 / 0.65 | 1.28 / 6.29 / 5.01 / 0.94 | 1.15 / 3.68 / 4.88 / 1.15 | 1.16 / 2.89 / 3.62 / 1.16 |
+| planner calls / episode | **2.0** (8.1) | 4.9 (6.5) | 1.8 (1.8) | 2.7 (2.6) |
+| decisions / episode, p50 / p95 / max | 9.3, 152 / 281 / 354 ms | 11.2, 146 / 251 / 579 ms | 9.3, 1 ms | 10.0, 1 ms |
+| drops / contacts / STOP ok | 0 / 0 of 1 / 1 of 1 | 0 / 0 of 1 / 1 of 1 | 0 / 0 of 1 / 1 of 1 | 0 / **1 of 1** / 1 of 1 |
+| asks | 0 | 1 | 0 | 0 |
+| median wall s | 57.4 | 64.5 | 54.0 | 54.6 |
+
+(Last run in brackets.) Both live deciders now finish every judged episode. The two controls each
+lost one: rules spelled OPENAI in ep 7 after "Could you spell PANE instead, please?" (a brain bug,
+section 7), and always_llm left a stray A after PINE in ep 4 (its replans misfit twice while the
+arm carried on, then the third plan kept the A; the control's own cost). The same small-sample
+caveat as before: one hand, one wait, one STOP, three new words.
+
+### 2. Ep 5, a hand mid-carry with "Sorry, just reaching over."
+
+Finished with both deciders (last run: both timed out at 240 s with "O" placed).
+
+- **Jev**: the hand's decision landed first this time (pause 0.125 s after the hand); when the hand
+  left (16.56 s) Jev answered `resume`, confidently, 0.10 s later. The new rule was not needed.
+- **Decisions API**: it paused in 0.14 s; when the hand left (18.13 s) it answered an unsure `hold`;
+  code ended the pause at 23.29 s (`resumed`: "paused for a hand that has gone; nothing else holds
+  the arm"), 5.2 s after the hand left, with no re-ask and no question. Score 1.0 in 67.2 s.
+
+The slice's (c) shows the same split: Jev resumed 0.099 s after the hand left, the Decisions API
+5.105 s (code).
+
+### 3. Plans sent back, and the spare-letter question
+
+| | new plans sent back | first plans sent back | loop limit hit |
+|---|---|---|---|
+| Jev | **3 / 9** (14 / 33 last run) | 1 / 10 | 1 (4) |
+| Decisions API | 5 / 22 (3 / 39) | 2 / 10 | 1 (0) |
+| slice, both | 0 | 0 | 0 |
+
+Every send-back is still a spare A (`live_battery_report.py`: 4 of 4 for Jev, 7 of 7 for the API).
+The count question did go out ("`plan` already uses 1 object labelled A (…). the third letter A is
+another one …"). Answers to it, as `check.letter_A*` confidences on plan_arrived (|2p − 1|; under 0.5
+is "unsure"): Jev 19 answers, 0.02-0.82, median 0.68, 4 under 0.5; the Decisions API 32, 0.0-1.0,
+median 0.92, 4 under 0.5. All of Jev's send-backs are in ep 0, where a cube is taken and a third A
+comes into play: there it answered 0.16 ("the task needs it", p ≈ 0.58), 0.02 and 0.40 on three
+successive plans, and the loop limit ran the fourth unchecked. The count question halves the
+pattern for Jev; it does not remove it.
+
+### 4. Planner calls after a correction (b)
+
+| | runs | hold on the correction | text to hold | planner calls per run | post-correction step_done |
+|---|---|---|---|---|---|
+| Jev | 6 | hold 6/6, 0.77-0.80 | 0.103-0.182 s | **2** (5-6 last run) | 18 of 18 stay_local, the decider's own, 0.88-0.99 |
+| Decisions API | 6 | hold 6/6, 0.58-0.74 (0.88-0.94 last run) | 0.113-0.199 s | 3 | 12 of 18 stay_local (6 of them kept local by the routine rule at 0.29-0.61); the 3rd step_done went to the planner in every run, its own `fast_llm` at 0.40-0.65 |
+
+Final order 5, 3, 1 every run, no drops. Jev's post-correction re-judging is gone. In the battery
+the Decisions API also sent 17 routine step_done to the planner in 7 episodes with no correction,
+each its own `fast_llm` answer (route conf 0.36-0.75): the routine rule keeps an unsure stay_local,
+not a confident-enough replan (Jev: 0).
+
+### 5. Failed replans
+
+None in the slice (last run 3 of 13 (b) runs ended with the corrected move completed under the old
+plan; this run 0 of 12: block 1 was never set down in slot 0). In the battery one, always_llm ep 4:
+the plan failed validation, `plan_retry` asked once more, the retry came back usable. always_llm does
+not hold while it plans, so there was no hold to keep.
+
+### 6. `user_words`
+
+- Jev: only corrections, in the battery (PINE, PANE, IDEA) and the slice (6/6 "actually, highest on
+  the left"). No remark joined.
+- Decisions API: the corrections plus "See what I found!" (ep 6, its own `fast_llm` route, which
+  rule 4 allows). And in the slice, **the correction itself was kept out in 2 of 6 (b) runs**: the
+  API's route was an unsure stay_local (0.40) that the gate escalated, and rule 4 takes a line only
+  when the decider itself routed it off the plan. The replan still read the line (the order came out
+  right), but the later requests showed `user_words` without it.
+- rules and always_llm: every routed line, remarks included ("It slid a little.", "Sorry, just
+  reaching over.", "I've finished that one for you."); the controls route by keyword or always, so
+  rule 4 does not filter them.
+
+### 7. What the rules made worse, and the bug
+
+- **The Decisions API cannot get past "ok, go on" in the slice: (e) 0 / 6** (7 / 7 last run). On the
+  go-on it answered `carry_on` 0.28 (resume p 0.46) or `pause` 0.11, under the gate, so the arm
+  stayed paused; after two re-asks the rule asked the user ("Should it go on?"), the slice's scripted
+  user never answers (`ScriptedUser.ask` records and returns), and every later re-ask routed to the
+  planner until the 12-request cap ended the run (`gave_up` at 76-88 s). Rule 5 is the cause.
+  `experiments/ablate_go_on.py` sends the recorded request with rule 5's additions put back one by
+  one, 5 calls each (answers were identical across the 5):
+
+  | the "ok, go on" request | Decisions API right_now |
+  |---|---|
+  | as sent after the rules | resume, conf 0.28 (p 0.46) |
+  | without `user_words_in_task` | resume 0.56 (p 0.67) |
+  | `about_the_task` as before | resume 0.39 (p 0.54) |
+  | route `ask_about` as before | resume 0.28 (p 0.46) |
+  | all three as before | resume 0.88 (p 0.91) |
+
+  Jev on the same scenario: 6 / 6, pause 0.94-0.97, resume 0.91-0.95, stay_local. The battery's
+  wait episode shows the same API answer (carry_on on "Okay, keep going.", the ask, then the
+  battery user's scripted reply, which answers the end-result question, not "should it go on";
+  the arm ran again 23 s after the go-on). Not changed: the fix is in the wording of rule 5, and
+  the rules say not to tune to the numbers; the ablation says where.
+- **A question the slice cannot answer turns into planner calls**: once asked, each paused_idle
+  re-ask with an unsure route goes to the planner (8-10 per (e) run). With a real user it would be
+  waiting; with nobody answering, the request cap is the only stop.
+- **A hand pause ended while a hand was near**: none. Both `resumed` notes (battery ep 5, slice (c),
+  Decisions API) came 5 s after "the person's hand has gone out of view" with no hand reported after.
+- **A routine step kept local that a replan would have fixed**: none seen; no step failed and no
+  `plan_done_unmet` in any battery episode or slice run.
+- **The bug (a597da3, fixed)**: a line that needs the planner, typed while the first plan is still
+  on its way, was dropped. `_start_replan` returned with "the first plan is on its way; it will read
+  user_messages", but that request was built at t = 0. Battery ep 7 with the rules control: "spell
+  PANE instead" at 9.8 s, an 11 s first plan reading OPENAI, OPENAI spelled. The brain now asks for
+  the first plan again with the line in it (`plan_rerequested`; the earlier request goes stale), and
+  `words_planned` counts the `user_words` a request was built with. Test:
+  `test_a_correction_typed_before_the_first_plan_arrives_is_planned_for`. The live re-run of ep 7
+  after the fix spelled PANE, but its first plan came in 5.5 s, before the line, so the fixed path
+  is covered by the test only. Not the rules' doing: the path existed before; the last run's first
+  plans were all faster than the line.
+
+### 8. Decision latency (slice, all clean)
+
+Jev 127 / 167 / 200 ms (p50 / p95 / max, n 84); Decisions API 127 / 270 / 3,801 ms (n 156).
+
+### 9. Default decider
+
+**Jev stays the default, more clearly than before.** Under the new rules it finished every battery
+episode at 2.0 planner calls per episode, passed every slice scenario on an awake machine (the full
+five 5 / 5, (b) 6 / 6, (e) 6 / 6), held the correction at 0.77-0.80 and stayed local after it, and
+its slowest decision in the slice was 200 ms. The Decisions API finished the battery too, but rule 5
+cost it the wait scenario (0 / 6; the ablation shows why), its confidence on the correction fell to
+0.58-0.74, it sends routine steps to the planner on its own, and it had a 3.8 s decision. Next:
+rule 5's wording for the Decisions API (or a per-decider state), the spare-letter question for
+Jev's taken-cube case, and an answer to "should it go on?" in the slice's scripted user so the ask
+rule can be exercised there.
