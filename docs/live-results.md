@@ -529,9 +529,9 @@ Every send-back is still a spare A (`live_battery_report.py`: 4 of 4 for Jev, 7 
 The count question did go out ("`plan` already uses 1 object labelled A (…). the third letter A is
 another one …"). Answers to it, as `check.letter_A*` confidences on plan_arrived (|2p − 1|; under 0.5
 is "unsure"): Jev 19 answers, 0.02-0.82, median 0.68, 4 under 0.5; the Decisions API 32, 0.0-1.0,
-median 0.92, 4 under 0.5. All of Jev's send-backs are in ep 0, where a cube is taken and a third A
-comes into play: there it answered 0.16 ("the task needs it", p ≈ 0.58), 0.02 and 0.40 on three
-successive plans, and the loop limit ran the fourth unchecked. The count question halves the
+median 0.92, 4 under 0.5. Three of Jev's four send-backs are in ep 0, where a cube is taken and a
+third A comes into play: it answered 0.16 ("the task needs it", p ≈ 0.58), 0.02 and 0.40 on three
+successive plans, and the loop limit ran the fourth unchecked; the fourth is a first plan in ep 9. The count question halves the
 pattern for Jev; it does not remove it.
 
 ### 4. Planner calls after a correction (b)
