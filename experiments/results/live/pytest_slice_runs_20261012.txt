@@ -1,0 +1,590 @@
+=== jev run 1 (b, e)
+
+L1 correction [jev-openai]: wall 31.8 s; events {'plan_arrived': 5, 'user_text': 1, 'step_done': 3}; steps started/done/failed 4/3/0; plans 5 (stale 0, failed 0, loops 0); text_to_hold_s 0.117; verdict block_5 resting in slot_0, gripper empty, arm at travel height; block_3 resting in slot_1, gripper empty, arm at travel height; block_1 resting in slot_2, gripper empty, arm at travel height; starts [{'object': 'block_1', 'place': 'slot_0'}, {'object': 'block_1', 'place': 'slot_2'}, {'object': 'block_5', 'place': 'slot_0'}, {'object': 'block_3', 'place': 'slot_1'}]; drops []; said_right_now hold; said_route fast_llm; readings ['the first plan arrived: Line the blocks up in the tray, lowest number on the left.', 'a new plan arrived: Line the blocks up in the tray, highest on the left.', 'a new plan arrived: Line the blocks up in the tray, highest on the left.', 'a new plan arrived: Line the blocks up in the tray, highest on the left.']; plan_ms [2674, 3625, 3150, 2499, 2421]; decision_ms [97, 102, 96, 93, 87, 168, 99, 181]
+.
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_jev-openai_test_b_correction_mid_carry_holds_then_reverses_the_order_20261012-165437.jsonl', 'frames': 1312, 'events': 3}
+
+L1 wait_go [jev-openai]: wall 27.5 s; events {'plan_arrived': 2, 'user_text': 2, 'step_done': 3}; steps started/done/failed 4/3/0; plans 2 (stale 0, failed 0, loops 0); wait_to_pause_s 0.127; go_to_resume_s 0.145; user_text_decisions [('the user typed: "hang on a second"', 'pause', 'stay_local'), ('the user typed: "ok, go on"', 'resume', 'stay_local')]; readings ['the first plan arrived: Line the blocks up in the tray, lowest number on the left.', 'a new plan arrived: Line the blocks up in the tray, lowest number on the left.']; leaked []; verdict block_1 resting in slot_0, gripper empty, arm at travel height; block_3 resting in slot_1, gripper empty, arm at travel height; block_5 resting in slot_2, gripper empty, arm at travel height; plan_ms [2410, 3564]; decision_ms [100, 123, 143, 97, 147, 179, 105]
+.
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_jev-openai_test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task_20261012-165509.jsonl', 'frames': 1238, 'events': 3}
+
+2 passed, 3 deselected in 60.25s (0:01:00)
+=== jev run 2 (b, e)
+
+L1 correction [jev-openai]: wall 31.0 s; events {'plan_arrived': 4, 'user_text': 1, 'step_done': 3}; steps started/done/failed 5/3/0; plans 5 (stale 1, failed 0, loops 0); text_to_hold_s 0.106; verdict block_5 resting in slot_0, gripper empty, arm at travel height; block_3 resting in slot_1, gripper empty, arm at travel height; block_1 resting in slot_2, gripper empty, arm at travel height; starts [{'object': 'block_1', 'place': 'slot_0'}, {'object': 'block_1', 'place': 'slot_2'}, {'object': 'block_3', 'place': 'slot_1'}, {'object': 'block_3', 'place': 'slot_1'}, {'object': 'block_5', 'place': 'slot_0'}]; drops []; said_right_now hold; said_route fast_llm; readings ['the first plan arrived: Line the blocks up in the tray, lowest number on the left.', 'a new plan arrived: Line the blocks up in the tray, highest on the left.', 'a new plan arrived: Line the blocks up in the tray, highest on the left.']; plan_ms [2548, 4256, 3634, 9505, 2436]; decision_ms [98, 95, 127, 102, 113, 122, 181]
+.
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_jev-openai_test_b_correction_mid_carry_holds_then_reverses_the_order_20261012-165538.jsonl', 'frames': 1279, 'events': 3}
+
+L1 wait_go [jev-openai]: wall 28.2 s; events {'plan_arrived': 2, 'user_text': 2, 'step_done': 3}; steps started/done/failed 4/3/0; plans 2 (stale 0, failed 0, loops 0); wait_to_pause_s 0.144; go_to_resume_s 0.102; user_text_decisions [('the user typed: "hang on a second"', 'pause', 'stay_local'), ('the user typed: "ok, go on"', 'resume', 'stay_local')]; readings ['the first plan arrived: Line the blocks up in the tray, lowest number on the left.', 'a new plan arrived: Line the blocks up in the tray, lowest number on the left.']; leaked []; verdict block_1 resting in slot_0, gripper empty, arm at travel height; block_3 resting in slot_1, gripper empty, arm at travel height; block_5 resting in slot_2, gripper empty, arm at travel height; plan_ms [3165, 2919]; decision_ms [108, 141, 100, 123, 185, 110, 100]
+.
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_jev-openai_test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task_20261012-165609.jsonl', 'frames': 1234, 'events': 3}
+
+2 passed, 3 deselected in 60.03s (0:01:00)
+=== jev run 3 (b, e)
+
+L1 correction [jev-openai]: wall 36.1 s; events {'plan_arrived': 5, 'user_text': 1, 'step_done': 3}; steps started/done/failed 5/3/0; plans 5 (stale 0, failed 0, loops 0); text_to_hold_s 0.093; verdict block_5 resting in slot_0, gripper empty, arm at travel height; block_3 resting in slot_1, gripper empty, arm at travel height; block_1 resting in slot_2, gripper empty, arm at travel height; starts [{'object': 'block_1', 'place': 'slot_0'}, {'object': 'block_1', 'place': 'slot_2'}, {'object': 'block_3', 'place': 'slot_1'}, {'object': 'block_5', 'place': 'slot_0'}, {'object': 'block_5', 'place': 'slot_0'}]; drops []; said_right_now hold; said_route fast_llm; readings ['the first plan arrived: Line the blocks up in the tray, lowest number on the left.', 'a new plan arrived: Line the blocks up in the tray, highest on the left.', 'a new plan arrived: Line the blocks up in the tray, highest on the left.', 'a new plan arrived: Line the blocks up in the tray, highest on the left.']; plan_ms [2814, 4133, 3070, 6145, 2581]; decision_ms [132, 89, 104, 103, 162, 110, 155, 182]
+.
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_jev-openai_test_b_correction_mid_carry_holds_then_reverses_the_order_20261012-165638.jsonl', 'frames': 1516, 'events': 3}
+
+L1 wait_go [jev-openai]: wall 28.1 s; events {'plan_arrived': 2, 'user_text': 2, 'step_done': 3}; steps started/done/failed 4/3/0; plans 2 (stale 0, failed 0, loops 0); wait_to_pause_s 0.115; go_to_resume_s 0.112; user_text_decisions [('the user typed: "hang on a second"', 'pause', 'stay_local'), ('the user typed: "ok, go on"', 'resume', 'stay_local')]; readings ['the first plan arrived: Line the blocks up in the tray, lowest number on the left.', 'a new plan arrived: Line the blocks up in the tray, lowest number on the left.']; leaked []; verdict block_1 resting in slot_0, gripper empty, arm at travel height; block_3 resting in slot_1, gripper empty, arm at travel height; block_5 resting in slot_2, gripper empty, arm at travel height; plan_ms [2624, 3916]; decision_ms [103, 104, 110, 102, 201, 117, 213]
+.
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_jev-openai_test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task_20261012-165715.jsonl', 'frames': 1246, 'events': 3}
+
+2 passed, 3 deselected in 65.01s (0:01:05)
+=== jev run 4 (b, e)
+
+L1 correction [jev-openai]: wall 32.9 s; events {'plan_arrived': 5, 'user_text': 1, 'step_done': 3}; steps started/done/failed 5/3/0; plans 5 (stale 0, failed 0, loops 0); text_to_hold_s 0.134; verdict block_5 resting in slot_0, gripper empty, arm at travel height; block_3 resting in slot_1, gripper empty, arm at travel height; block_1 resting in slot_2, gripper empty, arm at travel height; starts [{'object': 'block_1', 'place': 'slot_0'}, {'object': 'block_1', 'place': 'slot_2'}, {'object': 'block_5', 'place': 'slot_0'}, {'object': 'block_5', 'place': 'slot_0'}, {'object': 'block_3', 'place': 'slot_1'}]; drops []; said_right_now hold; said_route fast_llm; readings ['the first plan arrived: Line the blocks up in the tray, lowest number on the left.', 'a new plan arrived: Line the blocks up in the tray, highest on the left.', 'a new plan arrived: Line the blocks up in the tray, highest on the left.', 'a new plan arrived: Line the blocks up in the tray, highest on the left.']; plan_ms [2594, 4449, 3982, 3091, 2598]; decision_ms [98, 129, 125, 196, 142, 161, 331, 201]
+.
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_jev-openai_test_b_correction_mid_carry_holds_then_reverses_the_order_20261012-165744.jsonl', 'frames': 1355, 'events': 3}
+
+L1 wait_go [jev-openai]: wall 27.7 s; events {'plan_arrived': 2, 'user_text': 2, 'step_done': 3}; steps started/done/failed 4/3/0; plans 2 (stale 0, failed 0, loops 0); wait_to_pause_s 0.128; go_to_resume_s 0.101; user_text_decisions [('the user typed: "hang on a second"', 'pause', 'stay_local'), ('the user typed: "ok, go on"', 'resume', 'stay_local')]; readings ['the first plan arrived: Line the blocks up in the tray, lowest number on the left.', 'a new plan arrived: Line the blocks up in the tray, lowest number on the left.']; leaked []; verdict block_1 resting in slot_0, gripper empty, arm at travel height; block_3 resting in slot_1, gripper empty, arm at travel height; block_5 resting in slot_2, gripper empty, arm at travel height; plan_ms [2701, 2755]; decision_ms [133, 116, 98, 99, 143, 118, 139]
+.
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_jev-openai_test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task_20261012-165817.jsonl', 'frames': 1233, 'events': 3}
+
+2 passed, 3 deselected in 61.50s (0:01:01)
+=== jev run 5 (b, e)
+
+L1 correction [jev-openai]: wall 33.5 s; events {'plan_arrived': 5, 'user_text': 1, 'step_done': 3}; steps started/done/failed 5/3/0; plans 5 (stale 0, failed 0, loops 0); text_to_hold_s 0.115; verdict block_5 resting in slot_0, gripper empty, arm at travel height; block_3 resting in slot_1, gripper empty, arm at travel height; block_1 resting in slot_2, gripper empty, arm at travel height; starts [{'object': 'block_1', 'place': 'slot_0'}, {'object': 'block_1', 'place': 'slot_2'}, {'object': 'block_5', 'place': 'slot_0'}, {'object': 'block_3', 'place': 'slot_1'}, {'object': 'block_3', 'place': 'slot_1'}]; drops []; said_right_now hold; said_route fast_llm; readings ['the first plan arrived: Line the blocks up in the tray, lowest number on the left.', 'a new plan arrived: Line the blocks up in the tray, highest on the left.', 'a new plan arrived: Line the blocks up in the tray, highest on the left.', 'a new plan arrived: Line the blocks up in the tray, highest on the left.']; plan_ms [2813, 5098, 2941, 3519, 2532]; decision_ms [125, 110, 174, 136, 132, 105, 104, 127]
+.
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_jev-openai_test_b_correction_mid_carry_holds_then_reverses_the_order_20261012-165845.jsonl', 'frames': 1388, 'events': 3}
+
+L1 wait_go [jev-openai]: wall 27.7 s; events {'plan_arrived': 2, 'user_text': 2, 'step_done': 3}; steps started/done/failed 4/3/0; plans 2 (stale 0, failed 0, loops 0); wait_to_pause_s 0.109; go_to_resume_s 0.131; user_text_decisions [('the user typed: "hang on a second"', 'pause', 'stay_local'), ('the user typed: "ok, go on"', 'resume', 'stay_local')]; readings ['the first plan arrived: Line the blocks up in the tray, lowest number on the left.', 'a new plan arrived: Line the blocks up in the tray, lowest number on the left.']; leaked []; verdict block_1 resting in slot_0, gripper empty, arm at travel height; block_3 resting in slot_1, gripper empty, arm at travel height; block_5 resting in slot_2, gripper empty, arm at travel height; plan_ms [2451, 2940]; decision_ms [127, 96, 129, 104, 222, 128, 146]
+.
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_jev-openai_test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task_20261012-165919.jsonl', 'frames': 1237, 'events': 3}
+
+2 passed, 3 deselected in 61.89s (0:01:01)
+=== decisions run 1 (b, e)
+
+L1 correction [decisions-openai]: wall 41.9 s; events {'plan_arrived': 5, 'user_text': 1, 'step_done': 3}; steps started/done/failed 4/3/0; plans 5 (stale 0, failed 0, loops 0); text_to_hold_s 0.105; verdict block_5 resting in slot_0, gripper empty, arm at travel height; block_3 resting in slot_1, gripper empty, arm at travel height; block_1 resting in slot_2, gripper empty, arm at travel height; starts [{'object': 'block_1', 'place': 'slot_0'}, {'object': 'block_1', 'place': 'slot_2'}, {'object': 'block_5', 'place': 'slot_0'}, {'object': 'block_3', 'place': 'slot_1'}]; drops []; said_right_now hold; said_route fast_llm; readings ['the first plan arrived: Line the blocks up in the tray, lowest number on the left.', 'a new plan arrived: Line the blocks up in the tray, highest on the left.', 'a new plan arrived: Line the blocks up in the tray, highest on the left.', 'a new plan arrived: Line the blocks up in the tray, highest on the left.']; plan_ms [2553, 4988, 3502, 3835, 2997]; decision_ms [161, 99, 106, 103, 91, 158, 91, 144]
+.
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_decisions-openai_test_b_correction_mid_carry_holds_then_reverses_the_order_20261012-165948.jsonl', 'frames': 1431, 'events': 3}
+
+L1 wait_go [decisions-openai]: wall 35.6 s; events {'plan_arrived': 3, 'user_text': 2, 'step_done': 3}; steps started/done/failed 4/3/0; plans 3 (stale 0, failed 0, loops 0); wait_to_pause_s 0.15; go_to_resume_s 0.131; user_text_decisions [('the user typed: "hang on a second"', 'pause', 'fast_llm'), ('the user typed: "ok, go on"', 'resume', 'stay_local')]; readings ['the first plan arrived: Line the blocks up in the tray, lowest number on the left.', 'a new plan arrived: Line the blocks up in the tray, lowest number on the left.']; leaked []; verdict block_1 resting in slot_0, gripper empty, arm at travel height; block_3 resting in slot_1, gripper empty, arm at travel height; block_5 resting in slot_2, gripper empty, arm at travel height; plan_ms [2648, 4453, 2837]; decision_ms [127, 140, 127, 101, 150, 142, 163]
+.
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_decisions-openai_test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task_20261012-170030.jsonl', 'frames': 1484, 'events': 3}
+
+2 passed, 3 deselected in 78.47s (0:01:18)
+=== decisions run 2 (b, e)
+
+L1 correction [decisions-openai]: wall 34.9 s; events {'plan_arrived': 5, 'user_text': 1, 'step_done': 3}; steps started/done/failed 5/3/0; plans 5 (stale 0, failed 0, loops 0); text_to_hold_s 0.133; verdict block_5 resting in slot_0, gripper empty, arm at travel height; block_3 resting in slot_1, gripper empty, arm at travel height; block_1 resting in slot_2, gripper empty, arm at travel height; starts [{'object': 'block_1', 'place': 'slot_0'}, {'object': 'block_1', 'place': 'slot_2'}, {'object': 'block_3', 'place': 'slot_1'}, {'object': 'block_5', 'place': 'slot_0'}, {'object': 'block_5', 'place': 'slot_0'}]; drops []; said_right_now hold; said_route fast_llm; readings ['the first plan arrived: Line the blocks up in the tray, lowest number on the left.', 'a new plan arrived: Line the blocks up in the tray, highest on the left.', 'a new plan arrived: Line the blocks up in the tray, highest on the left.', 'a new plan arrived: Line the blocks up in the tray, highest on the left.']; plan_ms [3237, 4516, 3042, 4347, 2237]; decision_ms [105, 120, 94, 116, 116, 130, 116, 131]
+.
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_decisions-openai_test_b_correction_mid_carry_holds_then_reverses_the_order_20261012-170107.jsonl', 'frames': 1300, 'events': 3}
+
+L1 wait_go [decisions-openai]: wall 35.0 s; events {'plan_arrived': 3, 'user_text': 2, 'step_done': 3}; steps started/done/failed 4/3/0; plans 3 (stale 0, failed 0, loops 0); wait_to_pause_s 0.124; go_to_resume_s 0.143; user_text_decisions [('the user typed: "hang on a second"', 'pause', 'fast_llm'), ('the user typed: "ok, go on"', 'resume', 'stay_local')]; readings ['the first plan arrived: Line the blocks up in the tray, lowest number on the left.', 'a new plan arrived: Line the blocks up in the tray, lowest number on the left.']; leaked []; verdict block_1 resting in slot_0, gripper empty, arm at travel height; block_3 resting in slot_1, gripper empty, arm at travel height; block_5 resting in slot_2, gripper empty, arm at travel height; plan_ms [2877, 4344, 2008]; decision_ms [119, 109, 141, 133, 135, 142, 175]
+.
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_decisions-openai_test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task_20261012-170142.jsonl', 'frames': 1483, 'events': 3}
+
+2 passed, 3 deselected in 70.68s (0:01:10)
+=== decisions run 3 (b, e)
+
+L1 correction [decisions-openai]: wall 53.0 s; events {'plan_arrived': 5, 'user_text': 1, 'step_done': 4}; steps started/done/failed 5/4/0; plans 6 (stale 0, failed 1, loops 0); text_to_hold_s 0.121; verdict block_5 resting in slot_0, gripper empty, arm at travel height; block_3 resting in slot_1, gripper empty, arm at travel height; block_1 resting in slot_2, gripper empty, arm at travel height; starts [{'object': 'block_1', 'place': 'slot_0'}, {'object': 'block_1', 'place': 'slot_2'}, {'object': 'block_3', 'place': 'slot_1'}, {'object': 'block_5', 'place': 'slot_0'}, {'object': 'block_5', 'place': 'slot_0'}]; drops []; said_right_now hold; said_route fast_llm; readings ['the first plan arrived: Line the blocks up in the tray, lowest number on the left.', 'a new plan arrived: Line the blocks up in the tray, highest on the left.', 'a new plan arrived: Line the blocks up in the tray, highest on the left.', 'a new plan arrived: Line the blocks up in the tray, highest on the left.']; plan_ms [2569, 11131, 5355, 2482, 4208, 2141]; decision_ms [97, 110, 202, 141, 137, 98, 120, 80, 85]
+.
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_decisions-openai_test_b_correction_mid_carry_holds_then_reverses_the_order_20261012-170218.jsonl', 'frames': 1997, 'events': 4}
+
+L1 wait_go [decisions-openai]: wall 33.6 s; events {'plan_arrived': 3, 'user_text': 2, 'step_done': 3}; steps started/done/failed 3/3/0; plans 4 (stale 1, failed 0, loops 0); wait_to_pause_s 0.112; go_to_resume_s 0.097; user_text_decisions [('the user typed: "hang on a second"', 'pause', 'fast_llm'), ('the user typed: "ok, go on"', 'resume', 'stay_local')]; readings ['the first plan arrived: Line the blocks up in the tray, lowest number on the left.', 'a new plan arrived: Line the blocks up in the tray, lowest number on the left.']; leaked []; verdict block_1 resting in slot_0, gripper empty, arm at travel height; block_3 resting in slot_1, gripper empty, arm at travel height; block_5 resting in slot_2, gripper empty, arm at travel height; plan_ms [2632, 9018, 3779, 2045]; decision_ms [122, 108, 94, 109, 105, 149, 179]
+.
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_decisions-openai_test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task_20261012-170311.jsonl', 'frames': 1234, 'events': 3}
+
+2 passed, 3 deselected in 87.42s (0:01:27)
+=== decisions run 4 (b, e)
+
+L1 correction [decisions-openai]: wall 45.0 s; events {'plan_arrived': 5, 'user_text': 1, 'step_done': 3}; steps started/done/failed 4/3/0; plans 5 (stale 0, failed 0, loops 0); text_to_hold_s 0.119; verdict block_5 resting in slot_0, gripper empty, arm at travel height; block_3 resting in slot_1, gripper empty, arm at travel height; block_1 resting in slot_2, gripper empty, arm at travel height; starts [{'object': 'block_1', 'place': 'slot_0'}, {'object': 'block_1', 'place': 'slot_2'}, {'object': 'block_5', 'place': 'slot_0'}, {'object': 'block_3', 'place': 'slot_1'}]; drops []; said_right_now hold; said_route fast_llm; readings ['the first plan arrived: Line the blocks up in the tray, lowest number on the left.', 'a new plan arrived: Line the blocks up in the tray, highest on the left.', 'a new plan arrived: Line the blocks up in the tray, highest on the left.', 'a new plan arrived: Line the blocks up in the tray, highest on the left.']; plan_ms [3769, 5344, 5063, 3795, 2888]; decision_ms [100, 102, 137, 110, 121, 139, 103, 136]
+.
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_decisions-openai_test_b_correction_mid_carry_holds_then_reverses_the_order_20261012-170346.jsonl', 'frames': 1452, 'events': 3}
+
+L1 wait_go [decisions-openai]: wall 28.8 s; events {'plan_arrived': 2, 'user_text': 2, 'step_done': 3}; steps started/done/failed 3/3/0; plans 3 (stale 0, failed 1, loops 0); wait_to_pause_s 0.107; go_to_resume_s 0.189; user_text_decisions [('the user typed: "hang on a second"', 'pause', 'fast_llm'), ('the user typed: "ok, go on"', 'resume', 'stay_local')]; readings ['the first plan arrived: Line the blocks up in the tray, lowest number on the left.', 'a new plan arrived: Line the blocks up in the tray, lowest number on the left.']; leaked []; verdict block_1 resting in slot_0, gripper empty, arm at travel height; block_3 resting in slot_1, gripper empty, arm at travel height; block_5 resting in slot_2, gripper empty, arm at travel height; plan_ms [3729, 2348, 1]; decision_ms [97, 94, 186, 113, 138, 134, 12]
+.
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_decisions-openai_test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task_20261012-170431.jsonl', 'frames': 1241, 'events': 3}
+
+2 passed, 3 deselected in 74.51s (0:01:14)
+=== decisions run 5 (b, e)
+F
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_decisions-openai_test_b_correction_mid_carry_holds_then_reverses_the_order_20261012-172057.jsonl', 'frames': 0, 'events': 0}
+F
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_decisions-openai_test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task_20261012-172058.jsonl', 'frames': 0, 'events': 0}
+
+=================================== FAILURES ===================================
+__________ test_b_correction_mid_carry_holds_then_reverses_the_order ___________
+
+srv = <robojev.brain.mocks.ScriptedPerception object at 0x10765f830>
+
+    def test_b_correction_mid_carry_holds_then_reverses_the_order(srv):
+        user = ScriptedUser([Line(carrying(srv, "block_1"), CORRECTION)])
+        r, wall = episode(brain(srv, [ASCENDING, DESCENDING], {CORRECTION: Utt("correction", version=1)}, user))
+>       t_text = user.t0 + user.said[0][0]
+                           ^^^^^^^^^^^^
+E       IndexError: list index out of range
+
+tests/test_slice.py:183: IndexError
+_______ test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task ________
+
+srv = <robojev.brain.mocks.ScriptedPerception object at 0x108143f80>
+
+    def test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task(srv):
+        """A transient "wait" pauses the arm and "go on" resumes it; neither is part of the task, so no
+        restated task (a plan's reading) may mention them (H5)."""
+        user = ScriptedUser([Line(carrying(srv, "block_1"), WAIT),
+                             Line(lambda: bool(user.said) and time.monotonic() - user.t0 - user.said[0][0] >= 2.0, GO_ON)])
+        r, wall = episode(brain(srv, [ASCENDING], {WAIT: Utt("wait"), GO_ON: Utt("go_on")}, user))
+>       t_wait, t_go = (user.t0 + t for t, _ in user.said[:2])
+        ^^^^^^^^^^^^
+E       ValueError: not enough values to unpack (expected 2, got 0)
+
+tests/test_slice.py:277: ValueError
+=========================== short test summary info ============================
+FAILED tests/test_slice.py::test_b_correction_mid_carry_holds_then_reverses_the_order
+FAILED tests/test_slice.py::test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task
+2 failed, 3 deselected in 0.56s
+=== jev full five
+
+L1 sort [jev-openai]: wall 0.0 s; events {}; steps started/done/failed 0/0/0; plans 2 (stale 0, failed 2, loops 0); verdict block_1 is table, 15.6 cm from slot_0; block_3 is table, 18.9 cm from slot_1; block_5 is table, 18.9 cm from slot_2; starts []; plan_ms [1, 1]; decision_ms []
+F
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_jev-openai_test_a_three_block_sort_on_physics_20261012-172058.jsonl', 'frames': 0, 'events': 0}
+F
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_jev-openai_test_b_correction_mid_carry_holds_then_reverses_the_order_20261012-172059.jsonl', 'frames': 0, 'events': 0}
+F
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_jev-openai_test_c_hand_near_the_gripper_pauses_within_half_a_second_and_resumes_20261012-172059.jsonl', 'frames': 0, 'events': 0}
+F
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_jev-openai_test_d_stop_mid_carry_parks_the_arm_and_never_drops_the_block_20261012-172059.jsonl', 'frames': 0, 'events': 0}
+F
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_jev-openai_test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task_20261012-172059.jsonl', 'frames': 0, 'events': 0}
+
+=================================== FAILURES ===================================
+______________________ test_a_three_block_sort_on_physics ______________________
+
+srv = <robojev.brain.mocks.ScriptedPerception object at 0x10c3cf410>
+
+    def test_a_three_block_sort_on_physics(srv):
+        r, wall = episode(brain(srv, [ASCENDING]))
+        ok, why = judge_sort(srv, ASCENDING)
+        summary("sort", r, wall, srv, verdict=why, starts=[c[2][2] for c in tools(srv, "start")])
+>       assert r.outcome == "done", r.log
+E       AssertionError: [{'t': 0.0, 'note': 'llm_request', 'request': 'plan', 'route': 'fast_llm'}, {'t': 0.002, 'note': 'plan_failed', 'reque...Error('[Errno 8] nodename nor servname provided, or not known')"]]}, {'t': 0.003, 'note': 'end', 'outcome': 'gave_up'}]
+E       assert 'gave_up' == 'done'
+E         
+E         - done
+E         + gave_up
+
+tests/test_slice.py:166: AssertionError
+__________ test_b_correction_mid_carry_holds_then_reverses_the_order ___________
+
+srv = <robojev.brain.mocks.ScriptedPerception object at 0x10ce68590>
+
+    def test_b_correction_mid_carry_holds_then_reverses_the_order(srv):
+        user = ScriptedUser([Line(carrying(srv, "block_1"), CORRECTION)])
+        r, wall = episode(brain(srv, [ASCENDING, DESCENDING], {CORRECTION: Utt("correction", version=1)}, user))
+>       t_text = user.t0 + user.said[0][0]
+                           ^^^^^^^^^^^^
+E       IndexError: list index out of range
+
+tests/test_slice.py:183: IndexError
+_____ test_c_hand_near_the_gripper_pauses_within_half_a_second_and_resumes _____
+
+srv = <robojev.brain.mocks.ScriptedPerception object at 0x10cea1ee0>
+
+    def test_c_hand_near_the_gripper_pauses_within_half_a_second_and_resumes(srv):
+        srv.hand_when(carrying(srv), for_s=1.5, dist=0.15)
+        r, wall = episode(brain(srv, [ASCENDING]))
+>       appeared = next(t for t, what in srv.hand_log if what == "appears")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       StopIteration
+
+tests/test_slice.py:213: StopIteration
+________ test_d_stop_mid_carry_parks_the_arm_and_never_drops_the_block _________
+
+srv = <robojev.brain.mocks.ScriptedPerception object at 0x10ce9aed0>
+
+    def test_d_stop_mid_carry_parks_the_arm_and_never_drops_the_block(srv):
+        user = ScriptedUser([Line(carrying(srv, "block_1"), PRESS_STOP)])
+        r, wall = episode(brain(srv, [ASCENDING], user=user))
+>       t_stop = tools(srv, "stop")[0][0]
+                 ^^^^^^^^^^^^^^^^^^^^^
+E       IndexError: list index out of range
+
+tests/test_slice.py:240: IndexError
+_______ test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task ________
+
+srv = <robojev.brain.mocks.ScriptedPerception object at 0x10ceefda0>
+
+    def test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task(srv):
+        """A transient "wait" pauses the arm and "go on" resumes it; neither is part of the task, so no
+        restated task (a plan's reading) may mention them (H5)."""
+        user = ScriptedUser([Line(carrying(srv, "block_1"), WAIT),
+                             Line(lambda: bool(user.said) and time.monotonic() - user.t0 - user.said[0][0] >= 2.0, GO_ON)])
+        r, wall = episode(brain(srv, [ASCENDING], {WAIT: Utt("wait"), GO_ON: Utt("go_on")}, user))
+>       t_wait, t_go = (user.t0 + t for t, _ in user.said[:2])
+        ^^^^^^^^^^^^
+E       ValueError: not enough values to unpack (expected 2, got 0)
+
+tests/test_slice.py:277: ValueError
+=========================== short test summary info ============================
+FAILED tests/test_slice.py::test_a_three_block_sort_on_physics - AssertionErr...
+FAILED tests/test_slice.py::test_b_correction_mid_carry_holds_then_reverses_the_order
+FAILED tests/test_slice.py::test_c_hand_near_the_gripper_pauses_within_half_a_second_and_resumes
+FAILED tests/test_slice.py::test_d_stop_mid_carry_parks_the_arm_and_never_drops_the_block
+FAILED tests/test_slice.py::test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task
+5 failed in 0.64s
+=== decisions full five
+
+L1 sort [decisions-openai]: wall 0.0 s; events {}; steps started/done/failed 0/0/0; plans 2 (stale 0, failed 2, loops 0); verdict block_1 is table, 15.6 cm from slot_0; block_3 is table, 18.9 cm from slot_1; block_5 is table, 18.9 cm from slot_2; starts []; plan_ms [1, 1]; decision_ms []
+F
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_decisions-openai_test_a_three_block_sort_on_physics_20261012-172059.jsonl', 'frames': 0, 'events': 0}
+F
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_decisions-openai_test_b_correction_mid_carry_holds_then_reverses_the_order_20261012-172059.jsonl', 'frames': 0, 'events': 0}
+F
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_decisions-openai_test_c_hand_near_the_gripper_pauses_within_half_a_second_and_resumes_20261012-172100.jsonl', 'frames': 0, 'events': 0}
+F
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_decisions-openai_test_d_stop_mid_carry_parks_the_arm_and_never_drops_the_block_20261012-172100.jsonl', 'frames': 0, 'events': 0}
+F
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_decisions-openai_test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task_20261012-172100.jsonl', 'frames': 0, 'events': 0}
+
+=================================== FAILURES ===================================
+______________________ test_a_three_block_sort_on_physics ______________________
+
+srv = <robojev.brain.mocks.ScriptedPerception object at 0x10bf4f650>
+
+    def test_a_three_block_sort_on_physics(srv):
+        r, wall = episode(brain(srv, [ASCENDING]))
+        ok, why = judge_sort(srv, ASCENDING)
+        summary("sort", r, wall, srv, verdict=why, starts=[c[2][2] for c in tools(srv, "start")])
+>       assert r.outcome == "done", r.log
+E       AssertionError: [{'t': 0.0, 'note': 'llm_request', 'request': 'plan', 'route': 'fast_llm'}, {'t': 0.001, 'note': 'plan_failed', 'reque...Error('[Errno 8] nodename nor servname provided, or not known')"]]}, {'t': 0.002, 'note': 'end', 'outcome': 'gave_up'}]
+E       assert 'gave_up' == 'done'
+E         
+E         - done
+E         + gave_up
+
+tests/test_slice.py:166: AssertionError
+__________ test_b_correction_mid_carry_holds_then_reverses_the_order ___________
+
+srv = <robojev.brain.mocks.ScriptedPerception object at 0x10c9ee360>
+
+    def test_b_correction_mid_carry_holds_then_reverses_the_order(srv):
+        user = ScriptedUser([Line(carrying(srv, "block_1"), CORRECTION)])
+        r, wall = episode(brain(srv, [ASCENDING, DESCENDING], {CORRECTION: Utt("correction", version=1)}, user))
+>       t_text = user.t0 + user.said[0][0]
+                           ^^^^^^^^^^^^
+E       IndexError: list index out of range
+
+tests/test_slice.py:183: IndexError
+_____ test_c_hand_near_the_gripper_pauses_within_half_a_second_and_resumes _____
+
+srv = <robojev.brain.mocks.ScriptedPerception object at 0x10ca2ecc0>
+
+    def test_c_hand_near_the_gripper_pauses_within_half_a_second_and_resumes(srv):
+        srv.hand_when(carrying(srv), for_s=1.5, dist=0.15)
+        r, wall = episode(brain(srv, [ASCENDING]))
+>       appeared = next(t for t, what in srv.hand_log if what == "appears")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       StopIteration
+
+tests/test_slice.py:213: StopIteration
+________ test_d_stop_mid_carry_parks_the_arm_and_never_drops_the_block _________
+
+srv = <robojev.brain.mocks.ScriptedPerception object at 0x10ca72ed0>
+
+    def test_d_stop_mid_carry_parks_the_arm_and_never_drops_the_block(srv):
+        user = ScriptedUser([Line(carrying(srv, "block_1"), PRESS_STOP)])
+        r, wall = episode(brain(srv, [ASCENDING], user=user))
+>       t_stop = tools(srv, "stop")[0][0]
+                 ^^^^^^^^^^^^^^^^^^^^^
+E       IndexError: list index out of range
+
+tests/test_slice.py:240: IndexError
+_______ test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task ________
+
+srv = <robojev.brain.mocks.ScriptedPerception object at 0x10ca7b350>
+
+    def test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task(srv):
+        """A transient "wait" pauses the arm and "go on" resumes it; neither is part of the task, so no
+        restated task (a plan's reading) may mention them (H5)."""
+        user = ScriptedUser([Line(carrying(srv, "block_1"), WAIT),
+                             Line(lambda: bool(user.said) and time.monotonic() - user.t0 - user.said[0][0] >= 2.0, GO_ON)])
+        r, wall = episode(brain(srv, [ASCENDING], {WAIT: Utt("wait"), GO_ON: Utt("go_on")}, user))
+>       t_wait, t_go = (user.t0 + t for t, _ in user.said[:2])
+        ^^^^^^^^^^^^
+E       ValueError: not enough values to unpack (expected 2, got 0)
+
+tests/test_slice.py:277: ValueError
+=========================== short test summary info ============================
+FAILED tests/test_slice.py::test_a_three_block_sort_on_physics - AssertionErr...
+FAILED tests/test_slice.py::test_b_correction_mid_carry_holds_then_reverses_the_order
+FAILED tests/test_slice.py::test_c_hand_near_the_gripper_pauses_within_half_a_second_and_resumes
+FAILED tests/test_slice.py::test_d_stop_mid_carry_parks_the_arm_and_never_drops_the_block
+FAILED tests/test_slice.py::test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task
+5 failed in 0.64s
+=== decisions run 5 (b, e), again: the run above failed on a network outage (DNS), as did both full-five passes below; their empty recordings were removed
+F
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_decisions-openai_test_b_correction_mid_carry_holds_then_reverses_the_order_20261012-190356.jsonl', 'frames': 0, 'events': 2}
+
+L1 wait_go [decisions-openai]: wall 48.4 s; events {'plan_arrived': 2, 'user_text': 2, 'step_done': 3}; steps started/done/failed 3/3/0; plans 3 (stale 0, failed 1, loops 0); wait_to_pause_s 0.411; go_to_resume_s 0.106; user_text_decisions [('the user typed: "hang on a second"', 'pause', 'fast_llm'), ('the user typed: "ok, go on"', 'resume', 'stay_local')]; readings ['the first plan arrived: Line the blocks up in the tray, lowest number on the left.', 'a new plan arrived: Line the blocks up in the tray, lowest number on the left.']; leaked []; verdict block_1 resting in slot_0, gripper empty, arm at travel height; block_3 resting in slot_1, gripper empty, arm at travel height; block_5 resting in slot_2, gripper empty, arm at travel height; plan_ms [4860, 3818, 17975]; decision_ms [175, 391, 99, 124, 93, 323, 712]
+.
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_decisions-openai_test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task_20261012-200437.jsonl', 'frames': 1220, 'events': 3}
+
+=================================== FAILURES ===================================
+__________ test_b_correction_mid_carry_holds_then_reverses_the_order ___________
+
+srv = <robojev.brain.mocks.ScriptedPerception object at 0x109bab9b0>
+
+    def test_b_correction_mid_carry_holds_then_reverses_the_order(srv):
+        user = ScriptedUser([Line(carrying(srv, "block_1"), CORRECTION)])
+        r, wall = episode(brain(srv, [ASCENDING, DESCENDING], {CORRECTION: Utt("correction", version=1)}, user))
+>       t_text = user.t0 + user.said[0][0]
+                           ^^^^^^^^^^^^
+E       IndexError: list index out of range
+
+tests/test_slice.py:183: IndexError
+=========================== short test summary info ============================
+FAILED tests/test_slice.py::test_b_correction_mid_carry_holds_then_reverses_the_order
+1 failed, 1 passed, 3 deselected in 94.70s (0:01:34)
+=== jev full five, again (network back)
+
+L1 sort [jev-openai]: wall 27.4 s; events {'plan_arrived': 2, 'step_done': 3}; steps started/done/failed 4/3/0; plans 2 (stale 0, failed 0, loops 0); verdict block_1 resting in slot_0, gripper empty, arm at travel height; block_3 resting in slot_1, gripper empty, arm at travel height; block_5 resting in slot_2, gripper empty, arm at travel height; starts [{'object': 'block_1', 'place': 'slot_0'}, {'object': 'block_3', 'place': 'slot_1'}, {'object': 'block_5', 'place': 'slot_2'}, {'object': 'block_5', 'place': 'slot_2'}]; plan_ms [3995, 3659]; decision_ms [145, 291, 213, 94, 132]
+.
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_jev-openai_test_a_three_block_sort_on_physics_20261012-210522.jsonl', 'frames': 1136, 'events': 3}
+
+L1 correction [jev-openai]: wall 64.5 s; events {'plan_arrived': 5, 'user_text': 1, 'step_done': 4}; steps started/done/failed 5/4/0; plans 6 (stale 0, failed 1, loops 0); text_to_hold_s 0.113; verdict block_5 resting in slot_0, gripper empty, arm at travel height; block_3 resting in slot_1, gripper empty, arm at travel height; block_1 resting in slot_2, gripper empty, arm at travel height; starts [{'object': 'block_1', 'place': 'slot_0'}, {'object': 'block_1', 'place': 'slot_2'}, {'object': 'block_5', 'place': 'slot_0'}, {'object': 'block_3', 'place': 'slot_1'}, {'object': 'block_3', 'place': 'slot_1'}]; drops []; said_right_now hold; said_route fast_llm; readings ['the first plan arrived: Line the blocks up in the tray, lowest number on the left.', 'a new plan arrived: Line the blocks up in the tray, highest on the left.', 'a new plan arrived: Line the blocks up in the tray, highest on the left.', 'a new plan arrived: Line the blocks up in the tray, highest on the left.']; plan_ms [3067, 22315, 6223, 4343, 3906, 3213]; decision_ms [87, 105, 179, 156, 348, 110, 140, 84, 126]
+.
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_jev-openai_test_b_correction_mid_carry_holds_then_reverses_the_order_20261012-210550.jsonl', 'frames': 2562, 'events': 4}
+
+L1 hand [jev-openai]: wall 27.5 s; events {'plan_arrived': 1, 'scene_change': 4, 'step_done': 3}; steps started/done/failed 3/3/0; plans 6 (stale 3, failed 2, loops 0); hand_to_pause_s 0.854; leave_to_resume_s 0.178; min_hand_dist_m 0.029; verdict block_1 resting in slot_0, gripper empty, arm at travel height; block_3 resting in slot_1, gripper empty, arm at travel height; block_5 resting in slot_2, gripper empty, arm at travel height; plan_ms [3219, 14, 13, 13, 7783, 7]; decision_ms [95, 835, 281, 94, 174, 98, 428, 210]
+F
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_jev-openai_test_c_hand_near_the_gripper_pauses_within_half_a_second_and_resumes_20261012-220650.jsonl', 'frames': 1177, 'events': 3}
+
+L1 stop [jev-openai]: wall 7.8 s; events {'plan_arrived': 1}; steps started/done/failed 1/0/0; plans 1 (stale 0, failed 0, loops 0); stop_to_parked_s 2.47; arm_mode stopped; holding block_1; block_where gripper:arm_0; block_z 0.114; drops []; plan_ms [4395]; decision_ms [134]
+.
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_jev-openai_test_d_stop_mid_carry_parks_the_arm_and_never_drops_the_block_20261012-230714.jsonl', 'frames': 167, 'events': 2}
+
+L1 wait_go [jev-openai]: wall 29.4 s; events {'plan_arrived': 2, 'user_text': 2, 'step_done': 3}; steps started/done/failed 4/3/0; plans 2 (stale 0, failed 0, loops 0); wait_to_pause_s 0.327; go_to_resume_s 0.261; user_text_decisions [('the user typed: "hang on a second"', 'pause', 'stay_local'), ('the user typed: "ok, go on"', 'resume', 'stay_local')]; readings ['the first plan arrived: Line the blocks up in the tray, lowest number on the left.', 'a new plan arrived: Line the blocks up in the tray, lowest number on the left.']; leaked []; verdict block_1 resting in slot_0, gripper empty, arm at travel height; block_3 resting in slot_1, gripper empty, arm at travel height; block_5 resting in slot_2, gripper empty, arm at travel height; plan_ms [3686, 3900]; decision_ms [136, 312, 258, 172, 552, 126, 87]
+.
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_jev-openai_test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task_20261012-230724.jsonl', 'frames': 1244, 'events': 3}
+
+=================================== FAILURES ===================================
+_____ test_c_hand_near_the_gripper_pauses_within_half_a_second_and_resumes _____
+
+srv = <robojev.brain.mocks.ScriptedPerception object at 0x10d1983e0>
+
+    def test_c_hand_near_the_gripper_pauses_within_half_a_second_and_resumes(srv):
+        srv.hand_when(carrying(srv), for_s=1.5, dist=0.15)
+        r, wall = episode(brain(srv, [ASCENDING]))
+        appeared = next(t for t, what in srv.hand_log if what == "appears")
+        left = next(t for t, what in srv.hand_log if what == "leaves")
+        t_pause = first_mode(srv, ("paused",), appeared)
+        resumed = [t for t, _, _ in tools(srv, "resume")]
+        ok, why = judge_sort(srv, ASCENDING)
+        summary("hand", r, wall, srv, hand_to_pause_s=None if t_pause is None else round(t_pause - appeared, 3),
+                leave_to_resume_s=None if not resumed else round(resumed[0] - left, 3), min_hand_dist_m=round(srv.min_hand_dist, 3),
+                verdict=why)
+        assert r.outcome == "done", r.log
+>       assert t_pause is not None and t_pause - appeared < REACT_S, (t_pause, appeared)
+E       AssertionError: (2093937.097957458, 2093936.243893916)
+E       assert (2093937.097957458 is not None and (2093937.097957458 - 2093936.243893916) < 0.5)
+
+tests/test_slice.py:222: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_slice.py::test_c_hand_near_the_gripper_pauses_within_half_a_second_and_resumes
+1 failed, 4 passed in 160.71s (0:02:40)
+=== decisions full five, again (network back)
+
+L1 sort [decisions-openai]: wall 50.2 s; events {'plan_arrived': 2, 'step_done': 3}; steps started/done/failed 3/3/0; plans 3 (stale 0, failed 1, loops 0); verdict block_1 resting in slot_0, gripper empty, arm at travel height; block_3 resting in slot_1, gripper empty, arm at travel height; block_5 resting in slot_2, gripper empty, arm at travel height; starts [{'object': 'block_1', 'place': 'slot_0'}, {'object': 'block_3', 'place': 'slot_1'}, {'object': 'block_5', 'place': 'slot_2'}]; plan_ms [19953, 3952, 2962]; decision_ms [541, 147, 256, 243]
+F
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_decisions-openai_test_a_three_block_sort_on_physics_20261012-230755.jsonl', 'frames': 1134, 'events': 3}
+
+L1 correction [decisions-openai]: wall 42.9 s; events {'plan_arrived': 5, 'user_text': 1, 'step_done': 3}; steps started/done/failed 5/3/0; plans 5 (stale 0, failed 0, loops 0); text_to_hold_s 0.116; verdict block_5 resting in slot_0, gripper empty, arm at travel height; block_3 resting in slot_1, gripper empty, arm at travel height; block_1 resting in slot_2, gripper empty, arm at travel height; starts [{'object': 'block_1', 'place': 'slot_0'}, {'object': 'block_1', 'place': 'slot_2'}, {'object': 'block_3', 'place': 'slot_1'}, {'object': 'block_5', 'place': 'slot_0'}, {'object': 'block_5', 'place': 'slot_0'}]; drops []; said_right_now hold; said_route fast_llm; readings ['the first plan arrived: Line the blocks up in the tray, lowest number on the left.', 'a new plan arrived: Line the blocks up in the tray, highest on the left.', 'a new plan arrived: Line the blocks up in the tray, highest on the left.', 'a new plan arrived: Line the blocks up in the tray, highest on the left.']; plan_ms [3459, 4638, 3962, 6363, 2942]; decision_ms [453, 103, 122, 156, 117, 128, 261, 197]
+.
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_decisions-openai_test_b_correction_mid_carry_holds_then_reverses_the_order_20261013-000842.jsonl', 'frames': 1600, 'events': 3}
+
+L1 hand [decisions-openai]: wall 44.3 s; events {'plan_arrived': 3, 'scene_change': 4, 'step_done': 5}; steps started/done/failed 5/5/0; plans 7 (stale 3, failed 1, loops 0); hand_to_pause_s 0.931; leave_to_resume_s 0.126; min_hand_dist_m 0.032; verdict block_1 resting in slot_0, gripper empty, arm at travel height; block_3 resting in slot_1, gripper empty, arm at travel height; block_5 resting in slot_2, gripper empty, arm at travel height; plan_ms [3771, 5917, 6624, 6405, 6735, 8, 2781]; decision_ms [101, 924, 807, 407, 122, 286, 98, 906, 825, 341, 149]
+F
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_decisions-openai_test_c_hand_near_the_gripper_pauses_within_half_a_second_and_resumes_20261013-001342.jsonl', 'frames': 1759, 'events': 5}
+
+L1 stop [decisions-openai]: wall 7.7 s; events {'plan_arrived': 1}; steps started/done/failed 1/0/0; plans 1 (stale 0, failed 0, loops 0); stop_to_parked_s 2.55; arm_mode stopped; holding block_1; block_where gripper:arm_0; block_z 0.114; drops []; plan_ms [4344]; decision_ms [85]
+.
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_decisions-openai_test_d_stop_mid_carry_parks_the_arm_and_never_drops_the_block_20261013-010917.jsonl', 'frames': 167, 'events': 2}
+
+L1 wait_go [decisions-openai]: wall 32.4 s; events {'plan_arrived': 3, 'user_text': 2, 'step_done': 3}; steps started/done/failed 4/3/0; plans 5 (stale 2, failed 0, loops 0); wait_to_pause_s 0.265; go_to_resume_s 0.157; user_text_decisions [('the user typed: "hang on a second"', 'pause', 'fast_llm'), ('the user typed: "ok, go on"', 'resume', 'fast_llm')]; readings ['the first plan arrived: Line the blocks up in the tray, lowest number on the left.', 'a new plan arrived: Line the blocks up in the tray, lowest number on the left.']; leaked []; verdict block_1 resting in slot_0, gripper empty, arm at travel height; block_3 resting in slot_1, gripper empty, arm at travel height; block_5 resting in slot_2, gripper empty, arm at travel height; plan_ms [3658, 5050, 7966, 4814, 3526]; decision_ms [176, 257, 154, 132, 354, 130, 147]
+.
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_decisions-openai_test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task_20261013-010928.jsonl', 'frames': 1242, 'events': 3}
+
+=================================== FAILURES ===================================
+______________________ test_a_three_block_sort_on_physics ______________________
+
+srv = <robojev.brain.mocks.ScriptedPerception object at 0x10770b5f0>
+
+    def test_a_three_block_sort_on_physics(srv):
+        r, wall = episode(brain(srv, [ASCENDING]))
+        ok, why = judge_sort(srv, ASCENDING)
+        summary("sort", r, wall, srv, verdict=why, starts=[c[2][2] for c in tools(srv, "start")])
+        assert r.outcome == "done", r.log
+        assert ok, why
+>       assert r.steps_failed == 0 and r.failed_plans == 0
+E       AssertionError: assert (0 == 0 and 1 == 0)
+E        +  where 0 = EpisodeResult(outcome='done', wall_s=50.19597754091956, done_s=50.19584483304061, decisions=[{'t': 24.45834641600959, ...number on the left.', 'arm': 'arm_0'}, {'t': 50.196, 'note': 'done'}, {'t': 50.196, 'note': 'end', 'outcome': 'done'}]).steps_failed
+E        +  and   1 = EpisodeResult(outcome='done', wall_s=50.19597754091956, done_s=50.19584483304061, decisions=[{'t': 24.45834641600959, ...number on the left.', 'arm': 'arm_0'}, {'t': 50.196, 'note': 'done'}, {'t': 50.196, 'note': 'end', 'outcome': 'done'}]).failed_plans
+
+tests/test_slice.py:168: AssertionError
+_____ test_c_hand_near_the_gripper_pauses_within_half_a_second_and_resumes _____
+
+srv = <robojev.brain.mocks.ScriptedPerception object at 0x108ba9910>
+
+    def test_c_hand_near_the_gripper_pauses_within_half_a_second_and_resumes(srv):
+        srv.hand_when(carrying(srv), for_s=1.5, dist=0.15)
+        r, wall = episode(brain(srv, [ASCENDING]))
+        appeared = next(t for t, what in srv.hand_log if what == "appears")
+        left = next(t for t, what in srv.hand_log if what == "leaves")
+        t_pause = first_mode(srv, ("paused",), appeared)
+        resumed = [t for t, _, _ in tools(srv, "resume")]
+        ok, why = judge_sort(srv, ASCENDING)
+        summary("hand", r, wall, srv, hand_to_pause_s=None if t_pause is None else round(t_pause - appeared, 3),
+                leave_to_resume_s=None if not resumed else round(resumed[0] - left, 3), min_hand_dist_m=round(srv.min_hand_dist, 3),
+                verdict=why)
+        assert r.outcome == "done", r.log
+>       assert t_pause is not None and t_pause - appeared < REACT_S, (t_pause, appeared)
+E       AssertionError: (2094101.171864125, 2094100.240434625)
+E       assert (2094101.171864125 is not None and (2094101.171864125 - 2094100.240434625) < 0.5)
+
+tests/test_slice.py:222: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_slice.py::test_a_three_block_sort_on_physics - AssertionErr...
+FAILED tests/test_slice.py::test_c_hand_near_the_gripper_pauses_within_half_a_second_and_resumes
+2 failed, 3 passed in 182.71s (0:03:02)
+=== NOTE: the three passes above (decisions run 5 again, both full fives again) ran while the Mac slept between tests (recording stamps an hour apart; Jev errors after 835 ms, planner 'Server disconnected'). Re-run below under caffeinate; the sleep-hit recordings are kept and named in docs/live-results.md.
+=== decisions run 5 (b, e), caffeinated
+
+L1 correction [decisions-openai]: wall 85.2 s; events {'plan_arrived': 5, 'user_text': 1, 'step_done': 4}; steps started/done/failed 4/4/0; plans 6 (stale 0, failed 1, loops 0); text_to_hold_s 0.181; verdict block_5 resting in slot_0, gripper empty, arm at travel height; block_3 resting in slot_1, gripper empty, arm at travel height; block_1 resting in slot_2, gripper empty, arm at travel height; starts [{'object': 'block_1', 'place': 'slot_0'}, {'object': 'block_1', 'place': 'slot_2'}, {'object': 'block_5', 'place': 'slot_0'}, {'object': 'block_3', 'place': 'slot_1'}]; drops []; said_right_now hold; said_route fast_llm; readings ['the first plan arrived: Line the blocks up in the tray, lowest number on the left.', 'a new plan arrived: Line the blocks up in the tray, highest on the left.', 'a new plan arrived: Line the blocks up in the tray, highest on the left.', 'a new plan arrived: Line the blocks up in the tray, highest on the left.']; plan_ms [3179, 30006, 8719, 3275, 5732, 3802]; decision_ms [113, 177, 818, 158, 443, 100, 144, 147, 141]
+.
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_decisions-openai_test_b_correction_mid_carry_holds_then_reverses_the_order_20261013-042753.jsonl', 'frames': 2946, 'events': 5}
+
+L1 wait_go [decisions-openai]: wall 33.2 s; events {'plan_arrived': 3, 'user_text': 2, 'step_done': 3}; steps started/done/failed 4/3/0; plans 5 (stale 2, failed 0, loops 0); wait_to_pause_s 0.269; go_to_resume_s 0.161; user_text_decisions [('the user typed: "hang on a second"', 'pause', 'fast_llm'), ('the user typed: "ok, go on"', 'resume', 'fast_llm')]; readings ['the first plan arrived: Line the blocks up in the tray, lowest number on the left.', 'a new plan arrived: Line the blocks up in the tray, lowest number on the left.']; leaked []; verdict block_1 resting in slot_0, gripper empty, arm at travel height; block_3 resting in slot_1, gripper empty, arm at travel height; block_5 resting in slot_2, gripper empty, arm at travel height; plan_ms [4002, 6965, 8681, 5538, 4003]; decision_ms [104, 263, 158, 124, 476, 125, 133]
+.
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_decisions-openai_test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task_20261013-050624.jsonl', 'frames': 1241, 'events': 3}
+
+2 passed, 3 deselected in 120.16s (0:02:00)
+=== jev full five, caffeinated
+
+L1 sort [jev-openai]: wall 26.2 s; events {'plan_arrived': 2, 'step_done': 3}; steps started/done/failed 4/3/0; plans 2 (stale 0, failed 0, loops 0); verdict block_1 resting in slot_0, gripper empty, arm at travel height; block_3 resting in slot_1, gripper empty, arm at travel height; block_5 resting in slot_2, gripper empty, arm at travel height; starts [{'object': 'block_1', 'place': 'slot_0'}, {'object': 'block_3', 'place': 'slot_1'}, {'object': 'block_5', 'place': 'slot_2'}, {'object': 'block_5', 'place': 'slot_2'}]; plan_ms [2731, 4962]; decision_ms [96, 164, 273, 160, 137]
+.
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_jev-openai_test_a_three_block_sort_on_physics_20261013-050659.jsonl', 'frames': 1145, 'events': 3}
+
+L1 correction [jev-openai]: wall 36.1 s; events {'plan_arrived': 2, 'user_text': 1, 'step_done': 3}; steps started/done/failed 4/3/0; plans 5 (stale 1, failed 2, loops 0); text_to_hold_s 0.104; verdict block_5 resting in slot_0, gripper empty, arm at travel height; block_3 resting in slot_1, gripper empty, arm at travel height; block_1 resting in slot_2, gripper empty, arm at travel height; starts [{'object': 'block_1', 'place': 'slot_0'}, {'object': 'block_1', 'place': 'slot_2'}, {'object': 'block_5', 'place': 'slot_0'}, {'object': 'block_3', 'place': 'slot_1'}]; drops []; said_right_now hold; said_route fast_llm; readings ['the first plan arrived: Line the blocks up in the tray, lowest number on the left.', 'a new plan arrived: Line the blocks up in the tray, highest on the left.']; plan_ms [4223, 7588, 7, 8647, 7]; decision_ms [157, 90, 140, 16, 1528, 168]
+.
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_jev-openai_test_b_correction_mid_carry_holds_then_reverses_the_order_20261013-050725.jsonl', 'frames': 1510, 'events': 3}
+
+L1 hand [jev-openai]: wall 63.2 s; events {'plan_arrived': 3, 'scene_change': 3, 'step_done': 3}; steps started/done/failed 3/3/0; plans 4 (stale 0, failed 1, loops 0); hand_to_pause_s 0.108; leave_to_resume_s 0.099; min_hand_dist_m 0.122; verdict block_1 resting in slot_0, gripper empty, arm at travel height; block_3 resting in slot_1, gripper empty, arm at travel height; block_5 resting in slot_2, gripper empty, arm at travel height; plan_ms [30037, 5241, 4797, 3334]; decision_ms [171, 105, 102, 96, 115, 177, 85, 94]
+.
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_jev-openai_test_c_hand_near_the_gripper_pauses_within_half_a_second_and_resumes_20261013-061005.jsonl', 'frames': 1210, 'events': 3}
+
+L1 stop [jev-openai]: wall 6.8 s; events {'plan_arrived': 1}; steps started/done/failed 1/0/0; plans 1 (stale 0, failed 0, loops 0); stop_to_parked_s 2.47; arm_mode stopped; holding block_1; block_where gripper:arm_0; block_z 0.114; drops []; plan_ms [3449]; decision_ms [108]
+.
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_jev-openai_test_d_stop_mid_carry_parks_the_arm_and_never_drops_the_block_20261013-070703.jsonl', 'frames': 167, 'events': 2}
+F
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_jev-openai_test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task_20261013-072306.jsonl', 'frames': 0, 'events': 2}
+
+=================================== FAILURES ===================================
+_______ test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task ________
+
+srv = <robojev.brain.mocks.ScriptedPerception object at 0x10e15e690>
+
+    def test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task(srv):
+        """A transient "wait" pauses the arm and "go on" resumes it; neither is part of the task, so no
+        restated task (a plan's reading) may mention them (H5)."""
+        user = ScriptedUser([Line(carrying(srv, "block_1"), WAIT),
+                             Line(lambda: bool(user.said) and time.monotonic() - user.t0 - user.said[0][0] >= 2.0, GO_ON)])
+        r, wall = episode(brain(srv, [ASCENDING], {WAIT: Utt("wait"), GO_ON: Utt("go_on")}, user))
+>       t_wait, t_go = (user.t0 + t for t, _ in user.said[:2])
+        ^^^^^^^^^^^^
+E       ValueError: not enough values to unpack (expected 2, got 0)
+
+tests/test_slice.py:277: ValueError
+=========================== short test summary info ============================
+FAILED tests/test_slice.py::test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task
+1 failed, 4 passed in 166.92s (0:02:46)
+=== decisions full five, caffeinated
+
+L1 sort [decisions-openai]: wall 0.0 s; events {}; steps started/done/failed 0/0/0; plans 2 (stale 0, failed 2, loops 0); verdict block_1 is table, 15.6 cm from slot_0; block_3 is table, 18.9 cm from slot_1; block_5 is table, 18.9 cm from slot_2; starts []; plan_ms [1, 1]; decision_ms []
+F
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_decisions-openai_test_a_three_block_sort_on_physics_20261013-075938.jsonl', 'frames': 0, 'events': 0}
+F
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_decisions-openai_test_b_correction_mid_carry_holds_then_reverses_the_order_20261013-075938.jsonl', 'frames': 0, 'events': 0}
+F
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_decisions-openai_test_c_hand_near_the_gripper_pauses_within_half_a_second_and_resumes_20261013-075938.jsonl', 'frames': 0, 'events': 0}
+F
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_decisions-openai_test_d_stop_mid_carry_parks_the_arm_and_never_drops_the_block_20261013-075938.jsonl', 'frames': 0, 'events': 0}
+F
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_decisions-openai_test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task_20261013-075938.jsonl', 'frames': 0, 'events': 0}
+
+=================================== FAILURES ===================================
+______________________ test_a_three_block_sort_on_physics ______________________
+
+srv = <robojev.brain.mocks.ScriptedPerception object at 0x1098bb4d0>
+
+    def test_a_three_block_sort_on_physics(srv):
+        r, wall = episode(brain(srv, [ASCENDING]))
+        ok, why = judge_sort(srv, ASCENDING)
+        summary("sort", r, wall, srv, verdict=why, starts=[c[2][2] for c in tools(srv, "start")])
+>       assert r.outcome == "done", r.log
+E       AssertionError: [{'t': 0.0, 'note': 'llm_request', 'request': 'plan', 'route': 'fast_llm'}, {'t': 0.002, 'note': 'plan_failed', 'reque...Error('[Errno 8] nodename nor servname provided, or not known')"]]}, {'t': 0.003, 'note': 'end', 'outcome': 'gave_up'}]
+E       assert 'gave_up' == 'done'
+E         
+E         - done
+E         + gave_up
+
+tests/test_slice.py:166: AssertionError
+__________ test_b_correction_mid_carry_holds_then_reverses_the_order ___________
+
+srv = <robojev.brain.mocks.ScriptedPerception object at 0x10a34fc20>
+
+    def test_b_correction_mid_carry_holds_then_reverses_the_order(srv):
+        user = ScriptedUser([Line(carrying(srv, "block_1"), CORRECTION)])
+        r, wall = episode(brain(srv, [ASCENDING, DESCENDING], {CORRECTION: Utt("correction", version=1)}, user))
+>       t_text = user.t0 + user.said[0][0]
+                           ^^^^^^^^^^^^
+E       IndexError: list index out of range
+
+tests/test_slice.py:183: IndexError
+_____ test_c_hand_near_the_gripper_pauses_within_half_a_second_and_resumes _____
+
+srv = <robojev.brain.mocks.ScriptedPerception object at 0x10a399730>
+
+    def test_c_hand_near_the_gripper_pauses_within_half_a_second_and_resumes(srv):
+        srv.hand_when(carrying(srv), for_s=1.5, dist=0.15)
+        r, wall = episode(brain(srv, [ASCENDING]))
+>       appeared = next(t for t, what in srv.hand_log if what == "appears")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       StopIteration
+
+tests/test_slice.py:213: StopIteration
+________ test_d_stop_mid_carry_parks_the_arm_and_never_drops_the_block _________
+
+srv = <robojev.brain.mocks.ScriptedPerception object at 0x10a3de120>
+
+    def test_d_stop_mid_carry_parks_the_arm_and_never_drops_the_block(srv):
+        user = ScriptedUser([Line(carrying(srv, "block_1"), PRESS_STOP)])
+        r, wall = episode(brain(srv, [ASCENDING], user=user))
+>       t_stop = tools(srv, "stop")[0][0]
+                 ^^^^^^^^^^^^^^^^^^^^^
+E       IndexError: list index out of range
+
+tests/test_slice.py:240: IndexError
+_______ test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task ________
+
+srv = <robojev.brain.mocks.ScriptedPerception object at 0x10a3ea7b0>
+
+    def test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task(srv):
+        """A transient "wait" pauses the arm and "go on" resumes it; neither is part of the task, so no
+        restated task (a plan's reading) may mention them (H5)."""
+        user = ScriptedUser([Line(carrying(srv, "block_1"), WAIT),
+                             Line(lambda: bool(user.said) and time.monotonic() - user.t0 - user.said[0][0] >= 2.0, GO_ON)])
+        r, wall = episode(brain(srv, [ASCENDING], {WAIT: Utt("wait"), GO_ON: Utt("go_on")}, user))
+>       t_wait, t_go = (user.t0 + t for t, _ in user.said[:2])
+        ^^^^^^^^^^^^
+E       ValueError: not enough values to unpack (expected 2, got 0)
+
+tests/test_slice.py:277: ValueError
+=========================== short test summary info ============================
+FAILED tests/test_slice.py::test_a_three_block_sort_on_physics - AssertionErr...
+FAILED tests/test_slice.py::test_b_correction_mid_carry_holds_then_reverses_the_order
+FAILED tests/test_slice.py::test_c_hand_near_the_gripper_pauses_within_half_a_second_and_resumes
+FAILED tests/test_slice.py::test_d_stop_mid_carry_parks_the_arm_and_never_drops_the_block
+FAILED tests/test_slice.py::test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task
+5 failed in 0.66s

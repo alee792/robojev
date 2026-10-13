@@ -1,0 +1,139 @@
+battery: 10 episodes, seed 1, sim, 1 arm(s), held_out phrasings, paraphrased; files under experiments/results/battery/20261012-160448-sim-jev
+  jev        ep   0 held_out word OPENAI row OPENAI   score 1.00 done       57.6 s  events ['letter_taken']
+  jev        ep   1 held_out word OPENAI row OPENAI   score 1.00 done       60.2 s  events []
+  jev        ep   2 held_out word OPENAI row OPENAI   score 1.00 done       70.3 s  events ['letter_nudged']
+  jev        ep   3 held_out word OPENAI row OPENAI   score 1.00 done       53.4 s  events ['letter_placed', 'letter_added']
+  jev        ep   4 held_out word PINE   row PINE__   score 1.00 done       75.8 s  events ['new_word', 'letter_placed']
+  jev        ep   5 held_out word OPENAI row O_____   score 0.17 timeout   240.0 s  events ['hand_near']
+  jev        ep   6 held_out word OPENAI row OP____   score 0.33 stopped    27.6 s  events ['letter_added', 'wait_go_on', 'stop']
+  jev        ep   7 held_out word PANE   row PANE__   score 1.00 done       64.3 s  events ['new_word']
+  jev        ep   8 held_out word IDEA   row IDEA__   score 1.00 done       99.0 s  events ['new_word']
+  jev        ep   9 held_out word OPENAI row OPENAI   score 1.00 done       62.1 s  events []
+
+                                                         jev + openai
+---------------------------------------------------------------------
+episodes (judged / with STOP)                              10 (9 / 1)
+mean outcome score                                              0.907
+finish rate (exact row, done)                                    0.89
+outcomes                                 done 8, stopped 1, timeout 1
+median s to first change: go_on                                  0.14
+median s to first change: hand_near                              0.12
+median s to first change: letter_added                           3.38
+median s to first change: letter_nudged                          4.26
+median s to first change: letter_placed                          0.65
+median s to first change: letter_taken                           1.30
+median s to first change: new_word                               0.13
+median s to first change: stop                                   0.00
+median s to first change: wait_go_on                             0.07
+planner calls / episode                                          8.10
+replans / episode                                                7.10
+decisions / episode                                              15.3
+decision latency p50 ms                                           152
+drops / episode                                                  0.00
+hand contacts / episodes with a hand                            0 / 1
+STOP ok / with STOP                                             1 / 1
+median wall s                                                    63.2
+battery: 10 episodes from experiments/results/battery/20261012-160448-sim-jev/episodes.json, sim, 1 arm(s); files under experiments/results/battery/20261012-161951-sim-decisions
+  decisions  ep   0 held_out word OPENAI row OPENAI   score 1.00 done       56.2 s  events ['letter_taken']
+  decisions  ep   1 held_out word OPENAI row OPENAI   score 1.00 done       57.9 s  events []
+  decisions  ep   2 held_out word OPENAI row OPENAI   score 1.00 done       58.5 s  events ['letter_nudged']
+  decisions  ep   3 held_out word OPENAI row OPENAI   score 1.00 done       55.6 s  events ['letter_placed', 'letter_added']
+  decisions  ep   4 held_out word PINE   row PINE__   score 1.00 done       87.9 s  events ['new_word', 'letter_placed']
+  decisions  ep   5 held_out word OPENAI row O_____   score 0.17 timeout   240.0 s  events ['hand_near']
+  decisions  ep   6 held_out word OPENAI row OP____   score 0.33 stopped    31.3 s  events ['letter_added', 'wait_go_on', 'stop']
+  decisions  ep   7 held_out word PANE   row PANE__   score 1.00 done       82.5 s  events ['new_word']
+  decisions  ep   8 held_out word IDEA   row IDEA__   score 1.00 done      141.0 s  events ['new_word']
+  decisions  ep   9 held_out word OPENAI row OPENAI   score 1.00 done       65.6 s  events []
+
+                                                   decisions + openai
+---------------------------------------------------------------------
+episodes (judged / with STOP)                              10 (9 / 1)
+mean outcome score                                              0.907
+finish rate (exact row, done)                                    0.89
+outcomes                                 done 8, stopped 1, timeout 1
+median s to first change: go_on                                  0.17
+median s to first change: hand_near                              0.07
+median s to first change: letter_added                           3.35
+median s to first change: letter_nudged                          4.29
+median s to first change: letter_placed                          0.90
+median s to first change: letter_taken                           1.26
+median s to first change: new_word                               0.17
+median s to first change: stop                                   0.00
+median s to first change: wait_go_on                             0.13
+planner calls / episode                                          6.50
+replans / episode                                                5.50
+decisions / episode                                              16.2
+decision latency p50 ms                                           152
+drops / episode                                                  0.00
+hand contacts / episodes with a hand                            0 / 1
+STOP ok / with STOP                                             1 / 1
+median wall s                                                    62.1
+battery: 10 episodes from experiments/results/battery/20261012-160448-sim-jev/episodes.json, sim, 1 arm(s); files under experiments/results/battery/20261012-163442-sim-rules
+  rules      ep   0 held_out word OPENAI row OPENAI   score 1.00 done       52.2 s  events ['letter_taken']
+  rules      ep   1 held_out word OPENAI row OPENAI   score 1.00 done       54.8 s  events []
+  rules      ep   2 held_out word OPENAI row OPENAI   score 1.00 done       52.6 s  events ['letter_nudged']
+  rules      ep   3 held_out word OPENAI row OPENAI   score 1.00 done       51.8 s  events ['letter_placed', 'letter_added']
+  rules      ep   4 held_out word PINE   row PINE__   score 1.00 done       71.1 s  events ['new_word', 'letter_placed']
+  rules      ep   5 held_out word OPENAI row OPENAI   score 1.00 done       57.6 s  events ['hand_near']
+  rules      ep   6 held_out word OPENAI row OP____   score 0.33 stopped    25.4 s  events ['letter_added', 'wait_go_on', 'stop']
+  rules      ep   7 held_out word PANE   row PANE__   score 1.00 done       52.1 s  events ['new_word']
+  rules      ep   8 held_out word IDEA   row IDEA__   score 1.00 done       85.9 s  events ['new_word']
+  rules      ep   9 held_out word OPENAI row OPENAI   score 1.00 done       53.6 s  events []
+
+                                            rules + openai
+----------------------------------------------------------
+episodes (judged / with STOP)                   10 (9 / 1)
+mean outcome score                                   1.000
+finish rate (exact row, done)                         1.00
+outcomes                                 done 9, stopped 1
+median s to first change: go_on                       0.00
+median s to first change: hand_near                   0.01
+median s to first change: letter_added                3.03
+median s to first change: letter_nudged               3.21
+median s to first change: letter_placed               1.15
+median s to first change: letter_taken                1.15
+median s to first change: new_word                    0.00
+median s to first change: wait_go_on                  0.00
+planner calls / episode                               1.80
+replans / episode                                     0.80
+decisions / episode                                    9.4
+decision latency p50 ms                                  1
+drops / episode                                       0.00
+hand contacts / episodes with a hand                 0 / 1
+STOP ok / with STOP                                  1 / 1
+median wall s                                         53.1
+battery: 10 episodes from experiments/results/battery/20261012-160448-sim-jev/episodes.json, sim, 1 arm(s); files under experiments/results/battery/20261012-164411-sim-always_llm
+  always_llm ep   0 held_out word OPENAI row OPENAI   score 1.00 done       54.5 s  events ['letter_taken']
+  always_llm ep   1 held_out word OPENAI row OPENAI   score 1.00 done       54.8 s  events []
+  always_llm ep   2 held_out word OPENAI row OPENAI   score 1.00 done       54.6 s  events ['letter_nudged']
+  always_llm ep   3 held_out word OPENAI row OPENAI   score 1.00 done       51.3 s  events ['letter_placed', 'letter_added']
+  always_llm ep   4 held_out word PINE   row PINE__   score 1.00 done      117.1 s  events ['new_word', 'letter_placed']
+  always_llm ep   5 held_out word OPENAI row OPENAI   score 1.00 done       50.6 s  events ['hand_near']
+  always_llm ep   6 held_out word OPENAI row OP____   score 0.33 stopped    23.4 s  events ['letter_added', 'wait_go_on', 'stop']
+  always_llm ep   7 held_out word PANE   row PANE__   score 1.00 done       61.6 s  events ['new_word']
+  always_llm ep   8 held_out word IDEA   row IDEA__   score 1.00 done       91.6 s  events ['new_word']
+  always_llm ep   9 held_out word OPENAI row OPENAI   score 1.00 done       53.4 s  events []
+
+                                         always_llm + openai
+------------------------------------------------------------
+episodes (judged / with STOP)                     10 (9 / 1)
+mean outcome score                                     1.000
+finish rate (exact row, done)                           1.00
+outcomes                                   done 9, stopped 1
+median s to first change: go_on                         1.78
+median s to first change: hand_near                     4.74
+median s to first change: letter_added                  3.05
+median s to first change: letter_nudged                 5.27
+median s to first change: letter_placed                 1.16
+median s to first change: letter_taken                  1.15
+median s to first change: new_word                      3.90
+median s to first change: stop                          0.01
+median s to first change: wait_go_on                    3.80
+planner calls / episode                                 2.60
+replans / episode                                       1.60
+decisions / episode                                     10.3
+decision latency p50 ms                                    1
+drops / episode                                         0.00
+hand contacts / episodes with a hand                   1 / 1
+STOP ok / with STOP                                    1 / 1
+median wall s                                           54.6
