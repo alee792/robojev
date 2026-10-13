@@ -22,6 +22,8 @@ Reads experiments/results/battery/*/ep_*.jsonl and experiments/results/live/slic
 
     uv run --frozen python experiments/replay_rules.py            # prints the table
     uv run --frozen python experiments/replay_rules.py --write    # also writes results/battery/replay_rules.txt
+    uv run --frozen python experiments/replay_rules.py --after 20261013-095000 --write
+        # only recordings stamped after that (one live run's), written to replay_rules_after_<stamp>.txt
 """
 from __future__ import annotations
 
@@ -103,11 +105,20 @@ def classify(decs: list[dict], llm: list[dict], log: list[dict]) -> Counter:
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--write", action="store_true")
+    ap.add_argument("--after", default=None, help="only recordings whose stamp (YYYYMMDD-HHMMSS) is later; "
+                    "runs are grouped by decider, so without it several live runs' files are counted together")
     a = ap.parse_args(argv)
+
+    def keep(stamp: str) -> bool:
+        return a.after is None or stamp > a.after
     runs: dict[str, list[Path]] = defaultdict(list)
     for p in sorted((ROOT / "battery").glob("2026*-sim-*/ep_*.jsonl")):
+        if not keep(p.parent.name.split("-sim-")[0]):
+            continue
         runs["battery " + p.parent.name.split("-sim-")[1]].append(p)
     for p in sorted((ROOT / "live").glob("slice_*_2026101[23]-*.jsonl.gz")):
+        if not keep(p.name.rsplit("_", 1)[1].split(".")[0]):
+            continue
         runs["slice " + p.name.split("_")[1].split("-")[0]].append(p)
     lines = ["| run | files | step_done | step_done replans | routine: now local | paused_idle re-asks | stayed paused | hand (code resumes) | other (user asked) | plans sent back | unsure-only (spare) | words: unsure lines | failed replans |",
              "|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
@@ -130,8 +141,9 @@ def main(argv=None) -> int:
     text = "\n".join(out) + "\n"
     print(text)
     if a.write:
-        (ROOT / "battery" / "replay_rules.txt").write_text(text)
-        print("wrote", ROOT / "battery" / "replay_rules.txt", file=sys.stderr)
+        out_path = ROOT / "battery" / ("replay_rules.txt" if a.after is None else f"replay_rules_after_{a.after}.txt")
+        out_path.write_text(text)
+        print("wrote", out_path, file=sys.stderr)
     return 0
 
 
