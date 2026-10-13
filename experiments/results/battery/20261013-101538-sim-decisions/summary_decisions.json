@@ -1,0 +1,35 @@
+{
+ "decider": "decisions",
+ "planner": "openai",
+ "world": "sim",
+ "n": 10,
+ "mean_score": 1.0,
+ "finish_rate": 1.0,
+ "judged": 9,
+ "time_to_change_s": {
+  "go_on": 14.773,
+  "hand_near": 0.138,
+  "letter_added": 6.287,
+  "letter_nudged": 5.013,
+  "letter_placed": 0.941,
+  "letter_taken": 1.28,
+  "new_word": 0.133,
+  "reply": 0.0,
+  "stop": 0.011,
+  "wait_go_on": 0.181
+ },
+ "planner_calls": 4.9,
+ "replans": 3.9,
+ "decisions": 11.2,
+ "decision_ms_p50": 145.1,
+ "drops": 0,
+ "hands": 1,
+ "contacts": 0,
+ "stops": 1,
+ "stops_ok": 1,
+ "wall_s": 64.5,
+ "outcomes": {
+  "done": 9,
+  "stopped": 1
+ }
+}

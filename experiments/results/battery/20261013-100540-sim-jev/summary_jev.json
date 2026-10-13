@@ -1,0 +1,34 @@
+{
+ "decider": "jev",
+ "planner": "openai",
+ "world": "sim",
+ "n": 10,
+ "mean_score": 1.0,
+ "finish_rate": 1.0,
+ "judged": 9,
+ "time_to_change_s": {
+  "go_on": 0.097,
+  "hand_near": 0.126,
+  "letter_added": 3.018,
+  "letter_nudged": 5.892,
+  "letter_placed": 0.654,
+  "letter_taken": 1.423,
+  "new_word": 0.149,
+  "stop": 0.008,
+  "wait_go_on": 0.099
+ },
+ "planner_calls": 2,
+ "replans": 1,
+ "decisions": 9.3,
+ "decision_ms_p50": 154.5,
+ "drops": 0,
+ "hands": 1,
+ "contacts": 0,
+ "stops": 1,
+ "stops_ok": 1,
+ "wall_s": 57.4,
+ "outcomes": {
+  "done": 9,
+  "stopped": 1
+ }
+}
