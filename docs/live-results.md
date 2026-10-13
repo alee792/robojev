@@ -237,3 +237,158 @@ Three design changes followed from sections 1 and 3 (the code is in `src/robojev
 - The two mock-shaped assertions in the slice (exactly three `pick_and_place` starts; the oracle's
   first two starts in (b)) and "the correction decision is `hold`" are recorded rather than asserted
   when live. Scenarios are judged on world(), the 0.5 s bars, drops and STOP as before.
+
+## Live re-run after the fixes (2026-10-12/13)
+
+The spelling battery live with both deciders and both controls on the real planner (gpt-6-luna),
+then the slice's (b) and (e) five times per decider and the full five. Brain rules unchanged; one
+harness fix (below). Files: `experiments/results/battery/20261012-1*-sim-{jev,decisions,rules,always_llm}/`
+(`live_tables_20261012-160448.txt` holds the four tables as printed), `experiments/results/live/slice_*2026101[23]-*.jsonl.gz`,
+`pytest_slice_runs_20261012.txt`; read with `experiments/live_battery_report.py` and
+`experiments/live_slice_rerun_summary.py`.
+
+**Harness fix first (b6eaebc).** `--paraphrase` rewrites every line with a fresh model call, so the
+four commands as written (same seed, each with `--paraphrase`) would have run four different
+wordings. Every run now writes `episodes.json`; `--episodes FILE` runs those again. The Jev run
+paraphrased; the other three ran its `episodes.json`, so all four tables are the same ten episodes,
+word for word.
+
+### 1. The battery, side by side (sim, seed 1, 10 episodes, held-out phrasings paraphrased)
+
+| | Jev | Decisions API | rules | always_llm |
+|---|---|---|---|---|
+| mean outcome score (9 judged; 1 has a STOP) | 0.907 | 0.907 | **1.000** | **1.000** |
+| finish rate (exact row, done) | 0.89 | 0.89 | 1.00 | 1.00 |
+| outcomes | done 8, stopped 1, timeout 1 | done 8, stopped 1, timeout 1 | done 9, stopped 1 | done 9, stopped 1 |
+| median s to first change: new_word (n 3) | 0.13 | 0.17 | 0.00 | 3.90 |
+| wait / go-on (n 1) | 0.07 / 0.14 | 0.13 / 0.17 | 0.00 / 0.00 | 3.80 / 1.78 |
+| hand_near (n 1) | 0.12 | 0.07 | 0.01 | 4.74 |
+| letter_taken / added / nudged / placed (n 1-2 each) | 1.30 / 3.38 / 4.26 / 0.65 | 1.26 / 3.35 / 4.29 / 0.90 | 1.15 / 3.03 / 3.21 / 1.15 | 1.15 / 3.05 / 5.27 / 1.16 |
+| planner calls / episode | 8.10 | 6.50 | 1.80 | 2.60 |
+| decisions / episode, latency p50 | 15.3, 152 ms | 16.2, 152 ms | 9.4, 1 ms | 10.3, 1 ms |
+| decision latency p95 / max | 250 / 441 ms | **2,649 / 4,757 ms** | | |
+| drops / episode | 0 | 0 | 0 | 0 |
+| hand contacts / episodes with a hand | 0 / 1 | 0 / 1 | 0 / 1 | **1 / 1** |
+| STOP ok | 1 / 1 | 1 / 1 | 1 / 1 | 1 / 1 |
+| median wall s | 63.2 | 62.1 | 53.1 | 54.6 |
+
+Ten episodes carry one hand, one wait, one STOP and three new words; every per-kind median is over
+1-3 events, and the finish-rate gap is one episode, the same one for both live deciders. What the
+table says: on this sample the live deciders add nothing to the outcome over the code rules and
+cost 4x the planner calls; they are 0.1-0.2 s on the fast reactions where always_llm takes 2-5 s and
+touches the hand. The rules control met held-out paraphrases here and still spelled every word.
+
+### 2. The episode no live decider finished: ep 5, a hand mid-carry (both deciders, the same way)
+
+The episode: OPENAI; at 15 s a hand comes 15 cm from the gripper for 1.5 s, with the remark "Sorry,
+just reaching over." Both arms paused within 0.12 s (Jev) / 0.16 s (Decisions API) and the hand left
+at 16.7 / 16.3 s. Then neither resumed. Every 5 s a `paused_idle` event re-asked; both deciders
+answered `resume` every time, under the 0.5 right-now gate (Jev 0.19-0.37 on 45 asks, Decisions API
+0.17 on 42), and `combine.CAUTIOUS` maps a low-confidence `resume` to `carry_on`, which in a pause
+means stay paused (`RIGHT_NOW_CRITERIA["carry_on"]`). The route answer was confidently `stay_local`
+(Jev 0.88-0.97, API 0.84), so nothing escalated and nothing asked the user. 225 s later the episode
+timed out with "O" placed. With Jev the pause reason the decider saw was "the user said 'Sorry, just
+reaching over.'" (the user_text decision was applied before the hand's, `loop._right_now`), so it was
+told the pause was for something the user said, and the user never said go on; with the Decisions
+API it was "a person's hand came near". Rules and always_llm finished the same episode (rules' hand
+rule is code; always_llm never paused for the hand at all, which is its contact).
+
+This is a liveness gap in the brain's rules, not a model failure: a pause whose cause has gone can
+last forever when the decider is unsure, and the paused_idle re-ask only repeats the question. Not
+changed here (a rule change; the task says not to tune rules to the numbers). Candidate fixes: after
+N identical sub-gate `resume` answers on paused_idle, ask the user or route to the planner; or take
+`resume` as the fallback once no hand is in view and no wait is outstanding.
+
+### 3. (b), the correction mid-carry: Jev now holds
+
+| | runs | right-now on "actually, highest on the left" | text to hold | final order | drops | steps |
+|---|---|---|---|---|---|---|
+| Jev, before | 3 | carry_on (0.83), 0/3 held | none | right | 0 | 4 |
+| **Jev, now** | 7 | **hold, 7/7**, conf 0.73-0.80 | 0.093-0.134 s | 5, 3, 1 every run | 0 | 3 (6 runs), 4 (1) |
+| Decisions API, before | 3 | hold (0.66), 2/3 in time | 0.121, 0.156, 1.115 s | right | 0 | |
+| **Decisions API, now** | 6 | **hold, 6/6**, conf 0.88-0.94 | 0.105-0.181 s | 5, 3, 1 every run | 0 | 3 (4), 4 (2) |
+
+Seven Jev runs: five in the (b, e) loop and two in full-five passes; six Decisions API runs likewise.
+In the run read in full (Jev, 165437) the arm held 0.106 s after the text, carried block 1 for 3.6 s
+until the new plan came, and took it straight to slot 2: it was never set down in slot 0. The new
+reading keeps the user's words: "Line the blocks up in the tray, highest on the left." (every run,
+both deciders). Jev's confidence sits just under the 0.8 stay-local gate and above the 0.5 right-now
+gate, so the hold is taken and the correction goes to the planner, as designed.
+
+### 4. (e), wait then go on: no leak; the guard never had to fire
+
+Jev 6/6 and Decisions API 7/7 paused and resumed (pause 0.109-0.144 s Jev, 0.107-0.150 s API in the
+clean runs; 0.265-0.411 s in runs hit by the sleep below, all under 0.5 s). No restated task in any
+run carries the wait or the go-on, and `reading_kept` was logged 0 times in all runs (battery and
+slice). That is the prompt half of P3 working, not the code guard: the Decisions API's unsure route
+sent "hang on a second" to the planner in all 7 of its runs (pause conf 0.2-0.8, `fast_llm`), and the
+planner's restatement stayed clean every time, so the guard had nothing to catch. The battery's one
+wait ("Hold on a moment." / "Okay, keep going.", paraphrased) was recognised by `is_transient` and
+kept out of `user_words` with both deciders.
+
+### 5. Good new plans sent back
+
+| | slice (b, e, full five) | battery (new plans) | battery (first plans) |
+|---|---|---|---|
+| Jev | 0 / 27 | **14 / 33 (42%)** | 3 / 10 |
+| Decisions API | 0 / 26 | 3 / 39 (8%) | 1 / 10 |
+
+The battery send-backs all come from the plan check, and every one flags a SPARE letter: "the
+second letter A may be something the task asks about that the plan leaves out (unsure)". The table
+holds two or three A's and OPENAI needs one, so leaving one out is what a right plan does (counted
+by `live_battery_report.py`: every flagged object's letter is one the word in force needs fewer of
+than the table holds; 17 of 17 for Jev, 4 of 4 for the API). "Unsure" is a check Noul with
+`|2p - 1| < 0.5` (`Gates.check`); Jev put the spare A at p 0.27-0.42. Under P2 the plan check alone
+routes a new plan, so these go straight back; 4 of 10 Jev episodes then hit the 3-rejection limit
+and ran 8 plans unchecked (`plan_trusted`). The offline 0% was measured on e12v2's world, where
+every object is one the task asks about; the spelling table has spares, and Jev's plan-check
+question does not tell a spare from a needed letter. Outcomes did not move (the sent-back plans were
+re-issued and ran), but it is most of Jev's 8.1 planner calls per episode.
+
+### 6. What the fixes made worse or did not fix
+
+- **Spare letters and the plan check** (section 5): a new failure mode of P2 on this task, Jev only
+  in practice (42% vs 8%). The fix belongs in the plan-check question (spare objects are not the
+  task's), not in the routing rule.
+- **Remarks join `user_words`.** A remark whose route came back unsure enters the user's task-level
+  words: "It slid a little.", "See what I found!", "I've finished that one for you.", "Sorry, just
+  reaching over." (both deciders). `_user_words` takes any user_text routed off stay_local; nothing
+  in these runs went wrong because of it, but the field is meant to hold the task and corrections.
+- **More planner calls after a correction.** In (b) every step_done after the correction went back
+  to the planner (route `fast_llm`, confident for Jev): 5-6 planner calls per run against 3 before,
+  both deciders. Over the slice's 19 Jev runs, 45 replans (2.4 per run; 8 in 15 before); the
+  battery's live deciders 7.1 and 5.5 replans per episode against 0.8 for rules. Whether `user_words`
+  (the old task and the correction side by side) is what makes the route unsure after each step is a
+  guess not tested here.
+- **No plan the check should have caught got through, as far as these runs show**: no step failed in
+  any battery episode, and the only misfits were caught by the validator (one Jev plan naming a done
+  condition on an absent object; three always_llm plans into occupied slots). Live runs plant no bad
+  plans, so the Decisions API's 47/60 offline is neither confirmed nor refuted.
+- **Decisions API latency tail.** In battery ep 8 all 18 of its decisions took 1.1-4.8 s (p50 1.6 s)
+  while the planner answered at its usual speed in the same episode, so it was the API's side; the
+  episode still finished. Jev never went over 500 ms in 153 battery decisions.
+- **Not the fixes:** planner latency this run was p50 4-7 s per call (2.8 s in the first live run),
+  OpenAI-side.
+
+### Runs lost and re-run
+
+At 17:20 the network dropped (DNS) and the Mac then slept between tests (recording stamps an hour
+apart while pytest counted ~3 min; `pmset` shows DarkWake on battery). The two full-five passes
+failed outright on DNS (empty recordings, removed); the re-runs ran in a sleeping machine: in them
+(c) failed for both deciders (pause 0.854 s after a Jev error at 835 ms that fell back to pause,
+`jev_error`; 0.931 s after a 924 ms Decisions API call; planner "Server disconnected"), and the
+Decisions API's (a) had a failed planner call. A `caffeinate -i` pass did not prevent it either.
+Kept and labelled in `pytest_slice_runs_20261012.txt`. Clean full-five status: **Jev** (a)-(d) pass
+in the last pass, (c) with pause 0.108 s, resume 0.099 s, closest 0.122 m; (e) passes in 6 other
+clean runs. **The Decisions API's full five is owed**: its (a), (c), (d) ran only in sleep-hit
+passes ((d) passed, parked in 2.55 s, block held). (b) and (e) for both are in the table above.
+
+### 7. Default decider
+
+**Jev stays the default.** It now holds on the correction 7/7, it pauses and resumes on the wait
+6/6 without escalating (conf 0.97, stay_local), and its latency tail stayed under 0.5 s in every
+battery decision. The Decisions API is surer on the correction (0.88-0.94) and sends fewer plans
+back on this task, but it put 18 decisions in a row over 1 s in one episode and 1.1 s on last run's
+hold; the demo's bars are 0.5 s, and a tail the brain cannot fix is worse than planner calls it can
+(the spare-letter plan check). Neither beats the rules control on outcome in this sample, and both
+share the paused_idle deadlock; those two, not the decider, are what to fix next.

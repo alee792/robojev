@@ -9,6 +9,7 @@ two controls that have to be beaten. Code: `src/robojev/battery/`; CLI `robojev-
 uv run --frozen robojev-battery --n 20 --seed 0 --world stub --compare          # offline, a few minutes
 uv run --frozen robojev-battery --world sim --n 4 --seed 0 --compare             # physics, ~10 min
 uv run --frozen robojev-battery --world sim --n 10 --seed 1 --decider jev --planner openai --paraphrase   # the Mac
+uv run --frozen robojev-battery --world sim --decider decisions --planner openai --episodes <that run>/episodes.json
 ```
 
 ## Two corrections this battery is built on
@@ -133,12 +134,17 @@ decider), `--world sim` (about 60 s an episode; the stub and the sim run the sam
 need `TROSSEN_ARM_MUJOCO_DIR`).
 
 Live, on the Mac (`OPENAI_API_KEY`, `TYPESAFE_API_KEY`): `robojev-battery --world sim --n 10 --seed 1
---decider jev --planner openai --paraphrase`, then `--decider decisions`, then the controls with the
-real planner, `--decider rules --planner openai` and `--decider always_llm --planner openai`, all on
-seed 1 so the four tables share their episodes. Held-out phrasings are the default whenever anything
-live runs. Episode files land under `experiments/results/battery/<stamp>-sim-<decider>/`
+--decider jev --planner openai --paraphrase`, then the others on THAT run's episodes:
+`--decider decisions --planner openai --episodes <jev run dir>/episodes.json`, and the controls with
+the real planner, `--decider rules` and `--decider always_llm`, the same way. The seed alone does not
+make the tables share their episodes once `--paraphrase` is on: each paraphrase is a fresh model call,
+so four `--paraphrase` runs on seed 1 meet four different wordings. Every run writes the episodes it
+ran to `episodes.json` in its directory. Held-out phrasings are the default whenever anything live
+runs. Episode files land under `experiments/results/battery/<stamp>-sim-<decider>/`
 (`ep_<seed>_<index>_<decider>.jsonl`: the episode, what the director did and when, the brain's log,
-decisions and planner records, the judge's record; `summary_<decider>.json`). The pytest route
+decisions and planner records, the judge's record; `summary_<decider>.json`; `episodes.json`).
+`experiments/live_battery_report.py DIR ...` reads the brain's log beside the table (plans sent
+back and why, escalations, decision latency, `reading_kept`). The pytest route
 (`ROBOJEV_DECIDER=jev ROBOJEV_PLANNER=openai uv run --frozen --extra mcp python -m pytest -q -s
 tests/test_battery.py -k physics`) runs the two physics episodes live and writes to
 `experiments/results/live/`.
