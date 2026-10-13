@@ -283,10 +283,10 @@ touches the hand. The rules control met held-out paraphrases here and still spel
 The episode: OPENAI; at 15 s a hand comes 15 cm from the gripper for 1.5 s, with the remark "Sorry,
 just reaching over." Both arms paused within 0.12 s (Jev) / 0.16 s (Decisions API) and the hand left
 at 16.7 / 16.3 s. Then neither resumed. Every 5 s a `paused_idle` event re-asked; both deciders
-answered `resume` every time, under the 0.5 right-now gate (Jev 0.19-0.37 on 45 asks, Decisions API
-0.17 on 42), and `combine.CAUTIOUS` maps a low-confidence `resume` to `carry_on`, which in a pause
-means stay paused (`RIGHT_NOW_CRITERIA["carry_on"]`). The route answer was confidently `stay_local`
-(Jev 0.88-0.97, API 0.84), so nothing escalated and nothing asked the user. 225 s later the episode
+answered `resume` every time, under the 0.5 right-now gate (Jev 0.19-0.37 on all 41 asks; Decisions
+API 0.17 on 42 of 43, the first a `hold` at 0.44), and `combine.CAUTIOUS` maps a low-confidence `resume` to `carry_on`, which in a pause
+means stay paused (`RIGHT_NOW_CRITERIA["carry_on"]`). The route answer was `stay_local` (Jev 0.64-0.97;
+the API 0.84 after its first ask), so nothing escalated and nothing asked the user. 225 s later the episode
 timed out with "O" placed. With Jev the pause reason the decider saw was "the user said 'Sorry, just
 reaching over.'" (the user_text decision was applied before the hand's, `loop._right_now`), so it was
 told the pause was for something the user said, and the user never said go on; with the Decisions
@@ -304,13 +304,19 @@ N identical sub-gate `resume` answers on paused_idle, ask the user or route to t
 | | runs | right-now on "actually, highest on the left" | text to hold | final order | drops | steps |
 |---|---|---|---|---|---|---|
 | Jev, before | 3 | carry_on (0.83), 0/3 held | none | right | 0 | 4 |
-| **Jev, now** | 7 | **hold, 7/7**, conf 0.73-0.80 | 0.093-0.134 s | 5, 3, 1 every run | 0 | 3 (6 runs), 4 (1) |
+| **Jev, now** | 7 | **hold, 7/7**, conf 0.73-0.80 | 0.093-0.134 s | 5, 3, 1 every run | 0 | 3 (6 runs), 4 (1, sleep-hit) |
 | Decisions API, before | 3 | hold (0.66), 2/3 in time | 0.121, 0.156, 1.115 s | right | 0 | |
 | **Decisions API, now** | 6 | **hold, 6/6**, conf 0.88-0.94 | 0.105-0.181 s | 5, 3, 1 every run | 0 | 3 (4), 4 (2) |
 
 Seven Jev runs: five in the (b, e) loop and two in full-five passes; six Decisions API runs likewise.
-In the run read in full (Jev, 165437) the arm held 0.106 s after the text, carried block 1 for 3.6 s
-until the new plan came, and took it straight to slot 2: it was never set down in slot 0. The new
+In the 3-step runs the hold did what it is for: in Jev 165437 the arm held 0.106 s after the text,
+carried block 1 for 3.6 s until the new plan came, and took it straight to slot 2, never setting it
+down in slot 0. **In the three 4-step runs it did not**: the replan failed while the arm held (the
+Decisions API's 170218, a clean run: the planner's plan failed validation, "move_object needs a slot,
+a bin or table as target, not tray", 11 s after the hold; Jev 210550 and the API's 042753, sleep-hit:
+"Server disconnected" after 22 s, a read timeout after 30 s), the hold released, the arm finished
+block 1 into slot 0 under the old plan, and the next plan moved it to slot 2. The end order was right
+every time, but the corrected move completed. The new
 reading keeps the user's words: "Line the blocks up in the tray, highest on the left." (every run,
 both deciders). Jev's confidence sits just under the 0.8 stay-local gate and above the 0.5 right-now
 gate, so the hold is taken and the correction goes to the planner, as designed.
@@ -347,6 +353,14 @@ re-issued and ran), but it is most of Jev's 8.1 planner calls per episode.
 
 ### 6. What the fixes made worse or did not fix
 
+- **A failed replan releases a hold and the corrected move completes** (section 3, 3 of 13 (b) runs,
+  1 of them clean). Not new with the fixes, but the hold is now taken, so it now shows: the brain's
+  answer to a failed replan is to run the old plan, which is the plan the user just corrected.
+- **Decisions a little slower for Jev.** The slice's clean runs, like for like with section 1: Jev
+  acting p50 123 ms, p95 204, max 331 (n 74; before 102 / 130 / 146); Decisions API 120 / 179 / 202
+  (n 61; before 129 / 254 / 1,097). The request now carries `user_words`; whether that is the +20 ms
+  is not separated from Jev's own variance here.
+
 - **Spare letters and the plan check** (section 5): a new failure mode of P2 on this task, Jev only
   in practice (42% vs 8%). The fix belongs in the plan-check question (spare objects are not the
   task's), not in the routing rule.
@@ -378,10 +392,12 @@ failed outright on DNS (empty recordings, removed); the re-runs ran in a sleepin
 (c) failed for both deciders (pause 0.854 s after a Jev error at 835 ms that fell back to pause,
 `jev_error`; 0.931 s after a 924 ms Decisions API call; planner "Server disconnected"), and the
 Decisions API's (a) had a failed planner call. A `caffeinate -i` pass did not prevent it either.
-Kept and labelled in `pytest_slice_runs_20261012.txt`. Clean full-five status: **Jev** (a)-(d) pass
-in the last pass, (c) with pause 0.108 s, resume 0.099 s, closest 0.122 m; (e) passes in 6 other
-clean runs. **The Decisions API's full five is owed**: its (a), (c), (d) ran only in sleep-hit
-passes ((d) passed, parked in 2.55 s, block held). (b) and (e) for both are in the table above.
+Kept and labelled in `pytest_slice_runs_20261012.txt`. **No full-five pass ran on an awake machine
+for either decider; both are owed** (on power, lid open). What the sleep-hit passes show: Jev passed
+(a), (b), (c) (pause 0.108 s, resume 0.099 s, closest 0.122 m, in the last pass) and (d) (parked
+2.47 s, block held) at least once each, and (e) in 6 runs; the Decisions API passed (b), (d) (parked
+2.55 s, block held) and (e), its (a) finished with one failed planner call, and its (c) paused in
+0.931 s. (b) and (e) in the clean loop are in the tables above.
 
 ### 7. Default decider
 
@@ -391,4 +407,5 @@ battery decision. The Decisions API is surer on the correction (0.88-0.94) and s
 back on this task, but it put 18 decisions in a row over 1 s in one episode and 1.1 s on last run's
 hold; the demo's bars are 0.5 s, and a tail the brain cannot fix is worse than planner calls it can
 (the spare-letter plan check). Neither beats the rules control on outcome in this sample, and both
-share the paused_idle deadlock; those two, not the decider, are what to fix next.
+share the paused_idle deadlock and the hold that a failed replan releases; those, with the
+spare-letter plan check, not the decider, are what to fix next.

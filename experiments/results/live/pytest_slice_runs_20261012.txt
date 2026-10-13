@@ -588,3 +588,4 @@ FAILED tests/test_slice.py::test_c_hand_near_the_gripper_pauses_within_half_a_se
 FAILED tests/test_slice.py::test_d_stop_mid_carry_parks_the_arm_and_never_drops_the_block
 FAILED tests/test_slice.py::test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task
 5 failed in 0.66s
+=== NOTE: the caffeinated passes above slept too (stamps 04:27 to 07:59, DarkWake on battery); no full-five pass in this file ran on an awake machine.
