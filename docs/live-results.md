@@ -531,8 +531,9 @@ another one …"). Answers to it, as `check.letter_A*` confidences on plan_arriv
 is "unsure"): Jev 19 answers, 0.02-0.82, median 0.68, 4 under 0.5; the Decisions API 32, 0.0-1.0,
 median 0.92, 4 under 0.5. Three of Jev's four send-backs are in ep 0, where a cube is taken and a
 third A comes into play: it answered 0.16 ("the task needs it", p ≈ 0.58), 0.02 and 0.40 on three
-successive plans, and the loop limit ran the fourth unchecked; the fourth is a first plan in ep 9. The count question halves the
-pattern for Jev; it does not remove it.
+successive plans, and the loop limit ran the fourth unchecked; the fourth is a first plan in ep 9. Jev's send-back count fell from 17 to 4, but mostly because
+rule 6 cut its new plans from 33 to 9; as a rate it is 33% of new plans against 42%. The count
+question narrows the pattern; it does not remove it.
 
 ### 4. Planner calls after a correction (b)
 
@@ -542,14 +543,22 @@ pattern for Jev; it does not remove it.
 | Decisions API | 6 | hold 6/6, 0.58-0.74 (0.88-0.94 last run) | 0.113-0.199 s | 3 | 12 of 18 stay_local (6 of them kept local by the routine rule at 0.29-0.61); the 3rd step_done went to the planner in every run, its own `fast_llm` at 0.40-0.65 |
 
 Final order 5, 3, 1 every run, no drops. Jev's post-correction re-judging is gone. In the battery
-the Decisions API also sent 17 routine step_done to the planner in 7 episodes with no correction,
-each its own `fast_llm` answer (route conf 0.36-0.75): the routine rule keeps an unsure stay_local,
-not a confident-enough replan (Jev: 0).
+the Decisions API also sent 17 step_done to the planner across 8 episodes, each its own `fast_llm`
+answer (route conf 0.36-0.75): 12 in 6 episodes with no correction at all, 5 after one (eps 4 and 8).
+The routine rule keeps an unsure stay_local, not a replan the decider chose (Jev: 0).
+
+The Decisions API's lower confidence on the correction (0.58-0.74 against 0.88-0.94) is not
+separated from day-to-day drift: the "all three as before" variant of section 7's ablation is the
+request the last run recorded at 0.68, and today it answers 0.88. Only the (e) regression is pinned
+to the rules (within one day, one request, one field at a time).
 
 ### 5. Failed replans
 
-None in the slice (last run 3 of 13 (b) runs ended with the corrected move completed under the old
-plan; this run 0 of 12: block 1 was never set down in slot 0). In the battery one, always_llm ep 4:
+None that mattered in the slice (last run 3 of 13 (b) runs ended with the corrected move completed
+under the old plan; this run 0 of 12: block 1 was never set down in slot 0). `replay_rules` counts 2
+"failed replans" for the slice's Decisions API: both are in one gave_up (e) run, at 84.4 s, unusable
+("new step id n1 is already used") and already stale when they came back, with the arm paused, not
+holding; the column counts every unusable replan, whatever happened to it. In the battery one, always_llm ep 4:
 the plan failed validation, `plan_retry` asked once more, the retry came back usable. always_llm does
 not hold while it plans, so there was no hold to keep.
 
@@ -589,6 +598,10 @@ not hold while it plans, so there was no hold to keep.
   battery user's scripted reply, which answers the end-result question, not "should it go on";
   the arm ran again 23 s after the go-on). Not changed: the fix is in the wording of rule 5, and
   the rules say not to tune to the numbers; the ablation says where.
+- **Questions that should not have been asked**: seven "Should it go on?" asks (battery ep 6 and all
+  six slice (e) runs, Decisions API), each after the user had already said go on. The cause is the
+  decider's `carry_on` on the go-on under rule 5, not the ask rule, which did its job as a backstop
+  where an answer came (the battery) and could not where none does (the slice).
 - **A question the slice cannot answer turns into planner calls**: once asked, each paused_idle
   re-ask with an unsure route goes to the planner (8-10 per (e) run). With a real user it would be
   waiting; with nobody answering, the request cap is the only stop.
