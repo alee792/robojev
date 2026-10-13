@@ -22,6 +22,18 @@ one decision per event (a plan trusted in a replan loop is the one event not dec
 on the weakest confidence; the replan-loop limit (3 rejections since the user last spoke); a
 heartbeat every 200 ms; hold on safety_trip; a reconnecting brain carries on (below).
 
+Liveness (from the live spelling runs, docs/live-results.md "Live re-run after the fixes"): a pause
+must end. Code records what each pause is for (ArmRun.pause_cause: a hand in view, a typed wait, a
+question to the user, or other). A pause for a hand ends in code once the hand has been out of view
+for a paused-idle period (5 s): the hand is the one thing code judges on its own. Any other pause
+that outlasts two paused-idle re-asks (10 s) with the decider still unsure becomes a question to
+the user ("should it go on?"); their answer ends the pause and is decided like any other text. A
+failed replan keeps the hold: the old plan is the one the event said is wrong, so it is never run
+as a fallback. The planner is asked once more; if that fails too, the holding arms pause and the
+user is asked what to do. `user_words` (the task and corrections the decider is shown) takes a typed
+line only when the decider itself routed it to a planner or to the user, not when an unsure
+stay_local was escalated by the confidence gate: remarks stay out of the task.
+
 Reconnecting. The server owns the state, so a new Brain on a server whose arm is mid-skill lets that
 skill run: it reads world() and the arm's mode, plans only once the arm is free (so the plan starts
 from the world the skill leaves, and nothing is redone), and never start()s over it. The protocol
@@ -120,6 +132,8 @@ class BrainConfig:
     loop_repeats: int = 3             # the same two steps alternating this many times = a loop
     max_step_failures: int = 3        # one step failing this many times = a loop
     max_plan_rejections: int = 3      # rules.ReplanGuard
+    max_replan_retries: int = 1       # a failed replan is asked again this many times before the user is asked
+    idle_asks_before_question: int = 2   # paused_idle re-asks that leave the arm paused before the user is asked
     stay_local_gate: float = 0.8      # rules.enforce_gate
     settle_s: float = 0.4             # an object change must hold this long to be an event (changes.py)
     arm: str | None = None            # the one arm to drive; None = every arm in the manifest
@@ -154,6 +168,8 @@ class ArmRun:
     loops: LoopDetector
     mode: str = "waiting"                  # waiting | running | holding | paused: what the brain wants the arm doing
     pause_reason: str | None = None
+    pause_cause: str | None = None         # hand | wait | question | other: what code knows the pause is for (liveness)
+    idle_asks: int = 0                     # paused_idle events decided during this pause
     hold_until: float | None = None
     awaiting: int | None = None            # the event whose decision gates this arm's next step
     state: CoreWorld | None = None         # the world as e12v2 reads it from this arm (cm; its gripper is "gripper")
@@ -190,9 +206,12 @@ class Brain:
         self.task = ""
         self.user_messages: list[str] = []
         self.user_words: list[str] = []   # the task, then each correction taken as about the end result, verbatim (View.user_words)
+        self.words_planned = 0            # how many of user_words the current plan's reading has folded in
         self.mode = "waiting"             # the episode: waiting (no plan yet) | running | done | stopped | gave_up | timeout
         self.replan_seq = 0               # the newest planner request; older results are stale
         self.replan_pending = False
+        self._last_replan: tuple[str, str, Event | None] | None = None   # (route, why, event) of the newest replan
+        self._replan_retries = 0          # failed attempts at the current replan asked again
         self.llm_requests = 0
         self.misfits = 0
         self.world = self.state = None    # the protocol world; the primary arm's core world (done checks, schema ids)
@@ -379,6 +398,8 @@ class Brain:
         if arm.mode == mode:
             return
         before, arm.mode = arm.mode, mode
+        if before == "paused":
+            arm.pause_cause, arm.idle_asks = None, 0
         arm.ctl.set_motion(mode)
         self._note("mode", arm=arm.id, before=before, after=mode)
 
@@ -453,7 +474,8 @@ class Brain:
                     runnable_other=P.step_text(self.plan.steps()[other], self.names) if other else None,
                     tries=dict(self.plan.tries),
                     grasped=bool(cur and st.arm.holding and st.arm.holding == cur.get("object")),
-                    user_words=list(self.user_words))
+                    user_words=list(self.user_words), unplanned_words=self.user_words[self.words_planned:])
+
 
     def _with_other_arms(self, arm: ArmRun, names_: dict[str, str]) -> CoreWorld:
         """`arm`'s world with every other driven arm as one more object, so e12v2's nearby-objects
@@ -664,6 +686,14 @@ class Brain:
                 arm.hold_until = None
                 self._arm_to(arm, "running")
             if arm.mode == "paused" and t - arm.last_event_t >= self.cfg.paused_idle_s and not arm.in_flight:
+                if arm.pause_cause == "hand" and arm.state is not None and arm.state.hand is None:
+                    # liveness (module doc): the pause was for a hand, and the hand has been gone a whole
+                    # idle period; nothing else holds the arm, so code ends the pause
+                    self._note("resumed", arm=arm.id, why="paused for a hand that has gone; nothing else holds the arm")
+                    arm.pause_reason = arm.hold_until = None
+                    self._arm_to(arm, "running")
+                    continue
+                arm.idle_asks += 1
                 self.event("paused_idle", f"the arm has been paused for {self.cfg.paused_idle_s:.0f} s ({arm.pause_reason}) "
                                           "and nothing has changed", arms=[arm.id])
 
@@ -751,7 +781,7 @@ class Brain:
     def _apply_decision(self, ev: Event, out: dict) -> None:
         arm = self._arm_of(ev)
         arm.in_flight -= 1
-        c = enforce_gate(out["combined"], self.cfg.stay_local_gate)
+        c = enforce_gate(out["combined"], self.cfg.stay_local_gate, ev.kind)
         self.r.decisions.append({"t": self.now(), "t_event": ev.t, "event_id": ev.id, "event": ev.kind, "text": ev.text,
                                  "arm": arm.id, "combined": c, "latency_ms": out.get("latency_ms", 0.0)})
         self._note("decision", event_id=ev.id, arm=arm.id, event=ev.kind, right_now=c.right_now, fix=c.fix, route=c.route,
@@ -762,8 +792,8 @@ class Brain:
             return
         self.plan.done_answers.update(c.done)
         self._right_now(arm, c.right_now, ev)
-        if ev.kind == "user_text" and c.route != "stay_local" and self._once(ev, "words"):
-            self._user_words(ev.data.get("text", ""))
+        if ev.kind == "user_text" and (c.route_raw or c.route) in LLM_ROUTES + ("ask_user",) and self._once(ev, "words"):
+            self._user_words(ev.data.get("text", ""))     # the decider's own routing, not a gate escalation (module doc)
         if c.route == "stay_local":
             self._fix(arm, c.fix, ev)
         elif c.route in LLM_ROUTES:
@@ -771,11 +801,23 @@ class Brain:
                 self._start_replan(c.route, ev.text + ("; plan check: " + "; ".join(c.problems) if c.problems else ""), ev)
         elif c.route == "ask_user":
             self._arm_to(arm, "paused")
-            arm.pause_reason = "waiting for the user's answer to a question"
+            arm.pause_reason, arm.pause_cause = "waiting for the user's answer to a question", "question"
             if self.user is not None and self._once(ev, "ask"):
                 self.user.ask(f"About \"{ev.data.get('text', ev.text)}\": what should the end result be?")
+        if ev.kind == "paused_idle" and arm.mode == "paused" and arm.pause_cause != "question" \
+                and arm.idle_asks >= self.cfg.idle_asks_before_question:
+            self._ask_to_go_on(arm)
         if arm.mode == "holding" and not self.replan_pending:
             arm.hold_until = self.now() + self.cfg.hold_s
+
+    def _ask_to_go_on(self, arm: ArmRun) -> None:
+        """Liveness (module doc): a pause the decider keeps re-asking about becomes a question to the
+        user. Their answer ends the pause (_user_said) and is decided like any other text."""
+        why = arm.pause_reason or "no reason recorded"
+        arm.pause_reason, arm.pause_cause = f"waiting for the user's answer: still paused ({why})", "question"
+        self._note("ask", arm=arm.id, why=f"paused for {arm.idle_asks * self.cfg.paused_idle_s:.0f} s ({why}) with no decision to go on")
+        if self.user is not None:
+            self.user.ask(f"The arm has been paused for {arm.idle_asks * self.cfg.paused_idle_s:.0f} s ({why}). Should it go on?")
 
     def _right_now(self, arm: ArmRun, answer: str, ev: Event) -> None:
         """Apply the right-now answer to the arm it was asked about. It can hold, pause, resume or
@@ -790,11 +832,24 @@ class Brain:
             # the user's own words, not an interpretation (e12v2: "asked to wait" kept a cautious pause paused)
             arm.pause_reason = (f'the user said "{ev.data.get("text", "")}"' if ev.kind == "user_text" else
                                 "a person's hand came near" if "hand" in ev.text else f"paused after: {ev.text}")
+            arm.pause_cause = self._pause_cause(arm, ev)
         elif action == "retarget":
             arm.ctl.retarget()
         elif action == "running" and arm.mode in ("paused", "holding"):
             arm.hold_until, arm.pause_reason = None, None
             self._arm_to(arm, "running")
+
+    @staticmethod
+    def _pause_cause(arm: ArmRun, ev: Event) -> str:
+        """What code knows a pause is for (module doc, liveness): a typed wait ("hang on") is the
+        user's and lasts until they say so; any other pause decided while a hand is in view is for the
+        hand (the hand event itself, or a remark made while reaching over: the live ep 5 pause was
+        recorded as "the user said 'Sorry, just reaching over.'" and never ended); else other."""
+        if ev.kind == "user_text" and is_transient(ev.data.get("text", "")):
+            return "wait"
+        if arm.state is not None and arm.state.hand is not None:
+            return "hand"
+        return "other"
 
     def _user_words(self, text: str) -> None:
         """A typed line the decision took as about the end result (a planner or ask_user route) joins
@@ -853,15 +908,18 @@ class Brain:
                 "doing": st.phase_text if st is not None else "between steps",
                 "while_you_plan": {"holding": "holding still", "paused": "paused"}.get(arm.mode, "carrying on")}
 
-    def _start_replan(self, route: str, why: str, ev: Event | None) -> None:
+    def _start_replan(self, route: str, why: str, ev: Event | None, *, retry: bool = False) -> None:
         if self.plan.plan is None:
             return                                # the first plan is on its way; it will read user_messages
-        if ev is not None and ev.kind == "plan_arrived" and self.replans.rejected():
+        if not retry and ev is not None and ev.kind == "plan_arrived" and self.replans.rejected():
             self.r.loops += 1
             self._note("loop", loop="replans", rejections=self.replans.rejections)
         seq = self._new_request()
         if seq is None:
             return
+        self._last_replan = (route, why, ev)
+        if not retry:
+            self._replan_retries = 0
         arm_now = ({a: self._arm_now(arm) for a, arm in self.arms.items()} if self.multi else
                    self._arm_now(self.arms[self.primary]))
         args = (route, self.task, list(self.user_messages), self.world, self.state, copy.deepcopy(self.plan.plan),
@@ -870,8 +928,31 @@ class Brain:
         self._note("llm_request", request="replan", route=route, why=why)
         self._in_thread(lambda: self.planner.replan(*args, ref=ref), lambda res: Planned(seq, t, ev, res))
 
+    def _replan_failed(self) -> None:
+        """A replan came back unusable. The arms holding for it keep holding (module doc, liveness):
+        the old plan is the one the event said is wrong, so it is no fallback. The planner is asked
+        again, up to max_replan_retries; then the holding arms pause for the user, who is asked."""
+        route, why, ev = self._last_replan or ("fast_llm", "the event that needed a new plan", None)
+        if self._replan_retries < self.cfg.max_replan_retries and self.llm_requests < self.cfg.max_llm_requests:
+            self._replan_retries += 1
+            self._note("plan_retry", attempt=self._replan_retries + 1, why=why)
+            self._start_replan(route, why + " (the previous attempt at a new plan was unusable; try again)", ev, retry=True)
+            return
+        self._replan_retries = 0
+        held = [a for a, arm in self.arms.items() if arm.mode == "holding"]
+        for a in held:
+            arm = self.arms[a]
+            arm.hold_until = None
+            self._arm_to(arm, "paused")
+            arm.pause_reason, arm.pause_cause = f"waiting for the user's answer: no new plan could be made ({why})", "question"
+        self._note("plan_abandoned", why=why, paused=held)
+        if self.user is not None:
+            about = ev.data.get("text", ev.text) if ev is not None else why
+            self.user.ask(f"I could not work out a new plan for \"{about}\". What should I do?")
+
     def _resume_held(self) -> None:
         """A plan came back: arms holding for it carry on."""
+
         for arm in self.arms.values():
             if arm.mode == "holding":
                 arm.hold_until = None
@@ -897,11 +978,12 @@ class Brain:
                     self._request_plan()
             else:
                 self.plan.unmet_raised = False
-                self._resume_held()
+                self._replan_failed()
             return
         if res.kind == "plan":
             self._keep_reading(res.plan, "plan")
             self.plan.load(res.plan)
+            self.words_planned = len(self.user_words)
             self.mode = "running"
             for arm in self.arms.values():
                 if arm.mode == "waiting":
@@ -921,8 +1003,10 @@ class Brain:
             self._start_replan(res.route, txt, Event(0, self.now(), "misfit", txt))
             return
         self.misfits = 0
+        self.words_planned = len(self.user_words)
         for a in self.plan.install(newp, q):
             self.arms[a].ctl.release()
+
         self._resume_held()
         self._note("plan_applied", diff=res.diff, queue=q)
         self.event("plan_arrived", "a new plan arrived: " + (res.diff.get("reading") or ""))

@@ -22,6 +22,15 @@ the problems attached), with code-certain confidence; a route or in-plan-fix ans
 is ignored for that event (core/decision.py no longer asks them). The replan-loop limit (rules.py,
 3 rejections since the user last spoke) stays as the backstop. The offline replay of the recorded
 answers under this rule: experiments/replay_plan_route.py.
+
+A routine step_done is kept local on the decider's choice alone. The stay_local gate guards what a
+wrong LOCAL answer would do: an in-plan fix applied on a guess. On a step that finished normally
+with no fix and no plan-check problem, keeping local does nothing but start the next planned step,
+which the plan already says to do; a wrong keep costs a later replan (plan_done_unmet, a failed
+step), not a wrong move. The live spelling battery (docs/live-results.md) had Jev answer stay_local
+on such steps at 0.3-0.77, and the gate turned 28 of them into planner calls (the replan-loop limit
+counts only plans sent back, so nothing capped them). So `routine(event, fix, problems)` says when
+the choice stands as given; the loop's enforce_gate (rules.py) applies the same rule.
 """
 
 from __future__ import annotations
@@ -64,6 +73,12 @@ class Ablation:
 
 def noul_conf(p: float) -> float:
     return abs(2 * p - 1)
+
+
+def routine(event_kind: str, fix: str, problems: list | None) -> bool:
+    """A step finished normally and nothing local is being changed (module doc): a stay_local answer
+    stands at any confidence."""
+    return event_kind == "step_done" and fix == "none" and not problems
 
 
 def _ch(answers: dict, key: str) -> tuple[str | None, float]:
@@ -114,16 +129,19 @@ def combine(event: Event, answers: dict | None, view, gates: Gates, abl: Ablatio
         route, c_route = _ch(answers, "route")
         route = route or "fast_llm"
     else:
-        routine = event.kind == "step_done"
-        route, c_route = ("stay_local" if fix != "none" or routine else "fast_llm"), 1.0
+        route, c_route = ("stay_local" if fix != "none" or event.kind == "step_done" else "fast_llm"), 1.0
+
     conf["route"] = c_route
     route_raw = route
     if problems and route not in ("fast_llm", "capable_llm"):
         route, reason = "fast_llm", "plan check"
     if route == "stay_local":
         w = min(c_route, c_fix)
-        if w < gates.stay_local:
+        if w < gates.stay_local and not routine(event.kind, fix, problems):
             route, reason = "fast_llm", "low confidence"
+        elif w < gates.stay_local:
+            reason = "routine: the step finished and nothing local changes"
+
         elif fix == "none" and event.kind in ("step_failed", "plan_done_unmet"):
             route, reason = "fast_llm", "nothing local fixes it"
     elif route == "fast_llm" and c_route < gates.fast_llm:

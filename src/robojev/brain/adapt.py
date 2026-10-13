@@ -41,7 +41,8 @@ def core_state(ws: RobotWorld, arm: str, geom: Geometry, lookahead_s: float) -> 
     arm's gripper is the one e12v2 reasons about."""
     a = ws.arms[arm]
     objs = {o.id: Obj(o.id, o.name, "", _number(o.label), f"{o.size * CM:.0f} cm" if o.size else "",
-                      o.x * CM, o.y * CM, o.z * CM, _where(o.where, arm))
+                      o.x * CM, o.y * CM, o.z * CM, _where(o.where, arm), label=o.label or None)
+
             for o in ws.objects.values()}
     places = {p.id: Place(p.id, p.name, p.kind, p.x * CM, p.y * CM, p.capacity, tuple(p.members), p.radius * CM)
               for p in ws.places.values()}

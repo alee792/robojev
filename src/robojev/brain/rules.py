@@ -11,6 +11,8 @@ Priority: STOP > the robot's safety filter > right-now answer > route > in-plan 
   route and the fix clears the gate (0.8; e12v2 measured it catching 98% of wrong answers). e12v2's
   combine() already does this; `enforce_gate` re-applies it in the loop so a decider that does not
   (another backend, a control) cannot bypass it. A confidence the decider did not report counts as 0.
+  A routine step_done (no fix, no plan-check problem) is the one exception, with core/combine.py:
+  keeping local there only starts the next planned step, so the choice stands at any confidence.
 - Replan loop: a new plan sent back to the LLM by its plan_arrived decision is a rejection; at
   `limit` (3) rejections since the user last spoke, later plans run as they come, undecided, until
   the user says something new (ReplanGuard).
@@ -28,6 +30,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, replace
 
+from .core.combine import routine
 from .core.data import Combined
 
 STAY_LOCAL_GATE = 0.8
@@ -107,11 +110,13 @@ RIGHT_NOW_ACTION: dict[str, str | None] = {
 }
 
 
-def enforce_gate(c: Combined, gate: float = STAY_LOCAL_GATE) -> Combined:
+def enforce_gate(c: Combined, gate: float = STAY_LOCAL_GATE, event_kind: str = "") -> Combined:
     """Keep a decision local only on confidence: stay_local with min(route, fix) confidence below
-    `gate` goes to the fast LLM instead, with no fix applied."""
-    if c.route != "stay_local":
+    `gate` goes to the fast LLM instead, with no fix applied. A routine step_done (combine.routine)
+    is kept as decided."""
+    if c.route != "stay_local" or routine(event_kind, c.fix, c.problems):
         return c
+
     weakest = min(c.conf.get("route", 0.0), c.conf.get("in_plan_fix", 0.0))
     if weakest >= gate:
         return c

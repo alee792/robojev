@@ -56,6 +56,7 @@ class View:
     tries: dict = field(default_factory=dict)   # step id -> failures so far
     grasped: bool = False           # the current step's object is in the gripper
     user_words: list = field(default_factory=list)   # the task and each correction, verbatim, newest last (no transients)
+    unplanned_words: list = field(default_factory=list)   # the tail of user_words no plan has read yet (a correction being planned)
 
     def name(self, oid) -> str:
         return self.names.get(oid, oid)
@@ -226,6 +227,14 @@ def build_state(event, v: View) -> dict:
     # decision"). A correction is judged against the user's words, not the restatement (module doc).
     s["user_words"] = list(v.user_words) or [v.task]
     s["task"] = (v.plan.get("reading") if v.plan else "") or v.task
+    # Which of those words `task` already answers. The live correction runs (docs/live-results.md,
+    # "More planner calls after a correction") showed a stateless decider reading the old task beside
+    # the correction as "the user asks for a different end result" on every later step, though the
+    # plan had folded the correction in; code knows which lines the current plan has read.
+    if v.plan and v.user_words:
+        s["user_words_in_task"] = ("all of them: `task` is the plan's reading of every line in `user_words`, the corrections folded in"
+                                   if not v.unplanned_words else
+                                   {"not_yet": list(v.unplanned_words), "note": "a new plan for these is being worked out; `task` does not include them yet"})
     if v.replan_pending and v.user_messages and event.kind != "user_text":
         s["change_being_planned"] = {"user_said": v.user_messages[-1],
                                      "note": "a new plan for this is being worked out; `task` does not include it yet"}
@@ -246,7 +255,7 @@ def build_state(event, v: View) -> dict:
         s["plan"] = {"reading": v.plan.get("reading", ""),
                      "steps_to_run": [step_text(byid[i], v.names) for i in v.queue],
                      "done_when": [c["text"] for c in v.plan["done_when"]],
-                     "objects_the_plan_never_mentions": [v.name(o) for o in unmentioned(v)]}
+                     "objects_the_plan_never_mentions": [_unmentioned_text(v, g) for g in unmentioned_groups(v)]}
     if v.hand:
         h = v.hand
         s["hand"] = {"distance_from_gripper": h["band"], "coming_closer": "yes" if h["approaching"] else "no",
@@ -265,6 +274,39 @@ def unmentioned(v: View) -> list[str]:
         return []
     m = mentioned(v.plan)
     return sorted(o for o in v.state.objects if o not in m)
+
+
+def unmentioned_groups(v: View) -> list[dict]:
+    """The objects the plan never mentions, grouped by label (objects.label: a letter or number read
+    off them, so two "A" cubes are interchangeable). One plan-check question per group, not per
+    object, and each group knows how many objects of its label the plan already uses: a spare letter
+    is the normal case on a table with duplicates, and the live spelling runs (docs/live-results.md,
+    "Good new plans sent back") showed Jev unsure whether "the second letter A" was something the
+    task asks about, with nothing in the question to tell a spare from a missing letter.
+    -> [{"ids": [...], "label": str | None, "used": [ids the plan uses with the same label]}]"""
+    if not v.plan:
+        return []
+    m = mentioned(v.plan)
+    groups: dict[str, dict] = {}
+    for oid in sorted(v.state.objects):
+        if oid in m:
+            continue
+        lab = v.state.objects[oid].label
+        key = f"label:{lab}" if lab else f"id:{oid}"
+        g = groups.setdefault(key, {"ids": [], "label": lab or None, "used": []})
+        g["ids"].append(oid)
+    for g in groups.values():
+        if g["label"]:
+            g["used"] = sorted(o for o in m if o in v.state.objects and v.state.objects[o].label == g["label"])
+    return list(groups.values())
+
+
+def _unmentioned_text(v: View, g: dict) -> str:
+    names = ", ".join(v.name(o) for o in g["ids"])
+    if not g["label"]:
+        return names
+    k = len(g["used"])
+    return f"{names} (labelled {g['label']}; the plan uses {k} other object{'s' if k != 1 else ''} labelled {g['label']})"
 
 
 # ---------------------------------------------------------------- options code has checked
@@ -308,7 +350,7 @@ def build_questions(event, v: View, groups=("right_now", "in_plan_fix", "route")
             "instructions": {
                 "question": "Given `event`, what should the arm do right now?",
                 "context": "`plan_position.arm_in_step` says literally where the arm is in its current step; `robot.mode` says whether it is moving, paused or holding. The code's own stop distance for hands applies regardless of this answer.",
-                "about_the_task": "`user_words` is what the user asked for, in their own words (the task, then each correction, newest last); `task` is how the current plan reads it. If the user just asked for something different from `user_words`, the move in progress may be wrong even where it fits `task`.",
+                "about_the_task": "`user_words` is what the user asked for, in their own words (the task, then each correction, newest last); `task` is how the current plan reads it, and `user_words_in_task` says which of those lines it already answers. If the user just asked for something different from `user_words`, the move in progress may be wrong even where it fits `task`.",
             },
             "criteria": {k: RIGHT_NOW_CRITERIA[k] for k in offered_right_now(v)},
         }
@@ -323,7 +365,8 @@ def build_questions(event, v: View, groups=("right_now", "in_plan_fix", "route")
         qs["route"] = {
             "type": "choice",
             "instructions": {"question": "Who should handle `event`: the robot on its own with the current plan, or a planner that writes a new plan, or the user?",
-                             "ask_about": "whether the end result or the steps must change, not what the event is about. Whether the user asks for a different end result is judged against `user_words` (what the user asked for, in their words), not against `task` (how the current plan reads it)"},
+                             "ask_about": "whether the end result or the steps must change, not what the event is about. Whether the user asks for a different end result is judged against `user_words` (what the user asked for, in their words), not against `task` (how the current plan reads it). A correction that `task` already states (`user_words_in_task`) is not a request for a different end result: the plan has changed for it already, and the steps go on as written unless this event itself calls for a change"},
+
             "criteria": ROUTE_CRITERIA,
         }
     if v.plan and event.kind in ("step_done", "plan_done_unmet"):
@@ -335,12 +378,28 @@ def build_questions(event, v: View, groups=("right_now", "in_plan_fix", "route")
                     "criteria": {"true": f"{c['text']}: yes, as the objects are now.", "false": "No, or not yet."},
                 }
     if event.kind == "plan_arrived":
-        for oid in unmentioned(v):
-            nm = v.name(oid)
-            qs[f"check.{oid}"] = {
-                "type": "noul",
-                "instructions": f"Is {nm} something `task` asks about (something to move, arrange, hand over or keep away from somewhere) but `plan` leaves out?",
-                "criteria": {"true": f"The task covers {nm} (by name, number, colour or as one of a group it describes) and the plan has no step, done condition or constraint for it.",
-                             "false": f"The task does not ask for anything about {nm}; the plan is right to leave it alone."},
-            }
+        for g in unmentioned_groups(v):
+            qs[f"check.{g['ids'][0]}"] = _check_question(v, g)
     return qs
+
+
+def _check_question(v: View, g: dict) -> dict:
+    """One plan-check Noul for a group of unmentioned objects (unmentioned_groups). With a label the
+    plan already uses, the question is about COUNT: does the task need more objects of that label
+    than the plan moves? A spare is then a confident "false", not a general doubt."""
+    ids, lab, used = g["ids"], g["label"], g["used"]
+    nm = v.name(ids[0]) + (f" (and {len(ids) - 1} more labelled {lab})" if len(ids) > 1 else "")
+    if lab and used:
+        k = len(used)
+        plural = "s" if k != 1 else ""
+        q = (f"`plan` already uses {k} object{plural} labelled {lab} ({', '.join(v.name(o) for o in used)}). {nm} is another one "
+             f"labelled {lab} that `plan` leaves out. Does `task` need more objects labelled {lab} than the {k} the plan uses?")
+        return {"type": "noul", "instructions": q,
+                "criteria": {"true": f"Counting what the task names, spells or describes, it needs more than {k} object{plural} labelled {lab}, so {nm} is needed and the plan leaves it out.",
+                             "false": f"The task needs {k} or fewer objects labelled {lab}: {nm} is a spare, and the plan is right to leave it alone."}}
+    what = f"{nm}" + (f" (labelled {lab})" if lab else "")
+    return {"type": "noul",
+            "instructions": f"Is {what} something `task` asks about (something to move, arrange, hand over or keep away from somewhere) but `plan` leaves out?",
+            "criteria": {"true": f"The task covers {what} (by name, number, letter, colour or as one of a group it describes) and the plan has no step, done condition or constraint for it.",
+                         "false": f"The task does not ask for anything about {what}; the plan is right to leave it alone."}}
+

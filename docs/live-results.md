@@ -409,3 +409,62 @@ hold; the demo's bars are 0.5 s, and a tail the brain cannot fix is worse than p
 (the spare-letter plan check). Neither beats the rules control on outcome in this sample, and both
 share the paused_idle deadlock and the hold that a failed replan releases; those, with the
 spare-letter plan check, not the decider, are what to fix next.
+
+## Rules added after the re-run (2026-10-13, offline)
+
+The re-run's four gaps (sections 2, 3, 5 and 6) are rule gaps, and the brain now has rules for them
+(`src/robojev/brain/loop.py` "Liveness", `core/combine.py` "A routine step_done",
+`core/decision.py` `unmentioned_groups`; `tests/test_brain_liveness.py` holds one test per rule on
+the stub). In plain words:
+
+1. **A pause must end.** Code records what each pause is for. A pause for a hand ends in code one
+   idle period (5 s) after the hand has gone out of view, whatever the decider says: the hand is
+   the one thing code judges on its own. A remark made while a hand is in view counts as a hand
+   pause (ep 5 with Jev recorded its pause as "the user said 'Sorry, just reaching over.'"). Any
+   other pause (a typed wait, anything else) that outlasts two idle re-asks with the decider still
+   unsure becomes a question to the user: "The arm has been paused for 10 s (…). Should it go on?"
+   Their answer ends the pause and is decided like any other line.
+2. **A failed replan keeps the hold.** The old plan is the one the event said is wrong, so it is
+   never run as a fallback. The planner is asked once more; if that fails too, the holding arms
+   pause and the user is asked what to do. Before, the hold was released and the corrected move
+   completed (section 3, 3 of 13 (b) runs).
+3. **Spare letters.** The plan check asks one question per label group, and when the plan already
+   uses objects of that label it asks about the count: "the plan already uses 1 object labelled A;
+   does the task need more than 1?", with "spare" as the confident no. Before, "the second letter A"
+   got the generic "is it something the task asks about?" and Jev answered unsure (section 5).
+4. **`user_words` keeps remarks out.** A typed line joins the user's task-level words only when the
+   decider itself routed it to a planner or to the user, not when the confidence gate escalated an
+   unsure stay_local (section 6: "It slid a little." and the like).
+5. **A correction already folded in.** Every request now says which of `user_words` the current
+   plan has already read (`user_words_in_task`), and the route question says a correction `task`
+   already states is not a request for a different end result. The offline reading of the (b)
+   logs: after the correction every request showed the old task beside the correction, and both
+   deciders (the Decisions API confidently, Jev unsurely) read that as the user asking for a change
+   on every later step; the same day's runs with a one-line `user_words` stayed local.
+6. **A routine step_done stays local.** The 0.8 gate guards a wrong local fix; on a step that
+   finished normally with no fix and no plan-check problem, keeping local only starts the next
+   planned step, so the decider's stay_local stands at any confidence. This is most of the battery's
+   planner calls: Jev's stay_local on routine steps sat at 0.3-0.77 and the gate turned 28 of them
+   into replans, with or without a correction (the replan-loop limit counts only plans sent back).
+
+What the recorded runs would have done under them, counted from the decisions alone
+(`experiments/replay_rules.py`, `experiments/results/battery/replay_rules.txt`; the spare-letter
+question needs a live answer, so its column is the size of the pattern, not a result):
+
+| run | step_done replans | of which now local (routine) | paused_idle re-asks that stayed paused | ended by code / asked | plans sent back, unsure-only | remarks that joined user_words | failed replans (hold released) |
+|---|---|---|---|---|---|---|---|
+| battery, Jev | 42 | 28 | 41 (all ep 5) | asked at the 2nd re-ask | 15 of 17 | 2 | 0 |
+| battery, Decisions API | 38 | 17 | 42 (all ep 5) | code resumes at the 1st | 4 of 4 | 3 | 0 |
+| slice, Jev | 34 | 13 | 0 | | 0 | 0 | 9 (incl. sleep-hit runs) |
+| slice, Decisions API | 34 | 9 | 0 | | 0 | 0 | 6 |
+
+Under the new rules ep 5 ends 5 s after the hand leaves with the Decisions API (its pause was the
+hand's) and 10 s after with Jev (its pause was the remark's: the user is asked, and the battery's
+user answers). The step_done replans not counted as routine were the decider's own `fast_llm`
+answers after a correction (rule 5 speaks to those; a live run says whether it is enough).
+
+The rules are not tuned to these numbers: each is the cost argument the module docstrings give,
+and each has a test that fails without it. What only a live run can show: the spare-letter answer
+with the count question, the post-correction route with `user_words_in_task`, and whether the
+remark-as-hand-pause rule misfires on a correction typed while a hand is in view (then the pause
+ends when the hand goes, which is what a hand pause should do; the correction's replan is separate).

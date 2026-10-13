@@ -216,3 +216,16 @@ Small, recorded so they aren't lost; none blocks the next spike.
   policy to 11 Hz). The real-arm tests now run on a lockstep virtual clock that only the test
   advances (`widowx_real/clock.py`); assertions unchanged, the frame trace byte-identical every run,
   10/10 under the load that reproduced the failure, and the file runs in 11 s instead of 50.
+
+## Follow-ups from the live re-run (2026-10-13)
+
+The re-run's rule gaps are fixed in code (`docs/live-results.md`, "Rules added after the re-run"):
+a pause that must end (hand gone: code resumes; otherwise the user is asked), a failed replan that
+keeps the hold, the plan check that knows a spare letter, `user_words` without remarks, the
+folded-in correction, the routine step_done. Owed: Handoff 8 (the battery and the slice live again
+under them). Still open from the re-run:
+
+- Both full-five slice passes on an awake Mac (on power, lid open), either decider.
+- The Decisions API's latency tail (18 decisions over 1 s in one episode) is the API's; nothing in
+  the brain can fix it, so the default stays Jev until a run shows otherwise.
+- Planner latency p50 4-7 s per call this run (2.8 s in the first); OpenAI-side, not ours.

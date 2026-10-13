@@ -24,10 +24,12 @@ class Obj:
     y: float
     z: float
     where: str
+    label: str | None = None  # a letter or number read off it ("A"); objects sharing a label are interchangeable
 
 
 @dataclass
 class Place:
+
     id: str
     name: str                 # "tray slot 3 (the leftmost slot)", "the red bin"
     kind: str                 # slot | bin | table | person | group

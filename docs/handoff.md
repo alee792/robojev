@@ -499,3 +499,53 @@ Each battery run prints its table and writes `experiments/results/battery/<stamp
 
 **Rules:** never print API keys; don't change brain rules to improve numbers; fix real bugs in their
 own commits and say so; commit to `claude/widowx-pair`, no history rewriting.
+
+# Handoff 8: the battery and the slice under the liveness rules
+
+Paste the block below into a Claude Code session on the MacBook (`OPENAI_API_KEY`, `TYPESAFE_API_KEY`).
+
+---
+
+You are re-running robojev's spelling battery and the live slice after six brain rules made from
+your last run (`docs/live-results.md`, "Rules added after the re-run": a pause that must end, a
+failed replan that keeps the hold, a plan check that knows a spare letter, `user_words` without
+remarks, a correction marked as folded in, a routine step_done that stays local). The offline count
+(`experiments/results/battery/replay_rules.txt`) says what the recorded runs would have done; what it
+cannot show is the models' answers to the changed questions.
+
+**Setup:** `git fetch origin claude/widowx-pair && git checkout claude/widowx-pair && uv sync --extra sim --extra mcp`;
+`uv run --frozen --extra mcp python -m pytest -q` (expect all passed, 4 skipped). Read
+`docs/live-results.md` (the last section first), `docs/battery.md` and `tests/live_models.py`.
+
+**Run.** On power, lid open, `caffeinate -dims` in another terminal for the whole session (the last
+run's full-five passes were lost to sleep and DNS).
+1. The battery, same seed and phrasings as last time so the episodes match:
+   `uv run --frozen robojev-battery --world sim --n 10 --seed 1 --decider jev --planner openai --paraphrase`,
+   then `--decider decisions`, then the two controls (`rules`, `always_llm`).
+2. The slice: scenario (b) and (e) 5 runs each per decider, then the full five once per decider
+   (`ROBOJEV_DECIDER=jev|decisions ROBOJEV_PLANNER=openai uv run --frozen python -m pytest -s tests/test_slice.py`).
+3. `uv run --frozen python experiments/replay_rules.py --write` on the new recordings, so the
+   same table exists for this run.
+Commit the result directories as before.
+
+**Report, with numbers, as a comment on PR #3 and a new section in `docs/live-results.md`:**
+1. The battery side by side (score, finish rate, time to first change per event kind, planner
+   calls per episode, drops, hand contacts, asks). Last run: Jev and the Decisions API 0.907, rules
+   and always_llm 1.000; planner calls 8.1 (Jev) against 0.8 (rules).
+2. Ep 5 (a hand mid-carry with "Sorry, just reaching over."): did it finish, how the pause ended
+   (a `resumed` note, an `ask` note and the user's answer, or a decision), and after how long.
+3. Plans sent back by the plan check, per decider, and what the spare-letter question was answered
+   (the `check.*` confidences in the decision records): last run Jev sent back 14 of 33 new plans,
+   all for spare A's.
+4. Planner calls after a correction on (b): per run, how many step_done events went to the planner
+   and with what route confidence; last run 5-6 calls against 3.
+5. Any replan that failed: did the arm hold through the retry, pause, and ask? Did the corrected
+   move ever complete under the old plan (last run: 3 of 13)?
+6. Lines that joined `user_words` (the `user_words` notes): only the task and corrections?
+7. Anything the rules made worse: a hand pause that ended while a hand was still near (`resumed`
+   notes against the hand log), a question to the user that should not have been asked, a routine
+   step kept local that a replan would have fixed (a later `plan_done_unmet` or failed step).
+8. The default-decider recommendation again.
+
+**Rules:** never print API keys; don't change brain rules to improve numbers; fix real bugs in their
+own commits and say so; commit to `claude/widowx-pair`, no history rewriting.
