@@ -898,8 +898,9 @@ class Brain:
         if seq is None:
             return
         task, said, world, core, ref, t = self.task, list(self.user_messages), self.world, self.state, self._ref(None), self.now()
+        words = len(self.user_words)
         self._note("llm_request", request="plan", route="fast_llm")
-        self._in_thread(lambda: self.planner.plan(task, said, world, core, ref=ref), lambda res: Planned(seq, t, None, res))
+        self._in_thread(lambda: self.planner.plan(task, said, world, core, ref=ref), lambda res: Planned(seq, t, None, res, words))
 
     def _arm_now(self, arm: ArmRun) -> dict:
         """What an arm is doing, for a replan request."""
@@ -910,7 +911,13 @@ class Brain:
 
     def _start_replan(self, route: str, why: str, ev: Event | None, *, retry: bool = False) -> None:
         if self.plan.plan is None:
-            return                                # the first plan is on its way; it will read user_messages
+            # the first plan is on its way, but its request was built before this line: ask for it again
+            # with the line in it (the earlier request goes stale). Live, battery ep 7 with the rules
+            # decider: "spell PANE instead" typed before an 11 s first plan, which read OPENAI and ran.
+            if not retry and ev is not None and ev.kind == "user_text" and self.replan_pending:
+                self._note("plan_rerequested", why=why)
+                self._request_plan()
+            return
         if not retry and ev is not None and ev.kind == "plan_arrived" and self.replans.rejected():
             self.r.loops += 1
             self._note("loop", loop="replans", rejections=self.replans.rejections)
@@ -924,9 +931,9 @@ class Brain:
                    self._arm_now(self.arms[self.primary]))
         args = (route, self.task, list(self.user_messages), self.world, self.state, copy.deepcopy(self.plan.plan),
                 list(self.plan.queue), dict(self.plan.status), arm_now, why)
-        ref, t = self._ref(ev), self.now()
+        ref, t, words = self._ref(ev), self.now(), len(self.user_words)
         self._note("llm_request", request="replan", route=route, why=why)
-        self._in_thread(lambda: self.planner.replan(*args, ref=ref), lambda res: Planned(seq, t, ev, res))
+        self._in_thread(lambda: self.planner.replan(*args, ref=ref), lambda res: Planned(seq, t, ev, res, words))
 
     def _replan_failed(self) -> None:
         """A replan came back unusable. The arms holding for it keep holding (module doc, liveness):
@@ -983,7 +990,7 @@ class Brain:
         if res.kind == "plan":
             self._keep_reading(res.plan, "plan")
             self.plan.load(res.plan)
-            self.words_planned = len(self.user_words)
+            self.words_planned = msg.words
             self.mode = "running"
             for arm in self.arms.values():
                 if arm.mode == "waiting":
@@ -1003,7 +1010,7 @@ class Brain:
             self._start_replan(res.route, txt, Event(0, self.now(), "misfit", txt))
             return
         self.misfits = 0
-        self.words_planned = len(self.user_words)
+        self.words_planned = msg.words
         for a in self.plan.install(newp, q):
             self.arms[a].ctl.release()
 

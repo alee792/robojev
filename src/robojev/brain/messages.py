@@ -46,6 +46,7 @@ class Planned:
     t_request: float
     event: Event | None
     result: PlanResult
+    words: int = 0           # how many of user_words the request was built with (what its reading can have folded in)
 
 
 @dataclass(frozen=True)

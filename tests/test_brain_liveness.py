@@ -357,3 +357,41 @@ def test_labels_reach_the_brain_from_the_robots_world():
         assert {o.label for o in st.objects.values()} == {"1", "3", "5"}
     finally:
         srv.close()
+
+
+# ---------------------------------------------------------------- a correction before the first plan
+
+
+class SlowFirstPlan:
+    """An LLM backend whose first plan call takes `delay_s` (the live rules ep 7: an 11 s first plan)."""
+
+    def __init__(self, backend, delay_s: float):
+        self.backend, self.delay_s, self.plans = backend, delay_s, 0
+
+    def call(self, req, ref=None):
+        if req.kind == "plan":
+            self.plans += 1
+            if self.plans == 1:
+                time.sleep(self.delay_s)
+        return self.backend.call(req, ref=ref)
+
+
+def test_a_correction_typed_before_the_first_plan_arrives_is_planned_for():
+    """The first plan request is built when the run starts; a correction typed while it is on its way
+    is not in it. Live (battery, rules, ep 7): "Could you spell PANE instead, please?" at 9.8 s, the
+    first plan at 11.0 s read OPENAI, and the arm spelled OPENAI. The brain now asks for the first plan
+    again with the line in it; the earlier request goes stale."""
+    srv = make(pick_s=0.8)
+    try:
+        nums = numbers(srv)
+        start = time.monotonic()
+        user = ScriptedUser([Line(lambda *_: time.monotonic() - start > 0.3, CORRECTION)])
+        decider, llm = oracle_models(srv, [sort_goal(nums), sort_goal(nums, desc=True)], {CORRECTION: Utt("correction", version=1)})
+        slow = SlowFirstPlan(llm["fast_llm"], 1.0)
+        r = episode(Brain(srv, decider, {"fast_llm": slow, "capable_llm": slow}, user, BrainConfig(max_s=20, **FAST)))
+        assert r.outcome == "done", r.log
+        assert [e["request"] for e in notes(r, "llm_request")][:2] == ["plan", "plan"]
+        assert notes(r, "plan_stale")
+        assert where(srv) == {"block_5": "tray_slot_1", "block_3": "tray_slot_2", "block_1": "tray_slot_3"}
+    finally:
+        srv.close()
