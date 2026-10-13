@@ -851,13 +851,17 @@ class Brain:
             return "hand"
         return "other"
 
-    def _user_words(self, text: str) -> None:
-        """A typed line the decision took as about the end result (a planner or ask_user route) joins
-        the user's task-level words, verbatim, newest last; a transient command never does, even when
-        an unsure route sends it to the planner (rules.is_transient)."""
-        if text and not is_transient(text):
-            self.user_words.append(text)
-            self._note("user_words", words=list(self.user_words))
+    def _user_words(self, text: str) -> bool:
+        """A typed line the decision took as about the end result (a planner or ask_user route), or
+        that a new plan changed for (_apply_plan), joins the user's task-level words, verbatim, newest
+        last, once; a transient command never does, even when an unsure route sends it to the planner
+        (rules.is_transient). -> whether it was added."""
+        if not text or is_transient(text) or text in self.user_words:
+            return False
+        self.user_words.append(text)
+        self._note("user_words", words=list(self.user_words))
+        return True
+
 
     def _keep_reading(self, out: dict, kind: str) -> None:
         """The reading guard (rules.transient_mentions): a plan whose restated task repeats a transient
@@ -1011,6 +1015,12 @@ class Brain:
             return
         self.misfits = 0
         self.words_planned = msg.words
+        if msg.event is not None and msg.event.kind == "user_text" and P.diff_changes(res.diff, self.plan.queue):
+            # the planner accepted the line as a change to the plan: it is a correction, whatever the
+            # route's confidence was (Handoff 8: an unsure stay_local the gate escalated kept the
+            # correction itself out of user_words in 2 of 6 runs; rule 4 took only the decider's own routes)
+            if self._user_words(msg.event.data.get("text", "")):
+                self.words_planned = len(self.user_words)
         for a in self.plan.install(newp, q):
             self.arms[a].ctl.release()
 

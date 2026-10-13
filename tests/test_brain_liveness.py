@@ -217,7 +217,68 @@ def test_user_words_take_a_line_only_when_the_decider_itself_routed_it_off_the_p
         srv.close()
 
 
+def test_a_correction_the_gate_escalated_joins_user_words_once_its_plan_changes_the_steps():
+    """Handoff 8: the Decisions API's route on the correction was an unsure stay_local (0.40) that the
+    gate escalated; the replan read the line and changed the plan, but rule 4 kept it out of
+    `user_words`. A line the planner changed the plan for is a correction, whatever the route's
+    confidence. A remark whose replan changes nothing stays out."""
+    srv = make(pick_s=1.2)
+    try:
+        nums = numbers(srv)
+        remark = "It slid a little."
+        user = ScriptedUser([Line(carrying(srv, "block_1"), CORRECTION), Line(carrying(srv, "block_5"), remark)])
+        decider, llm = oracle_models(srv, [sort_goal(nums), sort_goal(nums, desc=True)],
+                                     {CORRECTION: Utt("correction", version=1), remark: Utt("chatter")})
+
+        class Unsure:
+            name = "unsure"
+
+            def decide(self, ev, view):
+                out = decider.decide(ev, view)
+                if ev.kind == "user_text":       # the decider leans stay_local but under the gate: escalated to the planner
+                    out["combined"] = replace(out["combined"], route="stay_local", route_raw="stay_local", fix="none",
+                                              conf={**out["combined"].conf, "route": 0.4})
+                return out
+        r = episode(Brain(srv, Unsure(), llm, user, BrainConfig(max_s=25)))
+        assert r.outcome == "done", r.log
+        said = [d for d in r.decisions if d["event"] == "user_text"]
+        assert len(said) == 2 and all(d["combined"].route == "fast_llm" and d["combined"].route_raw == "stay_local" for d in said)
+        words = [e["words"] for e in r.log if e["note"] == "user_words"]
+        assert words == [[SORT_TASK, CORRECTION]], words            # the correction once, the remark never
+        assert where(srv) == {"block_5": "tray_slot_1", "block_3": "tray_slot_2", "block_1": "tray_slot_3"}
+    finally:
+        srv.close()
+
+
+def test_diff_changes_ignores_a_new_reading_alone():
+    from robojev.brain.core.plan import diff_changes
+    same = {"reading": "new words", "new_steps": [], "pending_order": ["s2", "s3"], "drop_done_when": [], "new_done_when": [],
+            "drop_constraints": [], "new_constraints": []}
+    assert not diff_changes(same, ["s2", "s3"])
+    assert diff_changes({**same, "pending_order": ["s3", "s2"]}, ["s2", "s3"])
+    assert diff_changes({**same, "new_steps": [{"id": "n1"}]}, ["s2", "s3"])
+    assert diff_changes({**same, "drop_done_when": ["d1"]}, ["s2", "s3"])
+
+
+def test_the_scripted_user_can_answer_the_brains_question():
+    """The slice's user never answered "Should it go on?" (Handoff 8: with nobody answering, every
+    re-ask went to the planner until the request cap). ScriptedUser(on_ask=...) answers like a person."""
+    srv = make(pick_s=1.2)
+    try:
+        user = ScriptedUser([Line(carrying(srv, "block_1"), WAIT)], on_ask=GO_ON, ask_delay_s=0.2)
+        decider, llm = oracle_models(srv, [sort_goal(numbers(srv))], {WAIT: Utt("wait"), GO_ON: Utt("go_on")})
+        r = episode(Brain(srv, decider, llm, user, BrainConfig(max_s=20, **FAST)))
+        assert r.outcome == "done", r.log
+        assert len(user.asked) == 1 and [t for _, t in user.said] == [WAIT, GO_ON]
+        t_ask = next(e["t"] for e in r.log if e["note"] == "ask")
+        t_go = next(t for t, text in user.said if text == GO_ON)
+        assert t_ask <= t_go < t_ask + 1.0
+    finally:
+        srv.close()
+
+
 def _view(**kw) -> View:
+
     geom = Geometry(12, 2, 7, 4.5, 1.5, 8, 20, 1, (0, 60, -40, 40, 0, 30), 5)
     objs = {"block_1": Obj("block_1", "block 1", "red", 1, "4 cm", 20, 0, 2, "table")}
     state = WorldState(0, objs, {"tray_slot_1": Place("tray_slot_1", "tray slot 1", "slot", 40, 0, 1)}, None, ArmObs(0, 0, 12, None), geom)
@@ -237,19 +298,24 @@ def test_the_decider_is_told_which_user_words_the_plan_has_already_folded_in():
     qs = build_questions(ev, _view())
     assert "`user_words_in_task`" in qs["route"]["instructions"]["ask_about"]
     assert "A correction that `task` already states" in qs["route"]["instructions"]["ask_about"]
-    assert "`user_words_in_task`" in qs["right_now"]["instructions"]["about_the_task"]
+    assert "user_words_in_task" not in json.dumps(qs["right_now"])                        # the right-now question is as before
     assert "user_words_in_task" not in build_state(ev, _view(plan=None))                  # no plan yet: nothing is folded in
+    # never on a typed line or a pause re-ask: there the question is the line, or whether to go on
+    # (Handoff 8: the Decisions API read the field on "ok, go on" as a reason not to resume)
+    for kind, data in (("user_text", {"text": "ok, go on"}), ("paused_idle", {})):
+        e = Event(2, 0, kind, "x", data=data)
+        assert "user_words_in_task" not in build_state(e, _view(unplanned_words=[CORRECTION]))
+        assert "user_words_in_task" not in json.dumps(build_questions(e, _view()))
 
 
 def test_the_brain_marks_a_correction_folded_in_once_its_plan_arrives():
     srv = make(pick_s=1.2)
     try:
         nums = numbers(srv)
-        remark = "It slid a little."
-        user = ScriptedUser([Line(carrying(srv, "block_1"), CORRECTION),
-                             Line(lambda: len(user.said) == 1 and time.monotonic() - user.t0 - user.said[0][0] > 0.4, remark)])
+        user = ScriptedUser([Line(carrying(srv, "block_1"), CORRECTION)])
+        srv.person_hand(lambda w: bool(user.said), for_s=0.6, dist=0.3)          # a scene event while the new plan is on its way
         decider, llm = oracle_models(srv, [sort_goal(nums), sort_goal(nums, desc=True)],
-                                     {CORRECTION: Utt("correction", version=1), remark: Utt("chatter")}, llm_median_ms=1500.0)
+                                     {CORRECTION: Utt("correction", version=1)}, llm_median_ms=1500.0)
         seen = []
 
         class Rec:
@@ -262,11 +328,13 @@ def test_the_brain_marks_a_correction_folded_in_once_its_plan_arrives():
         r = episode(Brain(srv, Rec(), llm, user, BrainConfig(max_s=25)))
         assert r.outcome == "done", r.log
         t_plan = next(e["t"] for e in r.log if e["note"] == "plan_applied" and "diff" in e)
-        during = [s for ev, s in seen if ev.kind == "user_text" and ev.data.get("text") == remark]   # while the new plan was on its way
-        after = [s for ev, s in seen if ev.t > t_plan + 0.05]
-        assert len(during) == 1 and during[0]["user_words_in_task"]["not_yet"] == [CORRECTION], during
+        # scene events while the new plan was on its way (the first may predate the correction's own decision)
+        during = [s for ev, s in seen if ev.kind == "scene_change" and ev.t < t_plan and len(s["user_words"]) == 2]
+        after = [s for ev, s in seen if ev.t > t_plan + 0.05 and ev.kind not in ("user_text", "paused_idle")]
+        assert during and all(s["user_words_in_task"]["not_yet"] == [CORRECTION] for s in during), during
+        assert during[0]["change_being_planned"]["user_said"] == CORRECTION
         assert after and all(s["user_words_in_task"].startswith("all of them") for s in after)
-        assert all(s["user_words"] == [SORT_TASK, CORRECTION] for s in after)             # the remark never joined
+        assert all(s["user_words"] == [SORT_TASK, CORRECTION] for s in after)
     finally:
         srv.close()
 
@@ -327,7 +395,8 @@ def test_the_plan_check_groups_spare_objects_by_label_and_asks_about_counts():
     qs = build_questions(ev, v)
     assert set(qs) == {"right_now", "check.letter_A2", "check.letter_B1", "check.cup"}       # one per group, not per object
     a = qs["check.letter_A2"]
-    assert "already uses 1 object labelled A (the letter A)" in a["instructions"]
+    assert "Of the 3 objects labelled A in view, `plan` already uses 1 (the letter A)" in a["instructions"]
+
     assert "the second letter A (and 1 more labelled A)" in a["instructions"]
     assert "more objects labelled A than the 1 the plan uses" in a["instructions"]
     assert "spare" in a["criteria"]["false"] and "needs more than 1 object labelled A" in a["criteria"]["true"]

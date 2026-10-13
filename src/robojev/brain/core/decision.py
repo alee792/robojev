@@ -231,7 +231,11 @@ def build_state(event, v: View) -> dict:
     # "More planner calls after a correction") showed a stateless decider reading the old task beside
     # the correction as "the user asks for a different end result" on every later step, though the
     # plan had folded the correction in; code knows which lines the current plan has read.
-    if v.plan and v.user_words:
+    # Shown only on events about the plan's progress, never on a typed line or a pause re-ask: there
+    # the question is the line itself (or whether to go on), and the live run (docs/live-results.md,
+    # "Handoff 8") showed the Decisions API reading "every line is folded into task" on "ok, go on" as
+    # a reason not to resume (0.88 -> 0.28 with this field and the right-now wording that pointed at it).
+    if v.plan and v.user_words and event.kind not in ("user_text", "paused_idle"):
         s["user_words_in_task"] = ("all of them: `task` is the plan's reading of every line in `user_words`, the corrections folded in"
                                    if not v.unplanned_words else
                                    {"not_yet": list(v.unplanned_words), "note": "a new plan for these is being worked out; `task` does not include them yet"})
@@ -350,7 +354,7 @@ def build_questions(event, v: View, groups=("right_now", "in_plan_fix", "route")
             "instructions": {
                 "question": "Given `event`, what should the arm do right now?",
                 "context": "`plan_position.arm_in_step` says literally where the arm is in its current step; `robot.mode` says whether it is moving, paused or holding. The code's own stop distance for hands applies regardless of this answer.",
-                "about_the_task": "`user_words` is what the user asked for, in their own words (the task, then each correction, newest last); `task` is how the current plan reads it, and `user_words_in_task` says which of those lines it already answers. If the user just asked for something different from `user_words`, the move in progress may be wrong even where it fits `task`.",
+                "about_the_task": "`user_words` is what the user asked for, in their own words (the task, then each correction, newest last); `task` is how the current plan reads it. If the user just asked for something different from `user_words`, the move in progress may be wrong even where it fits `task`.",
             },
             "criteria": {k: RIGHT_NOW_CRITERIA[k] for k in offered_right_now(v)},
         }
@@ -365,7 +369,9 @@ def build_questions(event, v: View, groups=("right_now", "in_plan_fix", "route")
         qs["route"] = {
             "type": "choice",
             "instructions": {"question": "Who should handle `event`: the robot on its own with the current plan, or a planner that writes a new plan, or the user?",
-                             "ask_about": "whether the end result or the steps must change, not what the event is about. Whether the user asks for a different end result is judged against `user_words` (what the user asked for, in their words), not against `task` (how the current plan reads it). A correction that `task` already states (`user_words_in_task`) is not a request for a different end result: the plan has changed for it already, and the steps go on as written unless this event itself calls for a change"},
+                             "ask_about": "whether the end result or the steps must change, not what the event is about. Whether the user asks for a different end result is judged against `user_words` (what the user asked for, in their words), not against `task` (how the current plan reads it)."
+                                          + (" A correction that `task` already states (`user_words_in_task`) is not a request for a different end result: the plan has changed for it already, and the steps go on as written unless this event itself calls for a change"
+                                             if event.kind not in ("user_text", "paused_idle") else "")},
 
             "criteria": ROUTE_CRITERIA,
         }
@@ -390,10 +396,11 @@ def _check_question(v: View, g: dict) -> dict:
     ids, lab, used = g["ids"], g["label"], g["used"]
     nm = v.name(ids[0]) + (f" (and {len(ids) - 1} more labelled {lab})" if len(ids) > 1 else "")
     if lab and used:
-        k = len(used)
+        k, n = len(used), len(used) + len(ids)
         plural = "s" if k != 1 else ""
-        q = (f"`plan` already uses {k} object{plural} labelled {lab} ({', '.join(v.name(o) for o in used)}). {nm} is another one "
+        q = (f"Of the {n} objects labelled {lab} in view, `plan` already uses {k} ({', '.join(v.name(o) for o in used)}). {nm} is another one "
              f"labelled {lab} that `plan` leaves out. Does `task` need more objects labelled {lab} than the {k} the plan uses?")
+
         return {"type": "noul", "instructions": q,
                 "criteria": {"true": f"Counting what the task names, spells or describes, it needs more than {k} object{plural} labelled {lab}, so {nm} is needed and the plan leaves it out.",
                              "false": f"The task needs {k} or fewer objects labelled {lab}: {nm} is a spare, and the plan is right to leave it alone."}}

@@ -549,3 +549,40 @@ Commit the result directories as before.
 
 **Rules:** never print API keys; don't change brain rules to improve numbers; fix real bugs in their
 own commits and say so; commit to `claude/widowx-pair`, no history rewriting.
+
+# Handoff 9: the wait scenario and the battery after the rule 5 fix
+
+Paste the block below into a Claude Code session on the MacBook (`OPENAI_API_KEY`, `TYPESAFE_API_KEY`).
+
+---
+
+You are re-running two things after the changes made from your Handoff 8 report
+(`docs/live-results.md`, "After Handoff 8"): rule 5's text no longer goes out on a typed line or a
+pause re-ask (your ablation pinned the Decisions API's 0/6 on it), a line the planner changed the
+plan for now joins `user_words` whatever the route's confidence, the slice's user answers "Should it
+go on?", and the spare-letter question says how many of the letter are in view.
+
+**Setup:** `git fetch origin claude/widowx-pair && git checkout claude/widowx-pair && uv sync --extra sim --extra mcp`;
+`uv run --frozen --extra mcp python -m pytest -q` (expect all passed, 4 skipped). On power, lid
+open, `caffeinate -dims`, the TLS check before each run as last time.
+
+**Run.**
+1. Slice (e), wait then go on, 6 runs with the Decisions API and 3 with Jev
+   (`ROBOJEV_DECIDER=decisions|jev ROBOJEV_PLANNER=openai uv run --frozen python -m pytest -s tests/test_slice.py -k test_e`).
+   Then (b) 3 runs per decider.
+2. `experiments/ablate_go_on.py` on one of the new (e) recordings against last run's, so the
+   "ok, go on" request is scored as sent now (expect the "all three as before" number, about 0.88).
+3. The battery, both live deciders, same episodes (`--episodes` last run's `episodes.json`).
+4. `uv run --frozen python experiments/replay_rules.py --after <stamp> --write`.
+
+**Report, with numbers, as a comment on PR #3 and a new section in `docs/live-results.md`:**
+1. (e): resume on "ok, go on" per decider, confidence, go-on to resume time; any "Should it go on?"
+   asks and what followed; any `gave_up`.
+2. (b): hold on the correction and its confidence; `user_words` after the correction in every run
+   (the correction must be in it, whatever the route was).
+3. Battery side by side as before, with the spare-letter send-backs and the `check.*` answers on
+   the taken-cube episode (ep 0).
+4. Anything worse than Handoff 8.
+
+**Rules:** never print API keys; don't change brain rules to improve numbers; fix real bugs in their
+own commits and say so; commit to `claude/widowx-pair`, no history rewriting.

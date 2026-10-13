@@ -635,3 +635,34 @@ cost it the wait scenario (0 / 6; the ablation shows why), its confidence on the
 rule 5's wording for the Decisions API (or a per-decider state), the spare-letter question for
 Jev's taken-cube case, and an answer to "should it go on?" in the slice's scripted user so the ask
 rule can be exercised there.
+
+## After Handoff 8 (2026-10-13, offline)
+
+Three changes from the Handoff 8 findings, each with a test in `tests/test_brain_liveness.py`:
+
+1. **Rule 5 is scoped to events about the plan's progress.** `user_words_in_task` and the route
+   question's sentence about a folded-in correction go out on step_done, plan_arrived, scene_change,
+   step_failed and plan_done_unmet, never on a typed line or a pause re-ask, and the right-now
+   question's wording is as it was before rule 5. Section 7's ablation put the Decisions API's
+   "ok, go on" at 0.28 with the field and the right-now sentence and 0.88 without; on a typed line
+   the question is the line itself, so the field had nothing to add there. Jev's post-correction
+   steps (section 4, 18 of 18 local) are step_done events and keep the field.
+2. **A line the planner changed the plan for is a correction.** When a replan triggered by a typed
+   line comes back and changes the steps (new steps, a different order or set of pending steps, a
+   done condition or constraint added or dropped; a new reading alone does not count), the line
+   joins `user_words` whatever the route's confidence was. Section 6: the correction itself was kept
+   out in 2 of 6 (b) runs because the gate, not the decider, had routed it. A remark whose replan
+   changes nothing still stays out.
+3. **The slice's scripted user answers "Should it go on?"** (`ScriptedUser(on_ask=...)`, used by
+   scenario (e) with "ok, go on"), so the ask rule can be exercised there instead of running to the
+   request cap. The battery's user already answered.
+
+Also: the count question now says how many objects of the label are in view ("Of the 3 objects
+labelled A in view, `plan` already uses 1"), for Jev's taken-cube case (section 3); only a live run
+says whether that helps.
+
+Not changed: the Decisions API's own `fast_llm` on routine steps (section 4; the routine rule keeps
+an unsure stay_local, not a replan the decider chose). A rule that overrode the decider's own
+replan on a finished step would make the router meaningless on the event it is most often asked
+about; if the live rate stays where it is, the fix belongs in the route criteria's text, not in a
+gate. Handoff 9 re-runs (e) with the Decisions API, and the battery for both.

@@ -346,7 +346,16 @@ def validate(plan: dict, state: WorldState, holding: str | None = None, queue: l
 # ---------------------------------------------------------------- diffs
 
 
+def diff_changes(diff: dict, queue: list) -> bool:
+    """Whether a replan's diff changes what the robot will do: new steps, a different order or set of
+    steps still to run, or a done condition or constraint added or dropped. A new reading alone is
+    not a change (the planner restates the task with every plan)."""
+    return bool(diff.get("new_steps") or diff.get("drop_done_when") or diff.get("new_done_when") or
+                diff.get("drop_constraints") or diff.get("new_constraints") or list(diff.get("pending_order", [])) != list(queue))
+
+
 def apply_diff(plan: dict, diff: dict) -> tuple[dict, list]:
+
     """-> (new plan, new queue). Steps not in pending_order stay in the plan's history but won't run."""
     p = copy.deepcopy(plan)
     p["reading"] = diff.get("reading") or p.get("reading", "")

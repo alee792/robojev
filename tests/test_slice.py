@@ -272,8 +272,10 @@ def test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task(srv):
     """A transient "wait" pauses the arm and "go on" resumes it; neither is part of the task, so no
     restated task (a plan's reading) may mention them (H5)."""
     user = ScriptedUser([Line(carrying(srv, "block_1"), WAIT),
-                         Line(lambda: bool(user.said) and time.monotonic() - user.t0 - user.said[0][0] >= 2.0, GO_ON)])
+                         Line(lambda: bool(user.said) and time.monotonic() - user.t0 - user.said[0][0] >= 2.0, GO_ON)],
+                        on_ask=GO_ON)       # "should it go on?" gets the same answer a person would give
     r, wall = episode(brain(srv, [ASCENDING], {WAIT: Utt("wait"), GO_ON: Utt("go_on")}, user))
+
     t_wait, t_go = (user.t0 + t for t, _ in user.said[:2])
     t_pause = first_mode(srv, ("paused", "holding"), t_wait)
     resumed = [t for t, _, _ in tools(srv, "resume") if t >= t_go]

@@ -279,12 +279,15 @@ class Line:
 class ScriptedUser:
     """A UserChannel that plays its lines in order, each when its time or condition comes."""
 
-    def __init__(self, lines: Iterable[Line | tuple] = (), poll_s: float = 0.02):
+    def __init__(self, lines: Iterable[Line | tuple] = (), poll_s: float = 0.02, on_ask: str | None = None, ask_delay_s: float = 0.5):
+        """`on_ask`: what the user says, `ask_delay_s` after each question the brain asks (None: the
+        question is recorded and never answered, which a live wait scenario cannot survive)."""
         self.lines = [x if isinstance(x, Line) else Line(*x) for x in lines]
-        self.poll_s = poll_s
+        self.poll_s, self.on_ask, self.ask_delay_s = poll_s, on_ask, ask_delay_s
         self.said: list[tuple[float, str]] = []
         self.asked: list[str] = []
         self._task: asyncio.Task | None = None
+        self._answers: list[asyncio.Task] = []
 
     def attach(self, say: Callable[[str], None], press_stop: Callable[[], None]) -> None:
         self._say, self._press_stop, self.t0 = say, press_stop, time.monotonic()
@@ -302,9 +305,17 @@ class ScriptedUser:
 
     def ask(self, question: str) -> None:
         self.asked.append(question)
+        if self.on_ask is not None:
+            self._answers.append(asyncio.get_running_loop().create_task(self._answer(self.on_ask)))
+
+    async def _answer(self, text: str) -> None:
+        await asyncio.sleep(self.ask_delay_s)
+        self.said.append((time.monotonic() - self.t0, text))
+        self._say(text)
 
 
 # ---------------------------------------------------------------- a perception override in front of a server
+
 
 
 class ScriptedPerception:
