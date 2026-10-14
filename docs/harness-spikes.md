@@ -229,3 +229,11 @@ under them). Still open from the re-run:
 - The Decisions API's latency tail (18 decisions over 1 s in one episode) is the API's; nothing in
   the brain can fix it, so the default stays Jev until a run shows otherwise.
 - Planner latency p50 4-7 s per call this run (2.8 s in the first); OpenAI-side, not ours.
+- (Handoff 9) A misplaced letter passes the plan check: the check asks about objects a plan leaves
+  alone, not about a wrong step. Candidate: one Noul per step destination on plan_arrived, tried
+  with the battery's send-back count watched (`docs/live-results.md`, "After Handoff 9").
+- (Handoff 9) The Decisions API sends routine finished steps to the planner on its own `fast_llm`
+  (15 per 10 battery episodes; Jev 0). If it stays, the fix is the route criteria's text, judged on
+  the recorded requests first, not a gate.
+- (Handoff 9) The Decisions API's latency tail (0.7-2.5 s decisions in one window) decided 4 of 6
+  wait runs; the API's side. Jev's max in the slice was 204 ms.

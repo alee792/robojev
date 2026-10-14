@@ -762,3 +762,25 @@ rule effect (Jev's run of the same episode, and both of Handoff 8's, spelled PIN
 **Default decider: Jev, unchanged.** The rule 5 fix brought the Decisions API's go-on back (0.88 when
 its decisions are quick, and the ask path now ends a stuck pause), but its latency tail decided
 four of six (e) runs this time, and it is the tail, not the rules, that keeps it second.
+
+## After Handoff 9 (2026-10-14, offline)
+
+No brain changes from this round. What it settled: rule 5's scoping restored the Decisions API's
+go-on (0.88 on the recorded request, every variant alike); the ask rule is exercised and ends a
+stuck pause when the user answers; a correction the gate routed is in `user_words` every time; Jev
+is unchanged on every bar (3/3, 3/3, 1.000 at 2.3 planner calls, max decision 204 ms). What decided
+the Decisions API's (e) runs this time was its own latency tail, which no brain rule can fix.
+
+Two things recorded as follow-ups, not built (docs/harness-spikes.md):
+
+- **A misplaced letter passes the plan check** (the API's ep 4, PINEO). The check asks about objects
+  a plan leaves alone; a wrong step is the planner's own output and is not asked about. The generic
+  extension is one Noul per step destination on plan_arrived ("the plan puts the letter O in position
+  4; is that where `task` wants it?"). It would catch this; it would also give an unsure decider six
+  more chances per plan to send a good plan back, which the last three rounds spent reducing. Worth
+  trying only with the battery's send-back count watched, and after the live decider's own
+  plan-check confidences on step questions are seen once.
+- **The Decisions API's own `fast_llm` on routine step_done** (15 in the battery, 4 in the slice;
+  Jev 0). A rule that kept the arm local against the decider's own replan on a finished step would
+  take the router's most common event away from it; if it stays, the fix is in the route criteria's
+  text, judged on the recorded requests first.
