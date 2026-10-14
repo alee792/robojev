@@ -687,11 +687,16 @@ Brain rules unchanged; no bug fixes this time.
 
 All six Decisions API runs ended `done`. In the four that failed, the go-on came back unsure, the
 arm stayed paused, after two re-asks the brain asked "Should it go on?", the scripted user said "ok,
-go on", and the arm resumed and finished (the ask rule now exercised, as intended). They fail the
+go on", and the arm resumed and finished (the ask rule now exercised, as intended). In two of the four
+(runs 5 and 6) the answer's own decision was unsure as well (`hold`, `carry_on` under the gate);
+code turned the pause into a hold on the answer (paused → holding at 23.75 s and 30.63 s) and the
+next plan released it (holding → running 3.0 s and 13.2 s later), so those two resumed through the
+answer-to-a-question path, not a decision. They fail the
 test on its 0.5 s bars: the pause on "hang on a second" took 0.70, 1.58, 1.13 and 2.51 s.
 
-**Why runs 3-6 differ from 1-2: the Decisions API's latency, not rule 5.** Its decisions in those
-four runs had p50 349-1,242 ms and max 1.05-2.75 s (runs 1-2: p50 161-252 ms); the planner, on the
+**Why runs 3-6 differ from 1-2: the Decisions API's latency, not rule 5.** In every one of those four
+runs the wait decision itself was slow (680, 1,575, 1,112 and 2,504 ms; 115 and 101 ms in runs 1-2),
+and their decisions overall had p50 136-1,242 ms and max 1.05-2.75 s; the planner, on the
 same OpenAI account, answered at its usual 2-8 s in the same runs, and Jev ran at p50 92-118 ms over
 the same network a minute later, so the slow window (17:07-17:10) was the API's own, as in Handoff
 8's ep 8. A slow pause let the arm move on before it stopped, and the go-on request then described a
@@ -701,8 +706,8 @@ a nearby block), and the API is unsure about resuming mid-lowering. In run 6 the
 and the go-on (typed 2 s after it) was decided first.
 
 **The ablation on the new recording** (run 1's "ok, go on" request, 5 calls each): as sent now,
-resume 0.88; every variant 0.88. Rule 5's text is no longer in the request (the only field that
-still differs from last run's request is the route's `ask_about`, which it does not move).
+resume 0.88; every variant 0.88. Rule 5's text is no longer in the request: the only field that
+still differs from the pre-rule-5 request is the route's `ask_about`, by a trailing full stop.
 
 ### 2. (b), the correction
 
