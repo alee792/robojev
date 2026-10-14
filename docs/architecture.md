@@ -235,3 +235,9 @@ What that adds to today's loop, all of it generic (nothing inside knows letters 
   Which skills get a learned policy is decided by failure rates in the battery, not in advance.
 - **Two scenes, one brain.** Letter cubes and a surgical tray stay side by side in the simulator and
   the battery so that nothing that works is specific to either.
+- **Several agents at one tier, built for, kept single.** A responsibility is a question group with
+  its own criteria and gate; an agent is whatever answers a set of groups. `brain/panel.py` sends
+  each group to the decider named for it (a safety-minded one on right-now, a task-minded one on
+  the fix, another on routing), in parallel, and hands the merged answers to the same `combine()`;
+  with one backend it is exactly today's single decider. Adding an agent never adds an arbitration
+  path: code merges, the gates apply, and the priority order outranks every answer.
