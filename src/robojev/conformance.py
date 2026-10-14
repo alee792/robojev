@@ -13,12 +13,24 @@ real arm (D1) the positions are typed in and the judge reads the server's own bo
         --preflight-ack "your name" --skill pick_and_place --n 20
     uv run --frozen robojev-conformance --arms 2 --skill pick_and_place --n 10
     uv run --frozen robojev-conformance --arms 2 --skill handover_via_zone --n 10
+    uv run --frozen robojev-conformance --skill insert --n 10
+    uv run --frozen robojev-conformance --skill reorient --scene tools --n 10
+    uv run --frozen robojev-conformance --scene tools --skill pick_and_place --n 10
 
 Sim: each trial is a fresh scene. pick_and_place: one 4 cm block at a random pose in x 0.26-0.38,
 y -0.15..0.15, random yaw, a random tray slot as the destination. stack_on: two such blocks at least
 10 cm apart, the first stacked on the second. push: one block, a random catalog direction and a
-distance of 3-12 cm whose path stays in the workspace. hand_over is not here: the sim has no hands,
-so it is exercised by injecting one (tests/test_robots_widowx_sim.py).
+distance of 3-12 cm whose path stays in the workspace. reorient: one block, a random catalog
+direction. hand_over is not here: the sim has no hands, so it is exercised by injecting one
+(tests/test_robots_widowx_sim.py).
+
+Two scenes (`--scene`, sim only). `letters` (the default) is the above: cubes and the tray. `tools`
+puts a surgical tool (scene.Tool, a random label) at a random pose in x 0.20-0.26, y -0.15..0.15,
+random yaw: pick_and_place takes the tool to a tray slot, reorient turns it, insert (tools only, the
+default scene for it) seats it in a random holder of a three-holder rack standing where the tray
+would be, at a random yaw every holder can be served at, the tool drawn clear of its walls. The rod's
+yaw against the rack's is random, so about a third of the insert trials need the regrasp
+(skills.turn_plan); the verdict line says how many grasps a trial took.
 
 Two arms (K5, `--arms 2`, sim only): the pair scene of scene.pair(). pick_and_place runs both arms
 AT ONCE, each within its own half (a 4 cm block at a random pose x 0.17-0.21 from its base, y
@@ -41,8 +53,10 @@ imports the real driver module, which is a later file, and needs `--preflight-ac
 
 Success is judged by `judge_trial()` from the world state alone, never from what the skill says
 about itself: the object rests where the skill was to leave it (in the slot's radius; "on:" the
-base block; at least 80 % of the distance along the direction and still upright), nothing is in the
-gripper, and the arm has retreated to travel height. In sim the world state is MuJoCo ground truth.
+base block; at least 80 % of the distance along the direction and still upright; between the
+holder's walls with its front within 15 deg of the holder's yaw; turned within 15 deg of the asked
+direction and within 1 cm of where it started), nothing is in the gripper, and the arm has retreated
+to travel height. In sim the world state is MuJoCo ground truth.
 On the real arm it is `StaticWorld`'s bookkeeping (a held block follows the EE, a released one
 settles where it was let go) plus the gripper snapshot: the arm is trusted to have done what it was
 told, and the run's header says so. A block that fell out unnoticed, or a slot missed by more than
@@ -65,15 +79,24 @@ from robojev.config import Workspace
 from robojev.protocol import Manifest, RobotEvent, WorldState
 from robojev.recording.recorder import JsonlRecorder
 from robojev.robots.widowx_sim import scene, skills
-from robojev.robots.widowx_sim.server import ARM_ID, LIMITS, SimRobotServer
+from robojev.robots.widowx_sim.server import ARM_ID, LIMITS, TRAVEL_Z, SimRobotServer
 
 RESULTS = Path(__file__).resolve().parents[2] / "experiments" / "results" / "k2_trials.jsonl"
-SKILLS = ("pick_and_place", "stack_on", "push")
+SKILLS = ("pick_and_place", "stack_on", "push", "insert", "reorient")
+SCENES = ("letters", "tools")
+TOOLS_SKILLS = ("pick_and_place", "insert", "reorient")       # what the tool scene runs; stack_on and push are cube skills
 PAIR_SKILLS = ("pick_and_place", "handover_via_zone")
 PAIR_X_RANGE = (0.17, 0.21)   # from the arm's own base: in front of its tray/stage row (x 0.11), well inside its half
 PAIR_Y_RANGE = (-0.14, 0.14)
 X_RANGE = (0.26, 0.38)
 Y_RANGE = (-0.15, 0.15)
+TOOL_X_RANGE = (0.20, 0.26)   # a rod's handle (4.5 cm from its centre) stays inside the workspace at any yaw, and the
+                              # rod (6 cm from its centre) clear of the rack's walls at x 0.33+
+RACK_XY = (0.36, 0.0)         # where the tray's slots are: an insert trial has the rack, a pick_and_place trial the tray
+RACK_CLEAR = 0.05             # m a rod's segment keeps from every holder's centre at the start (walls reach 3 cm)
+FRONT_TOL = math.radians(15)  # how far off the asked direction an inserted or reoriented object's front may point
+STAY_TOL = 0.01               # m a reoriented object may end from where it started
+TURN_TIMEOUT_S = 40.0         # sim seconds for insert and reorient: a regrasp round doubles the motion
 PUSH_RANGE = (0.03, 0.12)   # m
 MIN_APART = 0.10            # m between two blocks' centres at the start of a stack trial
 SKILL_TIMEOUT_S = 20.0      # sim seconds before a trial is abandoned (the skill's own timeout is 15 s)
@@ -89,14 +112,25 @@ class Trial:
     skill: str
     blocks: list[scene.Block]
     args: dict = field(default_factory=dict)
+    tools: list[scene.Tool] = field(default_factory=list)    # the tool scene's objects (then `blocks` is empty)
+    rack: scene.Rack | None = None
+    tray: scene.Tray | None = field(default_factory=scene.Tray)
+
+    @property
+    def objects(self) -> list:
+        return self.tools or self.blocks
 
     @property
     def block_xy(self) -> tuple[float, float]:
-        return self.blocks[0].xy
+        return self.objects[0].xy
 
     @property
     def block_yaw(self) -> float:
-        return self.blocks[0].yaw
+        return self.objects[0].yaw
+
+    @property
+    def scene(self) -> str:
+        return "tools" if self.tools else "letters"
 
     @property
     def place(self) -> str:
@@ -153,8 +187,57 @@ def _push_args(rng: random.Random, b: scene.Block, workspace: Workspace, table_z
             return {"object": b.name, "direction": direction, "distance": distance}
 
 
-def sample(rng: random.Random, index: int, n_slots: int, skill: str = "pick_and_place") -> Trial:
-    """A random sim trial of `skill`, drawn so its preconditions hold (blocks apart, a push path in reach)."""
+def _tool(rng: random.Random, name: str) -> scene.Tool:
+    return scene.Tool(name, (rng.uniform(*TOOL_X_RANGE), rng.uniform(*Y_RANGE)), yaw=rng.uniform(-math.pi, math.pi),
+                      label=rng.choice(scene.TOOL_LABELS))
+
+
+def _rack(rng: random.Random, workspace: Workspace, travel_z: float) -> scene.Rack:
+    """A rack at RACK_XY at a random yaw whose every holder can be served: the handle of a seated
+    rod (`Tool.handle` past the holder's centre along the yaw) inside the workspace with 1 cm to spare."""
+    handle = scene.Tool("probe", (0, 0)).handle
+    while True:
+        r = scene.Rack(RACK_XY, yaw=rng.uniform(-math.pi, math.pi))
+        pts = [(x + handle * math.cos(r.yaw), y + handle * math.sin(r.yaw)) for x, y in (r.holder_xy(i) for i in range(r.n))]
+        if all(workspace.contains((x, y, travel_z), margin=0.01) for x, y in pts):
+            return r
+
+
+def _clear_of(t: scene.Tool, r: scene.Rack) -> bool:
+    """The rod's segment keeps RACK_CLEAR from every holder's centre, so it never starts lying on a wall."""
+    ux, uy = math.cos(t.yaw), math.sin(t.yaw)
+    for i in range(r.n):
+        hx, hy = r.holder_xy(i)
+        s = max(-t.length / 2, min(t.length / 2, (hx - t.xy[0]) * ux + (hy - t.xy[1]) * uy))   # nearest point on the rod
+        if math.hypot(t.xy[0] + s * ux - hx, t.xy[1] + s * uy - hy) < RACK_CLEAR:
+            return False
+    return True
+
+
+def _direction(rng: random.Random) -> str:
+    return rng.choice(sorted(skills.DIRECTIONS))
+
+
+def sample(rng: random.Random, index: int, n_slots: int, skill: str = "pick_and_place", scene_kind: str = "letters") -> Trial:
+    """A random sim trial of `skill`, drawn so its preconditions hold (blocks apart, a push path in
+    reach). On the `tools` scene the object is a tool (`tool_1`) and the places are the tray and a
+    rack at a random yaw."""
+    if scene_kind == "tools":
+        if skill not in TOOLS_SKILLS:
+            raise ValueError(f"the tools scene runs {', '.join(TOOLS_SKILLS)}, not {skill}")
+        t1 = _tool(rng, "tool_1")
+        if skill == "pick_and_place":
+            # not the end slots: a rod's handle is 4.5 cm past the slot, and at the tray's ends that is the workspace
+            # box's corner, 0.47 m from the base, beyond the straight-down reach (0.42), where the EE sags
+            return Trial(index, skill, [], {"object": "tool_1", "place": f"slot_{rng.randrange(1, max(2, n_slots - 1))}"}, [t1])
+        if skill == "insert":
+            rack = _rack(rng, LIMITS.workspace, TRAVEL_Z)
+            while not _clear_of(t1, rack):
+                t1 = _tool(rng, "tool_1")
+            return Trial(index, skill, [], {"object": "tool_1", "place": f"{rack.slot_id}_{rng.randrange(rack.n)}"}, [t1], rack, None)
+        return Trial(index, skill, [], {"object": "tool_1", "direction": _direction(rng)}, [t1])
+    if skill == "insert":
+        raise ValueError("insert runs on the tools scene")
     b1 = _block(rng, "block_1")
     if skill == "pick_and_place":
         return Trial(index, skill, [b1], {"object": "block_1", "place": f"slot_{rng.randrange(n_slots)}"})
@@ -165,6 +248,8 @@ def sample(rng: random.Random, index: int, n_slots: int, skill: str = "pick_and_
         return Trial(index, skill, [b1, b2], {"object": "block_1", "onto": "block_2"})
     if skill == "push":
         return Trial(index, skill, [b1], _push_args(rng, b1, LIMITS.workspace, scene.TABLE_Z))
+    if skill == "reorient":
+        return Trial(index, skill, [b1], {"object": "block_1", "direction": _direction(rng)})
     raise ValueError(f"no trials for {skill}")
 
 
@@ -275,6 +360,56 @@ def judge_push(world: WorldState, manifest: Manifest, oid: str, start: tuple[flo
     return True, f"{oid} moved {along * 100:.1f} cm {direction} ({abs(across) * 100:.1f} cm sideways), upright, gripper empty, arm at travel height"
 
 
+def _front_off(o, yaw: float) -> float | None:
+    """How far the object's front points from `yaw`, rad, or None when perception gave no yaw."""
+    return None if o.yaw is None else abs(skills.wrap(o.yaw - yaw))
+
+
+def judge_insert(world: WorldState, manifest: Manifest, oid: str, place: str, arm: str = ARM_ID) -> tuple[bool, str]:
+    """As `judge`, for an insert: the object rests between the holder's walls (its `where` is the
+    holder) with its front within FRONT_TOL of the holder's yaw."""
+    o = world.objects.get(oid)
+    pl = world.places.get(place)
+    if o is None or pl is None:
+        return False, f"{oid if o is None else place} is not in the world"
+    problems = []
+    if o.where != place:
+        problems.append(f"{oid} is {o.where}, {math.hypot(o.x - pl.x, o.y - pl.y) * 100:.1f} cm from {place}, not inside its walls")
+    off = _front_off(o, pl.yaw) if pl.yaw is not None else None
+    if off is None:
+        problems.append(f"no yaw to judge {oid}'s front against {place}")
+    elif off > FRONT_TOL:
+        problems.append(f"{oid}'s front points {math.degrees(off):.0f} deg off {place}'s opening")
+    problems += _arm_checks(world, manifest, arm)
+    if problems:
+        return False, "; ".join(problems)
+    return True, f"{oid} seated in {place}, front {math.degrees(off):.1f} deg off its opening, gripper empty, arm at travel height"
+
+
+def judge_reorient(world: WorldState, manifest: Manifest, oid: str, start: tuple[float, float], direction: str,
+                   arm: str = ARM_ID) -> tuple[bool, str]:
+    """As `judge`, for a reorient: the object's front within FRONT_TOL of the direction, its centre
+    within STAY_TOL of where it started, resting (not in a gripper, not on another object)."""
+    o = world.objects.get(oid)
+    if o is None:
+        return False, f"{oid} is not in the world"
+    problems = []
+    off = _front_off(o, skills.front_of(direction))
+    if off is None:
+        problems.append(f"no yaw to judge {oid}'s front")
+    elif off > FRONT_TOL:
+        problems.append(f"{oid}'s front points {math.degrees(off):.0f} deg off {direction}")
+    moved = math.dist((o.x, o.y), start)
+    if moved > STAY_TOL:
+        problems.append(f"{oid} ended {moved * 100:.1f} cm from where it started")
+    if o.where.startswith(("on:", "gripper:")):
+        problems.append(f"{oid} is {o.where}")
+    problems += _arm_checks(world, manifest, arm)
+    if problems:
+        return False, "; ".join(problems)
+    return True, f"{oid} points {direction} ({math.degrees(off):.1f} deg off), {moved * 1000:.0f} mm from its start, gripper empty, arm at travel height"
+
+
 def judge_trial(world: WorldState, manifest: Manifest, trial: Trial, table_z: float = scene.TABLE_Z) -> tuple[bool, str]:
     a = trial.args
     if trial.skill == "pick_and_place":
@@ -283,6 +418,10 @@ def judge_trial(world: WorldState, manifest: Manifest, trial: Trial, table_z: fl
         return judge_stack(world, manifest, a["object"], a["onto"])
     if trial.skill == "push":
         return judge_push(world, manifest, a["object"], trial.block_xy, a["direction"], a["distance"], table_z=table_z)
+    if trial.skill == "insert":
+        return judge_insert(world, manifest, a["object"], a["place"])
+    if trial.skill == "reorient":
+        return judge_reorient(world, manifest, a["object"], trial.block_xy, a["direction"])
     raise ValueError(f"no judge for {trial.skill}")
 
 
@@ -306,7 +445,12 @@ def judge_pair(world: WorldState, manifest: Manifest, trial: PairTrial) -> tuple
 
 
 def make_server(trial: Trial, recorder: JsonlRecorder | None) -> SimRobotServer:
-    return SimRobotServer(scene.SceneSpec(blocks=list(trial.blocks)), realtime=False, recorder=recorder)
+    spec = scene.SceneSpec(blocks=list(trial.blocks), tray=trial.tray, tools=list(trial.tools), rack=trial.rack)
+    return SimRobotServer(spec, realtime=False, recorder=recorder)
+
+
+def trial_timeout(skill: str) -> float:
+    return TURN_TIMEOUT_S if skill in ("insert", "reorient") else SKILL_TIMEOUT_S
 
 
 def run_trial(trial: Trial, recorder: JsonlRecorder | None = None, srv=None, world=None,
@@ -330,6 +474,9 @@ def run_trial(trial: Trial, recorder: JsonlRecorder | None = None, srv=None, wor
         srv.run_for(SETTLE_S)
         st = srv.status(sid)
         ok, text = judge_trial(srv.world(), srv.manifest(), trial, table_z)
+        rounds = getattr(srv._runs[sid], "rounds", 0) if hasattr(srv, "_runs") else 0
+        if rounds:
+            text += f" ({rounds + 1} grasps)"
     finally:
         srv.unsubscribe(events.append)
     v = Verdict(ok, text, st.state, st.reason, srv.t - t_start, time.perf_counter() - t0)
@@ -401,13 +548,18 @@ def describe_pair(trial: PairTrial) -> str:
 
 
 def describe(trial: Trial) -> str:
-    b = trial.blocks[0]
-    s = f"block ({b.xy[0]:.3f}, {b.xy[1]:+.3f}) yaw {math.degrees(b.yaw):+6.1f} deg"
+    b = trial.objects[0]
+    what = b.label if trial.tools else "block"
+    s = f"{what:8s} ({b.xy[0]:.3f}, {b.xy[1]:+.3f}) yaw {math.degrees(b.yaw):+6.1f} deg"
     if trial.skill == "pick_and_place":
         return f"{s} -> {trial.place}"
     if trial.skill == "stack_on":
         c = trial.blocks[1]
         return f"{s} -> onto ({c.xy[0]:.3f}, {c.xy[1]:+.3f})"
+    if trial.skill == "insert":
+        return f"{s} -> {trial.place} (rack yaw {math.degrees(trial.rack.yaw):+6.1f} deg)"
+    if trial.skill == "reorient":
+        return f"{s} turn {trial.args['direction']}"
     return f"{s} push {trial.args['distance'] * 100:4.1f} cm {trial.args['direction']}"
 
 
@@ -456,6 +608,9 @@ def main(argv=None) -> int:
     ap.add_argument("--n", type=int, default=20)
     ap.add_argument("--arms", type=int, choices=(1, 2), default=1,
                     help="2: the two-arm pair scene (sim only): pick_and_place on both arms at once, or handover_via_zone")
+    ap.add_argument("--scene", choices=SCENES, default=None,
+                    help="sim only: letters (cubes and the tray, the default) or tools (a surgical tool, the tray and a rack; "
+                         "the default for insert)")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--out", type=Path, default=None,
                     help="JSONL of every policy tick and event; default: none, so a check run can't overwrite "
@@ -497,17 +652,25 @@ def main(argv=None) -> int:
         return _report_pair(a.skill, a.n, a.seed, verdicts, rec)
     if a.skill not in SKILLS:
         ap.error(f"{a.skill} needs --arms 2")
+    scene_kind = a.scene or ("tools" if a.skill == "insert" else "letters")
+    if a.robot != "sim":
+        if scene_kind == "tools":
+            ap.error("--scene tools runs in sim only: the real servers' worlds know blocks and a tray")
+        if a.skill in ("insert", "reorient"):
+            ap.error(f"{a.skill} runs in sim only so far: the real servers' worlds report no yaw or holders")
     if a.robot == "sim":
+        if scene_kind == "tools" and a.skill not in TOOLS_SKILLS:
+            ap.error(f"--scene tools runs {', '.join(TOOLS_SKILLS)}")
         n_slots = scene.Tray().n
         verdicts = []
         for i in range(a.n):
-            trial = sample(rng, i, n_slots, a.skill)
+            trial = sample(rng, i, n_slots, a.skill, scene_kind)
             if rec is not None:
                 rec.tag = {"trial": i}
-            v = run_trial(trial, rec)
+            v = run_trial(trial, rec, timeout_s=trial_timeout(a.skill))
             verdicts.append(v)
             print(_line(i, trial, v, "sim"))
-        return _report(a.skill, a.n, a.seed, verdicts, rec)
+        return _report(f"{a.skill} ({scene_kind})", a.n, a.seed, verdicts, rec)
     if a.robot == "franka":
         return _main_franka(a, ap, rng, rec)
     return _main_real(a, ap, rng, rec)

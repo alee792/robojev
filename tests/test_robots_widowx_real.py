@@ -232,7 +232,7 @@ def test_manifest_matches_the_sim_shape(server):
     man = srv.manifest()
     assert man.robot == "widowx-bay-1" and man.catalog == catalog.CATALOG_VERSION
     assert catalog.check_manifest_skills(man.skills) == []
-    assert {s.name for s in man.skills} == {"pick_and_place", "stack_on", "push", "hand_over", "hold", "survey"}
+    assert {s.name for s in man.skills} == {"pick_and_place", "stack_on", "push", "hand_over", "insert", "reorient", "hold", "survey"}
     arm = man.arms[0]
     assert arm.id == ARM_ID and arm.gripper.max_width == pytest.approx(0.08) and arm.travel_z == pytest.approx(TRAVEL_Z)
     assert arm.workspace[2][0] == pytest.approx(TABLE_Z + 0.004)
@@ -398,7 +398,7 @@ def test_conformance_runs_the_same_trials_on_the_real_server_with_the_fake_drive
                       "--out", str(out)])
     text = capsys.readouterr().out
     assert rc == 0, text
-    assert trials.REAL_JUDGE_NOTE in text and "ok    0  block (0.300, -0.080) yaw  +20.0 deg -> slot_" in text, text
+    assert trials.REAL_JUDGE_NOTE in text and "(0.300, -0.080) yaw  +20.0 deg -> slot_" in text, text
     assert "s arm" in text and "1/1 succeeded" in text
     lines = [json.loads(line) for line in out.read_text().splitlines()]
     notes = {ln["kind"]: ln for ln in lines if ln["type"] == "note"}

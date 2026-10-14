@@ -317,7 +317,7 @@ def test_conformance_runs_on_the_fake_franka(tmp_path, capsys):
                       "--out", str(out)])
     text = capsys.readouterr().out
     assert rc == 0, text
-    assert trials.REAL_JUDGE_NOTE in text and "ok    0  block (0.300, -0.080) yaw  +20.0 deg -> slot_" in text, text
+    assert trials.REAL_JUDGE_NOTE in text and "(0.300, -0.080) yaw  +20.0 deg -> slot_" in text, text
     assert "1/1 succeeded" in text
     lines = [json.loads(line) for line in out.read_text().splitlines()]
     notes = {ln["kind"]: ln for ln in lines if ln["type"] == "note"}

@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from .protocol import SkillSpec
 
-CATALOG_VERSION = "0.1"
+CATALOG_VERSION = "0.2"     # 0.2 adds insert and reorient: tasks with a required orientation and a tight fit
 
 
 def _obj(desc="object id from the world state"):
@@ -42,7 +42,7 @@ PUSH = SkillSpec(
     "push", "Slide an object along the table with the closed gripper, without picking it up.",
     {"type": "object", "properties": {
         "object": _obj(),
-        "direction": {"type": "string", "enum": ["left", "right", "toward_robot", "away_from_robot"]},
+        "direction": {"type": "string", "enum": ["left", "right", "toward_robot", "away_from_robot"]},   # = DIRECTIONS
         "distance": {"type": "number", "description": "metres", "minimum": 0.02, "maximum": 0.3}},   # 1 cm is under a real arm's repeatability
      "required": ["object", "direction", "distance"], "additionalProperties": False})
 
@@ -59,7 +59,18 @@ HOLD = SkillSpec(
     {"type": "object", "properties": {"seconds": {"type": "number", "minimum": 0.5, "maximum": 10, "default": 1.0}},
      "additionalProperties": False})
 
-STANDARD = (PICK_AND_PLACE, STACK_ON, PUSH, HAND_OVER, SURVEY, HOLD)
+DIRECTIONS = ("left", "right", "toward_robot", "away_from_robot")   # as seen from the robot's base, on the table
+INSERT = SkillSpec(
+    "insert", "Pick up an object and seat it in a holder with a tight fit (a rack slot, a stand, a sleeve), aligned to the "
+              "holder's opening, pressing in slowly; fails `blocked` if it does not seat.",
+    {"type": "object", "properties": {"object": _obj(), "place": {"type": "string", "description": "place id of a holder"}},
+     "required": ["object", "place"], "additionalProperties": False})
+REORIENT = SkillSpec(
+    "reorient", "Turn an object in place so its front (a tool's handle, a block's marked face) points the given way, "
+                "regrasping as needed; it ends where it started.",
+    {"type": "object", "properties": {"object": _obj(), "direction": {"type": "string", "enum": list(DIRECTIONS)}},
+     "required": ["object", "direction"], "additionalProperties": False})
+STANDARD = (PICK_AND_PLACE, STACK_ON, PUSH, HAND_OVER, INSERT, REORIENT, SURVEY, HOLD)
 BY_NAME = {s.name: s for s in STANDARD}
 
 # Mandatory on every server, whatever skills it offers.

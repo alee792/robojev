@@ -24,6 +24,28 @@ along the closing axis, 13.7 / 19.7 mm across it), so a block is pushed by the p
 s / 2h = 0.7, which is why scene.py gives that pair 0.5 (at 1.0 the cube rolled over). The slide is
 closed-loop on the object: the fingers advance until the object has travelled the distance.
 
+Grasp by shape (the tool scene): the grasp is chosen from `ObjPose.shape`, not by a skill. A cube
+keeps the fingertip pinch above: four candidate closing-axis yaws, one per face. A rod (a handle-
+like tool) is pinched across its handle at the handle's midpoint (`ObjPose.handle` from the centre
+along the front): two candidates, the closing axis perpendicular to the rod either way round, the
+jaws opened to the handle's width plus the margin. Measured on the model (2026-10-14): the fingertip
+pieces are 14.6 mm tall and 15.4 mm along the rod and start at the EE point, so with the tips 5 mm
+over the table a 12 mm rod's 14 mm handle is pinched over its upper 7 mm, 1.6 N a finger at the 8 mm
+squeeze; over a 0.15 m/s carry with up to 170 deg of wrist roll it shifts under 4 mm and 2.2 deg in
+the fingers. The same pinch lets the rod slide up when it is pressed onto a wall (see Insert).
+
+The wrist roll (insert, reorient): the roll is the closing axis's angle from the direction
+perpendicular to the arm's azimuth, where joint_5 is at zero. The model's joint_5 turns +-180 deg
+and the IK follows it anywhere in the one-arm workspace with no self-contact (swept 2026-10-14), so
+`Params.roll_max` (120 deg) is a margin kept from the joint stop, not a measured collision; the
+real arms must confirm their own. Yaw is commanded as a roll held constant while the arm moves
+(`Grasping._steer`), stepping at most a radian from where the wrist is, because the backend's yaw
+rate limiter takes the short way round and a turn of more than half a turn would otherwise end
+past the stop. A turn the roll range cannot make in one grasp is split (`turn_plan`): put the object
+down turned as far as the range allows, regrasp with the other candidate, finish. With a range of
+at least 90 deg a rod needs at most one regrasp and a cube at most one too (its candidates are 90
+deg apart); the loop is general.
+
 Every phase has literal text the decision loop can read. hold()/pause() work from any phase: the
 setpoint freezes where it is and the gripper command is left alone, so a held grip stays a grip.
 resume() continues the same phase, because each phase re-issues its goal every tick and keeps no
@@ -44,8 +66,16 @@ class ObjPose:
     x: float
     y: float
     z: float
-    yaw: float            # rad about +z
-    size: float           # edge, m
+    yaw: float            # rad about +z: the direction the front points (a cube's marked face, a rod's handle)
+    size: float           # the width the fingers close to: a cube's edge, a rod's handle, m
+    shape: str = "cube"   # "cube" | "rod": picks the grasp (grasp_candidates, grasp_point)
+    length: float = 0.0   # along the front: a rod's length; 0 = size
+    handle: float = 0.0   # the pinch point, from the centre along the front: a rod's handle midpoint, 0 for a cube
+
+    @property
+    def extent(self) -> float:
+        """how far from its centre the object reaches, at most"""
+        return max(self.size, self.length) / 2
 
 
 class ArmIO(Protocol):
@@ -70,8 +100,9 @@ class ArmIO(Protocol):
         """every object's pose: neighbours of a grasp, what sits on a stack"""
     def where(self, oid: str) -> str:
         """the object's `where` as world() reports it (place id | table | on:<id> | gripper:<arm>)"""
-    def place(self, pid: str) -> tuple[float, float] | None:
-        """where to put something down for this place id (a group resolves to a free member)"""
+    def place(self, pid: str) -> tuple[float, ...] | None:
+        """where to put something down for this place id (a group resolves to a free member): (x, y),
+        or (x, y, yaw) for a holder, the yaw being the direction a seated object's front points"""
     def hands(self) -> list[HandObs]:
         """the hands perception reports now, as world().hands"""
     def held(self) -> str | None:
@@ -115,10 +146,21 @@ class Params:
     timeout_s: float = 15.0       # active (not held) seconds for the whole skill; hand_over's wait gets its own 15
     stall_s: float = 3.0          # s without 3 mm of EE progress in a motion phase
     stall_m: float = 0.003
+    roll_max: float = math.radians(120)   # the wrist roll either way from zero a grasp may use (see the module docstring)
+    v_insert: float = 0.03        # m/s pressing a rod into a holder
+    insert_above: float = 0.03    # the slow press starts this far above the seat: the rod's bottom 1 cm over 15 mm walls
+    insert_lag_m: float = 0.010   # fingers this far behind the press's setpoint = the rod is on a wall (blocked); a free
+                                  # descent at v_insert lags ~3 mm, the safety filter trips at 30
+    seat_tol: float = 0.004       # EE within this of the seat height, setpoint there = seated
+    settle_insert_s: float = 0.3  # s for the EE to close on an arrived setpoint before the height is judged
+    front_tol: float = 0.15       # rad: a reoriented object's front within this of the asked direction is done (the
+                                  # conformance judge allows 15 deg)
+    max_rounds: int = 3           # grasps a turn may take before it reads stalled (two suffice at roll_max >= 90 deg)
 
 
 # Advertised as-is from the standard catalog: shared names are what make recordings transfer.
-SPECS = (catalog.PICK_AND_PLACE, catalog.STACK_ON, catalog.PUSH, catalog.HAND_OVER, catalog.HOLD, catalog.SURVEY)
+SPECS = (catalog.PICK_AND_PLACE, catalog.STACK_ON, catalog.PUSH, catalog.HAND_OVER, catalog.INSERT, catalog.REORIENT,
+         catalog.HOLD, catalog.SURVEY)
 
 # Push directions in the base frame (+x forward, +y left), as the catalog names them.
 DIRECTIONS: dict[str, tuple[float, float]] = {"left": (0.0, 1.0), "right": (0.0, -1.0),
@@ -139,13 +181,75 @@ def grasp_yaw(x: float, y: float, block_yaw: float) -> float:
     return neutral + rel
 
 
+def neutral_yaw(x: float, y: float) -> float:
+    """The closing-axis yaw with zero wrist roll at (x, y): perpendicular to the arm's azimuth."""
+    return math.atan2(y, x) + math.pi / 2
+
+
+def roll_of(yaw: float, x: float, y: float) -> float:
+    """The wrist roll a closing-axis yaw means at (x, y), in (-pi, pi]."""
+    return wrap(yaw - neutral_yaw(x, y))
+
+
+def front_of(direction: str) -> float:
+    """The yaw an object's front points when it points `direction` (catalog.DIRECTIONS, base frame)."""
+    dx, dy = DIRECTIONS[direction]
+    return math.atan2(dy, dx)
+
+
+def grasp_relations(shape: str) -> tuple[float, ...]:
+    """The angles, from one grasp candidate to the next, a shape's front can sit at relative to the
+    closing axis: a cube's faces are 90 deg apart, a rod is pinched across its axis either way round."""
+    return (0.0, math.pi) if shape == "rod" else (0.0, math.pi / 2, math.pi, -math.pi / 2)
+
+
+def grasp_candidates(o: ObjPose) -> list[float]:
+    """Closing-axis yaws that meet the object squarely: a cube's four (one per face), a rod's two
+    (across its handle, either way round)."""
+    base = o.yaw + (math.pi / 2 if o.shape == "rod" else 0.0)
+    return [base + k for k in grasp_relations(o.shape)]
+
+
+def grasp_point(o: ObjPose) -> tuple[float, float]:
+    """Where the fingertips close: the centre, or `handle` along the front for a rod."""
+    return (o.x + o.handle * math.cos(o.yaw), o.y + o.handle * math.sin(o.yaw))
+
+
+@dataclass(frozen=True)
+class TurnPlan:
+    """How to get a held object's front to `F` at the destination: `direct` with the wrist at `roll`
+    there, or (not direct) an intermediate put-down at the pick spot with the wrist at `roll`, turned
+    as far toward the goal as the range allows, after which a regrasp reaches the destination."""
+    direct: bool
+    roll: float
+
+
+def turn_plan(shape: str, delta: float, F: float, dest: tuple[float, float], here: tuple[float, float],
+              r_now: float, roll_max: float) -> TurnPlan:
+    """`delta` is the front's angle from the closing axis as held (fixed by the grasp), `F` the front
+    wanted at `dest` (EE xy), `here` the EE xy for a put-down at the pick spot, `r_now` the wrist's
+    roll at the pick. Direct when the destination roll is within the range. Otherwise choose the
+    grasp relation to regrasp with (the one that makes the destination roll smallest), and turn now
+    so that the regrasp's own roll is as near zero as the range allows: with a range of 90 deg or
+    more both rolls of the next round are then within it."""
+    r1 = roll_of(F - delta, *dest)
+    if abs(r1) <= roll_max:
+        return TurnPlan(True, r1)
+    e = min((k for k in grasp_relations(shape) if k != 0.0), key=lambda k: abs(roll_of(F - wrap(delta - k), *dest)))
+    want = wrap(-e)
+    if abs(abs(want) - math.pi) < 1e-9:              # half a turn either way: the way that turns less
+        want = math.copysign(math.pi, r_now if r_now != 0.0 else 1.0)
+    return TurnPlan(False, max(-roll_max, min(roll_max, want)))
+
+
 def open_width(size: float, others: list[ObjPose], at: tuple[float, float], max_width: float, p: Params) -> float:
     """Pre-grasp opening for a block of `size` at `at`: width + open_margin, shrunk so a pad's outer
     face stays `neighbour_gap` clear of the nearest other block (taken as lying along the closing
-    axis, the worst case), never under width + open_min, never over the jaw max."""
+    axis, the worst case; a rod's reach is its half-length), never under width + open_min, never over
+    the jaw max."""
     w = size + p.open_margin
     for o in others:
-        face = math.hypot(o.x - at[0], o.y - at[1]) - o.size / 2        # that block's near face from our centre
+        face = math.hypot(o.x - at[0], o.y - at[1]) - o.extent           # that object's near face from our centre
         w = min(w, 2 * (face - p.finger_t - p.neighbour_gap))
     return min(max_width, max(size + p.open_min, w))
 
@@ -355,21 +459,35 @@ class Grasping(Skill):
     """The body every grasping skill shares: approach at travel height -> descend straight down ->
     close -> lift -> carry -> lower -> release -> retreat. Starts at `lift` when the object is already
     between the fingers (a correction replaces a running skill mid-carry; the catalog requires it).
-    Subclasses say where to carry to (`_aim_dest`), how low to go (`_lower_z`), whether the fingers
-    may open yet (`_may_release`), and the words (`dest_text`, `_done_text`)."""
+    Subclasses say where to carry to (`_aim_dest`, which may also set `dest_roll`, the wrist roll to
+    arrive with), how low to go (`_lower_z`), what follows the lowering (`_after_lower`, an extra
+    phase run by `_run_extra`), whether the fingers may open yet (`_may_release`), whether the skill
+    is finished once clear (`_after_retreat`: a turning skill starts another round) and the words
+    (`dest_text`, `_done_text`). The grasp itself follows the object's shape (grasp_candidates).
+
+    Wrist yaw is commanded through `_steer` as a roll held constant while the arm moves; the roll a
+    phase wants is `self.roll` (the pick's) or `dest_roll` (the destination's); without a `dest_roll`
+    the carry re-aims within the pick's 90-deg family, as K5 tuned it."""
     first_phase = "approach"
     PHASES = ("approach", "descend", "close", "lift", "carry", "lower", "release", "retreat")
+    HOLDING_PHASES = ("lift", "carry", "lower")     # ... plus `release` before the fingers open
+    YAW_STEP = 1.0                                  # rad: the most a yaw command leads the wrist by
 
     def __init__(self, sid: str, arm: str, args: dict, p: Params):
         super().__init__(sid, arm, args, p)
         self.obj = str(args["object"])
-        self.target: tuple[float, float] | None = None   # where the object was when aimed at
+        self.target: tuple[float, float] | None = None   # where the fingertips close (the grasp point) when aimed at
         self.size = 0.04
-        self.yaw = 0.0
+        self.yaw = 0.0                                   # the pick's closing-axis yaw
+        self.roll = 0.0                                  # ... as a wrist roll at the target
         self.open_w = 0.0                                # pre-grasp opening, chosen when aimed
         self.release_w = 0.0                             # opening at the destination, chosen on arrival
         self.dest: tuple[float, float] | None = None
+        self.dest_roll: float | None = None              # the wrist roll to arrive at `dest` with; None = the pick's family
         self.dest_text = ""                              # "slot_2", "block_2", "the hand-over point"
+        self.delta: float | None = None                  # the front's angle from the closing axis as held (set at the grasp)
+        self.hold_dz = 0.0                               # the object's centre above the EE point as held
+        self.pick_centre: tuple[float, float] | None = None   # the object's centre when grasped: where a turn puts it down
         self.releasing = False                           # the fingers have been told to open
         self._w_prev: float | None = None
         self._w_still = 0.0
@@ -377,16 +495,35 @@ class Grasping(Skill):
 
     # -- what a subclass decides ---------------------------------------------------------------------
     def _aim_dest(self, io: ArmIO) -> bool:
-        """Set `dest` (xy), `dest_text` and `heading`, or fail and return False."""
+        """Set `dest` (xy), `dest_text` and `heading` (and `dest_roll` if a roll is required), or fail
+        and return False."""
         raise NotImplementedError
 
     def _lower_z(self, io: ArmIO) -> float | None:
         """EE height at which to let go, read live; None once `fail` has been called."""
         raise NotImplementedError
 
+    def _after_lower(self) -> str:
+        """The phase after the lowering has arrived: release, or a subclass's own (insert)."""
+        return "release"
+
+    def _run_extra(self, io: ArmIO, phase: str) -> None:
+        """A phase of the subclass's own."""
+        raise NotImplementedError(phase)
+
     def _may_release(self, io: ArmIO) -> bool:
         """True when the fingers may open; a subclass that waits sets `text` meanwhile."""
         return True
+
+    def _after_retreat(self, io: ArmIO) -> bool:
+        """True when the skill is finished once clear of the destination; a turning skill that has
+        more to do starts its next round here and returns False."""
+        return True
+
+    def _pick_yaw(self, io: ArmIO, o: ObjPose, at: tuple[float, float]) -> float:
+        """The closing-axis yaw to grasp with: the candidate nearest zero roll (a subclass with a
+        destination in mind chooses with that in view)."""
+        return min(grasp_candidates(o), key=lambda c: abs(roll_of(c, *at)))
 
     def _done_text(self) -> str:
         raise NotImplementedError
@@ -397,15 +534,38 @@ class Grasping(Skill):
         if o is None:
             self.fail(io, f"precondition: {self.obj} is no longer in the world")
             return False
-        if not io.reachable((o.x, o.y, io.travel_z)):
+        at = grasp_point(o)
+        if not io.reachable((at[0], at[1], io.travel_z)):
             self.fail(io, f"unreachable: {self.obj} at ({o.x:.2f}, {o.y:.2f}) is outside the arm's workspace")
             return False
-        self.target, self.size = (o.x, o.y), o.size
-        self.yaw = grasp_yaw(o.x, o.y, o.yaw)
+        self.target, self.size = at, o.size
+        self.yaw = self._pick_yaw(io, o, at)
+        self.roll = roll_of(self.yaw, *at)
         others = [q for oid, q in io.objects().items() if oid != self.obj]
-        self.open_w = open_width(o.size, others, self.target, io.max_width, self.p)
-        self.heading = self.target
+        self.open_w = open_width(o.size, others, at, io.max_width, self.p)
+        self.heading = at
         return True
+
+    def _grasped(self, io: ArmIO) -> None:
+        """Remember how the object sits in the fingers: its front's angle from the closing axis, and
+        its centre (the turn spot). Read from the world, so a slipped grasp is still described."""
+        o = io.obj(self.obj)
+        if o is not None:
+            self.delta = wrap(o.yaw - io.ee_yaw())
+            self.hold_dz = o.z - io.ee()[2]
+            self.pick_centre = (o.x, o.y)
+            self.size = o.size
+
+    def _steer(self, io: ArmIO, roll: float, at: tuple[float, float]) -> tuple[float, bool]:
+        """The yaw to command now so the wrist arrives at `at` with `roll`, leading the wrist by at
+        most YAW_STEP along the turn still to make (the rate limiter takes the short way round; a
+        turn of more than half a turn must be led the right way), and whether it is there. The
+        command is anchored to the goal's azimuth, not the EE's, so it holds still as the EE settles
+        and the backend's `arrived()` can read true."""
+        x, y, _ = io.ee()
+        end = neutral_yaw(*at) + roll
+        d = end - (neutral_yaw(x, y) + roll_of(io.ee_yaw(), x, y))   # the physical turn left, as a real number
+        return io.ee_yaw() + max(-self.YAW_STEP, min(self.YAW_STEP, d)), abs(wrap(io.ee_yaw() - end)) < self.p.yaw_tol
 
     def retarget(self, io: ArmIO) -> None:
         """Re-read the target. Before the grasp the approach follows the object; once descending onto
@@ -423,7 +583,7 @@ class Grasping(Skill):
     def monitor(self, io: ArmIO) -> None:
         """Runs held or not: a block that leaves the fingers between the grasp and the release is a
         failure wherever we are (a hand-over's wait included)."""
-        if self.phase in ("lift", "carry", "lower") or (self.phase == "release" and not self.releasing):
+        if self.phase in self.HOLDING_PHASES or (self.phase == "release" and not self.releasing):
             if io.held() == self.obj:
                 self._lost_s = 0.0
             else:
@@ -434,6 +594,13 @@ class Grasping(Skill):
     def _when(self) -> str:
         return f"during {self.phase}"
 
+    def _new_round(self, io: ArmIO) -> None:
+        """Start over from the approach (a turning skill's regrasp): a fresh aim, a fresh timeout."""
+        self.target = self.dest = self.dest_roll = None
+        self.releasing = False
+        self.active_s = 0.0
+        self._enter(io, "approach")
+
     # -- the phases ----------------------------------------------------------------------------------
     def run(self, io: ArmIO) -> None:
         p, ph = self.p, self.phase
@@ -443,7 +610,7 @@ class Grasping(Skill):
                 if io.held() == self.obj:          # already in the gripper: carry on from here
                     x, y, _ = io.ee()
                     self.target = (x, y)
-                    self.size = (io.obj(self.obj) or ObjPose(x, y, 0, 0, self.size)).size
+                    self._grasped(io)
                     self.open_w = min(io.max_width, self.size + p.open_margin)
                     self._enter(io, "lift")
                     return
@@ -453,8 +620,9 @@ class Grasping(Skill):
             goal = (tx, ty, io.travel_z)
             self.text = f"moving above {self.obj} at travel height"
             io.grip(self.open_w)
-            io.goto(goal, p.v_travel, yaw=self.yaw)
-            if self._at(io, goal, z_tol=0.01) and abs(wrap(io.ee_yaw() - self.yaw)) < p.yaw_tol:
+            yaw, there = self._steer(io, self.roll, self.target)
+            io.goto(goal, p.v_travel, yaw=yaw)
+            if self._at(io, goal, z_tol=0.01) and there:
                 self._enter(io, "descend")
             elif self._stalled(io):
                 self.fail(io, f"stalled: no progress approaching {self.obj}: EE stuck at {fmt_xyz(io.ee())}")
@@ -463,7 +631,7 @@ class Grasping(Skill):
             goal = (tx, ty, grasp_z)
             self.text = f"descending onto {self.obj}, fingers open {self.open_w * 100:.1f} cm"
             z = io.ee()[2]
-            io.goto(goal, p.v_final if z - grasp_z < 0.02 else p.v_vertical, yaw=self.yaw)
+            io.goto(goal, p.v_final if z - grasp_z < 0.02 else p.v_vertical, yaw=self._steer(io, self.roll, self.target)[0])
             if self._at(io, goal):
                 self._enter(io, "close")
                 self._w_prev, self._w_still = None, 0.0
@@ -479,6 +647,7 @@ class Grasping(Skill):
             if self._w_still >= p.settle_s or self.phase_s > p.close_s:
                 if io.held() == self.obj:
                     self._lost_s = 0.0
+                    self._grasped(io)
                     self._enter(io, "lift")
                 else:
                     self.fail(io, f"grasp_failed: the fingers closed to {w * 100:.1f} cm; {self.obj} is {self.size * 100:.1f} cm wide and not between them")
@@ -495,10 +664,13 @@ class Grasping(Skill):
         elif ph == "carry":
             dx, dy = self.dest
             goal = (dx, dy, io.travel_z)
-            yaw = grasp_yaw(dx, dy, self.yaw)     # the same 90-deg family, re-aimed so the roll is near zero at the destination too:
-            self.text = f"carrying {self.obj} to {self.dest_text}"   # near the base the 19 cm gripper housing meets the upper arm at 60 deg of roll
+            # Without a required roll: the pick's 90-deg family, re-aimed so the roll is near zero at the
+            # destination too (near the base the 19 cm gripper housing meets the upper arm at 60 deg of roll).
+            roll = self.dest_roll if self.dest_roll is not None else roll_of(grasp_yaw(dx, dy, self.yaw), dx, dy)
+            self.text = f"carrying {self.obj} to {self.dest_text}"
+            yaw, there = self._steer(io, roll, self.dest)
             io.goto(goal, p.v_travel, yaw=yaw)
-            if self._at(io, goal, z_tol=0.01) and abs(wrap(io.ee_yaw() - yaw)) < p.yaw_tol:
+            if self._at(io, goal, z_tol=0.01) and there:
                 self._enter(io, "lower")
             elif self._stalled(io):
                 self.fail(io, f"stalled: no progress carrying {self.obj} at {fmt_xyz(io.ee())}")
@@ -512,7 +684,7 @@ class Grasping(Skill):
             z = io.ee()[2]
             io.goto(goal, p.v_final if z - lz < 0.02 else p.v_vertical)
             if self._at(io, goal, z_tol=0.006):
-                self._enter(io, "release")
+                self._enter(io, self._after_lower())
             elif self._stalled(io):
                 self.fail(io, f"stalled: no progress lowering {self.obj} at {self.dest_text}: EE {z - io.table_z:.3f} m above the table")
         elif ph == "release":
@@ -536,9 +708,12 @@ class Grasping(Skill):
             self.text = f"released {self.obj} at {self.dest_text}, rising clear"
             io.goto(goal, p.v_vertical)
             if self._at(io, goal, z_tol=0.01):
-                self.done(io, self._done_text())
+                if self._after_retreat(io):
+                    self.done(io, self._done_text())
             elif self._stalled(io):
                 self.fail(io, f"stalled: no progress rising clear of {self.dest_text} at {fmt_xyz(io.ee())}")
+        else:
+            self._run_extra(io, ph)
 
 
 class PickAndPlace(Grasping):
@@ -554,6 +729,19 @@ class PickAndPlace(Grasping):
         if d is None:
             self.fail(io, f"precondition: {self.place} is not a place with room in the world")
             return False
+        if len(d) > 2:
+            self.fail(io, f"precondition: {self.place} is a holder: insert seats things there")
+            return False
+        o = io.obj(self.obj)
+        if o is not None and o.handle and self.delta is not None:
+            # The object's centre goes on the place; the fingers hold it `handle` along its front, which at
+            # the destination is the carry's yaw plus the grasp's offset. The yaw depends on the azimuth of
+            # where the fingers end up, so a few fixed-point steps (a few degrees of correction at most).
+            ee = d
+            for _ in range(4):
+                front = grasp_yaw(ee[0], ee[1], self.yaw) + self.delta
+                ee = (d[0] + o.handle * math.cos(front), d[1] + o.handle * math.sin(front))
+            d = ee
         if not io.reachable((d[0], d[1], io.travel_z)):
             self.fail(io, f"unreachable: {self.place} at ({d[0]:.2f}, {d[1]:.2f}) is outside the arm's workspace")
             return False
@@ -654,6 +842,212 @@ class HandOver(Grasping):
 
     def _done_text(self) -> str:
         return f"{self.obj} released into the hand"
+
+
+class Turning(Grasping):
+    """What insert and reorient share: the object must end with its front pointing a given way
+    (`_goal`: the front and the EE xy at the destination), the pick is chosen with that in view, and
+    when the wrist's roll range cannot get there in one grasp the object is put down at its pick spot
+    turned as far as the range allows and regrasped (turn_plan), round after round, each round a
+    full approach-to-retreat with its own timeout."""
+    turning = False                  # this round is an intermediate put-down, not the destination
+
+    def __init__(self, sid: str, arm: str, args: dict, p: Params):
+        super().__init__(sid, arm, args, p)
+        self.rounds = 0
+
+    def _goal(self, io: ArmIO, o: ObjPose) -> tuple[float, tuple[float, float]] | None:
+        """(the front's yaw wanted, the EE xy at the destination), or None after a fail."""
+        raise NotImplementedError
+
+    def _pick_yaw(self, io: ArmIO, o: ObjPose, at: tuple[float, float]) -> float:
+        """Among the candidates within the roll range, one that reaches the destination in this
+        grasp if any can (the least roll overall), else the one whose turn-and-regrasp rolls least."""
+        g = self._goal(io, o)
+        cands = [c for c in grasp_candidates(o) if abs(roll_of(c, *at)) <= self.p.roll_max]
+        if g is None or not cands:
+            return super()._pick_yaw(io, o, at)
+        F, dest = g
+
+        def cost(c: float) -> tuple[int, float]:
+            r0 = roll_of(c, *at)
+            plan = turn_plan(o.shape, wrap(o.yaw - c), F, dest, (o.x, o.y), r0, self.p.roll_max)
+            return (0 if plan.direct else 1), abs(r0) + abs(plan.roll - r0)
+        return min(cands, key=cost)
+
+    def _put_down_xy(self, o: ObjPose, roll: float) -> tuple[float, float]:
+        """The EE xy that puts the object's centre back on its pick spot with the wrist at `roll`
+        there: the pinch is `handle` along the front, and the front depends on the azimuth, so a
+        few fixed-point steps (the correction is a few degrees at most)."""
+        cx, cy = self.pick_centre
+        ee = (cx, cy)
+        for _ in range(4):
+            front = neutral_yaw(*ee) + roll + self.delta
+            ee = (cx + o.handle * math.cos(front), cy + o.handle * math.sin(front))
+        return ee
+
+    def _aim_dest(self, io: ArmIO) -> bool:
+        o = io.obj(self.obj)
+        if o is None:
+            self.fail(io, f"precondition: {self.obj} is no longer in the world")
+            return False
+        g = self._goal(io, o)
+        if g is None:
+            return False
+        F, dest = g
+        x, y, _ = io.ee()
+        plan = turn_plan(o.shape, self.delta, F, dest, self.pick_centre, roll_of(io.ee_yaw(), x, y), self.p.roll_max)
+        if plan.direct:
+            self.turning = False
+            self.dest_text = self._dest_name()
+        else:
+            self.turning = True
+            dest = self._put_down_xy(o, plan.roll)
+            self.dest_text = "its spot, turned as far as the wrist goes, to regrasp"
+        if not io.reachable((dest[0], dest[1], io.travel_z)):
+            self.fail(io, f"unreachable: {self.dest_text} at ({dest[0]:.2f}, {dest[1]:.2f}) is outside the arm's workspace")
+            return False
+        self.dest, self.dest_roll, self.heading = dest, plan.roll, dest
+        return True
+
+    def _dest_name(self) -> str:
+        raise NotImplementedError
+
+    def _lower_z(self, io: ArmIO) -> float:
+        return io.table_z + self.p.tip_height + self.p.place_drop
+
+    def _after_retreat(self, io: ArmIO) -> bool:
+        if not self.turning and self._finished(io):
+            return True
+        self.rounds += 1
+        if self.rounds >= self.p.max_rounds:
+            self.fail(io, f"stalled: {self.obj} is not where it should point after {self.rounds} grasps ({self.text})")
+            return False
+        self._new_round(io)
+        return False
+
+    def _finished(self, io: ArmIO) -> bool:
+        """The destination round is over: is the object as asked? (Insert trusts its seating.)"""
+        return True
+
+
+class Insert(Turning):
+    """Seat a rod in a holder: pick it by its handle, carry it over the holder with the wrist turned
+    so the rod lies along the opening, lower to just above the walls, then press down slowly
+    (`insert` phase) watching the fingers against the setpoint and the rod against the fingers:
+    seated when the EE reaches the seat height with the setpoint there and the rod still riding where
+    it was grasped; `blocked` when the fingers fall `insert_lag_m` behind the setpoint (the rod is on
+    a wall and the arm with it), when they stop short of the seat, or when the rod rises in the
+    fingers by more than `seat_tol` (it is on a wall and the press is pushing it up through the pinch:
+    measured, a 4 N pinch lets a 12 mm rod slide before the arm's lag shows). Then release and rise.
+    A holder taken meanwhile, or no free holder in a group, is `blocked`; the preconditions refuse a
+    cube or an occupied holder."""
+    name = "insert"
+    PHASES = ("approach", "descend", "close", "lift", "carry", "lower", "insert", "release", "retreat")
+    HOLDING_PHASES = ("lift", "carry", "lower", "insert")
+
+    def __init__(self, sid: str, arm: str, args: dict, p: Params):
+        super().__init__(sid, arm, args, p)
+        self.place = str(args["place"])
+        self.dest_text = self.place
+        self._z0: float | None = None
+
+    def _goal(self, io: ArmIO, o: ObjPose):
+        d = io.place(self.place)
+        if d is None:
+            self.fail(io, f"blocked: {self.place} has no free holder")
+            return None
+        if len(d) < 3:
+            self.fail(io, f"precondition: {self.place} is not a holder")
+            return None
+        taken = next((oid for oid in io.objects() if oid != self.obj and io.where(oid) == self.place), None)
+        if taken is not None:
+            self.fail(io, f"blocked: {self.place} is occupied by {taken}")
+            return None
+        x, y, F = d
+        return F, (x + o.handle * math.cos(F), y + o.handle * math.sin(F))
+
+    def _dest_name(self) -> str:
+        return self.place
+
+    def _lower_z(self, io: ArmIO) -> float:
+        if self.turning:
+            return super()._lower_z(io)
+        return io.table_z + self.p.tip_height + self.p.insert_above
+
+    def _after_lower(self) -> str:
+        return "release" if self.turning else "insert"
+
+    def _enter(self, io: ArmIO, phase: str) -> None:
+        super()._enter(io, phase)
+        if phase == "insert":
+            self._z0 = io.ee()[2]
+            self._arrived_s = 0.0
+
+    def _run_extra(self, io: ArmIO, phase: str) -> None:
+        p = self.p
+        dx, dy = self.dest
+        seat = io.table_z + p.tip_height
+        goal = (dx, dy, seat)
+        z = io.ee()[2]
+        self.text = f"pressing {self.obj} into {self.place}, {max(0.0, z - seat) * 1000:.0f} mm above the seat"
+        io.goto(goal, p.v_insert)
+        due = min(p.v_insert * self.phase_s, self._z0 - seat)       # where the press's setpoint is by now
+        got = self._z0 - z
+        o = io.obj(self.obj)
+        risen = (o.z - z - self.hold_dz) if o is not None else 0.0  # the rod climbing in the fingers: it is on a wall
+        above = (z - seat) * 1000
+        if risen > p.seat_tol:
+            self.fail(io, f"blocked: {self.obj} is riding up in the fingers ({risen * 1000:.0f} mm) {above:.0f} mm above the "
+                          f"seat of {self.place}: it is resting on a wall, not in the opening")
+        elif io.arrived():
+            self._arrived_s += self._dt
+            if abs(z - seat) <= p.seat_tol:
+                self._enter(io, "release")
+                return
+            if self._arrived_s > p.settle_insert_s:
+                self.fail(io, f"blocked: {self.obj} stopped {above:.0f} mm above the seat of {self.place}: it is not in the opening")
+        elif due - got > p.insert_lag_m:
+            self.fail(io, f"blocked: {self.obj} stopped {above:.0f} mm above the seat of {self.place}: "
+                          f"it is resting on a wall, not in the opening")
+
+    def _done_text(self) -> str:
+        return f"{self.obj} seated in {self.place}"
+
+
+class Reorient(Turning):
+    """Turn the object in place so its front points `direction`: pick it, turn the wrist while
+    carrying it the few centimetres that keep its centre over its spot (a rod is held off-centre),
+    put it down, release, rise; regrasp and go on if the roll range ran out. Done when the front
+    reads within `front_tol` of the direction, else another round, up to `max_rounds`."""
+    name = "reorient"
+
+    def __init__(self, sid: str, arm: str, args: dict, p: Params):
+        super().__init__(sid, arm, args, p)
+        self.direction = str(args["direction"])
+        self.F = front_of(self.direction)
+        self.origin: tuple[float, float] | None = None   # the object's centre at the start: where it ends
+        self.dest_text = f"its spot, pointing {self.direction}"
+
+    def _goal(self, io: ArmIO, o: ObjPose):
+        if self.origin is None:
+            self.origin = (o.x, o.y)
+        return self.F, (self.origin[0] + o.handle * math.cos(self.F), self.origin[1] + o.handle * math.sin(self.F))
+
+    def _dest_name(self) -> str:
+        return f"its spot, pointing {self.direction}"
+
+    def _finished(self, io: ArmIO) -> bool:
+        o = io.obj(self.obj)
+        if o is None:
+            self.fail(io, f"precondition: {self.obj} is no longer in the world")
+            return False
+        off = wrap(o.yaw - self.F)
+        self.text = f"{self.obj} points {math.degrees(off):+.0f} deg off {self.direction}"
+        return abs(off) <= self.p.front_tol
+
+    def _done_text(self) -> str:
+        return f"{self.obj} turned to point {self.direction}"
 
 
 class Push(Skill):
@@ -806,4 +1200,5 @@ class Survey(Skill):
 
 
 SKILLS: dict[str, type[Skill]] = {"pick_and_place": PickAndPlace, "stack_on": StackOn, "push": Push,
-                                  "hand_over": HandOver, "hold": HoldStill, "survey": Survey}
+                                  "hand_over": HandOver, "insert": Insert, "reorient": Reorient,
+                                  "hold": HoldStill, "survey": Survey}

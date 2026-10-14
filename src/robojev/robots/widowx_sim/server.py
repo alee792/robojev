@@ -14,7 +14,8 @@ Layers, top down, as in docs/architecture.md:
                   joint on its true 0-0.044 m range, grasp detection from contacts, and the lag trip.
                   In the pair each arm's model elements carry its prefix ("arm_1/joint_0") and its IK
                   moves only its own joints.
-  SimWorld        reads the scene (scene.py) out of MjData: object poses, resting/held/on-what, places.
+  SimWorld        reads the scene (scene.py) out of MjData: object poses (with each object's yaw and
+                  shape), resting/held/on-what/in-which-holder, places (a holder with its opening's yaw).
 
 Frames (K5): the server's world, manifest and events speak the COMMON frame, arm_0's base frame,
 which is also MuJoCo's world frame (`ArmSpec.base_frame` names it: "base_link" alone, "arm_0/
@@ -69,6 +70,11 @@ Choices the protocol leaves open, made here (report, do not settle):
     ObjectObs.claimed_by is the arm whose running skill names the object; another arm's grasp of a
     claimed object is refused.
   - An arm moving itself out of the zone with no skill reads mode "idle": it can be started at once.
+  - A rod is "in" a holder when it rests on the table between the walls (its centre within the
+    opening's half-width plus 2 mm across, within the walls' half-length along); one resting on top
+    of a wall is not resting and reads "table". The holder's yaw is not part of "in": insert's judge
+    checks the front separately. ObjectObs.size is a rod's length (what a person would say); the
+    width the fingers close to is the handle's, which the skills read from their own ObjPose.
 """
 from __future__ import annotations
 
@@ -153,10 +159,18 @@ class _Body:
     name: str
     label: str | None
     body: int
-    geom: int
+    geoms: tuple[int, ...]       # its collision geoms (a rod has two: the rod and the handle)
     qadr: int                    # free joint: 3 pos + 4 quat
     dadr: int                    # free joint: 6 vel
-    size: float
+    size: float                  # the width the fingers close to: a cube's edge, a rod's handle
+    shape: str = "cube"
+    height: float = 0.04         # resting height of the centre above the table is half this
+    length: float = 0.04         # along the front: a cube's edge, a rod's length
+    handle: float = 0.0          # the pinch point, from the centre along the front
+
+    @property
+    def reported_size(self) -> float:
+        return self.length if self.shape == "rod" else self.size
 
 
 class SimWorld:
@@ -169,18 +183,28 @@ class SimWorld:
         self.table_z = scene.TABLE_Z
         self.hands: list[HandObs] = []
         self.arms: list[SimArm] = []
-        self.blocks: dict[str, _Body] = {}
+        self.blocks: dict[str, _Body] = {}       # every object, cubes and rods alike (the K1 name)
+
+        def ids(name: str, *geoms: str):
+            bid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, name)
+            jid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, name + "_free")
+            gids = tuple(mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, name + g) for g in geoms)
+            return bid, gids, model.jnt_qposadr[jid], model.jnt_dofadr[jid]
         labels = [scene.label_of(b) for b in spec.blocks]
         for b, label, letter in zip(spec.blocks, labels, scene.letter_names(labels)):
-            bid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, b.name)
-            jid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, b.name + "_free")
-            gid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, b.name + "_g")
-            self.blocks[b.name] = _Body(b.name, scene.block_name(b, letter), label,
-                                        bid, gid, model.jnt_qposadr[jid], model.jnt_dofadr[jid], b.size)
-        self.geom_to_block = {h.geom: oid for oid, h in self.blocks.items()}
+            bid, gids, qadr, dadr = ids(b.name, "_g")
+            self.blocks[b.name] = _Body(b.name, scene.block_name(b, letter), label, bid, gids, qadr, dadr, b.size,
+                                        "cube", b.size, b.size)
+        for t, name in zip(spec.tools, scene.tool_names(spec.tools)):
+            bid, gids, qadr, dadr = ids(t.name, "_g", "_handle")
+            self.blocks[t.name] = _Body(t.name, name, t.label, bid, gids, qadr, dadr, t.size,
+                                        "rod", t.thickness, t.length, t.handle)
+        self.geom_to_block = {g: oid for oid, h in self.blocks.items() for g in h.geoms}
         self.zone = spec.zone()
         self.spec = spec
         self.places: dict[str, PlaceObs] = spec.places()
+        # a holder's "in" tolerance across its walls: the opening's half-width plus 2 mm (the rod's own half-width is inside it)
+        self.holder_across = (spec.rack.clearance + 0.002) if spec.rack is not None else 0.0
 
     # -- reads ---------------------------------------------------------------------------------------
     def ids(self):
@@ -194,7 +218,7 @@ class SimWorld:
         if h is None:
             return None
         q = self.data.qpos[h.qadr:h.qadr + 7]
-        return skills.ObjPose(float(q[0]), float(q[1]), float(q[2]), _quat_yaw(q[3:7]), h.size)
+        return skills.ObjPose(float(q[0]), float(q[1]), float(q[2]), _quat_yaw(q[3:7]), h.size, h.shape, h.length, h.handle)
 
     def poses(self) -> dict[str, list[float]]:
         return {oid: [p.x, p.y, p.z, p.yaw] for oid in self.blocks for p in [self.pose(oid)]}
@@ -204,19 +228,22 @@ class SimWorld:
         h = self.blocks[oid]
         z = self.data.qpos[h.qadr + 2]
         v = self.data.qvel[h.dadr:h.dadr + 3]
-        return abs(z - (self.table_z + h.size / 2)) < 0.005 and float(np.linalg.norm(v)) < 0.02
+        return abs(z - (self.table_z + h.height / 2)) < 0.005 and float(np.linalg.norm(v)) < 0.02
 
     def where(self, oid: str, held_by: dict[str, str]) -> str:
         """place id | "table" | "on:<object id>" | "gripper:<arm id>", from geometry. A resting block is
-        in a slot within its radius, else in the shared zone's strip, else on the table. "on:" means
-        resting on the other block's top, centred within ON_TOL_XY; anything else off the table
-        (falling, tipped on an edge) reads "table"."""
+        in a slot within its radius, a resting rod in a holder when it lies between the walls, else
+        in the shared zone's strip, else on the table. "on:" means resting on the other block's top,
+        centred within ON_TOL_XY; anything else off the table (falling, tipped on an edge, lying
+        across a holder's wall) reads "table"."""
         if oid in held_by:
             return f"gripper:{held_by[oid]}"
         p = self.pose(oid)
         if self.resting(oid):
             for pl in self.places.values():
                 if pl.kind == "slot" and math.hypot(p.x - pl.x, p.y - pl.y) <= pl.radius:
+                    return pl.id
+                if pl.kind == "holder" and self.in_holder(p, pl):
                     return pl.id
             if self.zone is not None and self.zone.contains(p.x, p.y):
                 return self.zone.id
@@ -226,22 +253,31 @@ class SimWorld:
                 continue
             q = self.pose(other)
             if (math.hypot(p.x - q.x, p.y - q.y) <= ON_TOL_XY
-                    and abs(p.z - q.z - (h.size + p.size) / 2) <= ON_TOL_Z):
+                    and abs(p.z - q.z - (h.height + self.blocks[oid].height) / 2) <= ON_TOL_Z):
                 return f"on:{other}"
         return "table"
+
+    def in_holder(self, p: skills.ObjPose, pl: PlaceObs) -> bool:
+        """The object's centre lies between the holder's walls: within the opening across them (plus
+        2 mm) and within their half-length along."""
+        c, s = math.cos(pl.yaw), math.sin(pl.yaw)
+        dx, dy = p.x - pl.x, p.y - pl.y
+        along, across = dx * c + dy * s, dy * c - dx * s
+        return abs(across) <= self.holder_across and abs(along) <= pl.radius
 
     def objects(self, held_by: dict[str, str], claimed_by: dict[str, str] | None = None) -> dict[str, ObjectObs]:
         out = {}
         for oid, h in self.blocks.items():
             p = self.pose(oid)
-            out[oid] = ObjectObs(oid, h.name, p.x, p.y, p.z, self.where(oid, held_by), label=h.label, size=h.size,
-                                 claimed_by=(claimed_by or {}).get(oid))
+            out[oid] = ObjectObs(oid, h.name, p.x, p.y, p.z, self.where(oid, held_by), label=h.label, size=h.reported_size,
+                                 claimed_by=(claimed_by or {}).get(oid), yaw=p.yaw, shape=h.shape)
         return out
 
-    def place_xy(self, pid: str, held_by: dict[str, str], arm: str | None = None) -> tuple[float, float] | None:
+    def place_xy(self, pid: str, held_by: dict[str, str], arm: str | None = None) -> tuple[float, ...] | None:
         """Where to set something down for a place id: a slot's centre, a group's or the zone's first
         free spot, or for the "table" place (scene.FreeSpots) a free spot on the table, in `arm`'s
-        half when the scene has two arms."""
+        half when the scene has two arms. A holder resolves to (x, y, yaw): its centre and the
+        direction a seated object's front points, which insert needs."""
         pl = self.places.get(pid)
         if pl is None:
             return None
@@ -251,6 +287,8 @@ class SimWorld:
             return self.place_xy(free, held_by, arm) if free else None
         if pl.kind == "table":
             return self.free_spot(held_by, arm)
+        if pl.kind == "holder":
+            return (pl.x, pl.y, pl.yaw)
         return (pl.x, pl.y)
 
     def free_spot(self, held_by: dict[str, str], arm: str | None = None) -> tuple[float, float] | None:
@@ -280,7 +318,7 @@ class SimWorld:
         frame. A scripted person; tests. Not part of the protocol."""
         h = self.blocks[oid]
         q = self.data.qpos
-        q[h.qadr:h.qadr + 3] = (x, y, self.table_z + h.size / 2 if z is None else z)
+        q[h.qadr:h.qadr + 3] = (x, y, self.table_z + h.height / 2 if z is None else z)
         if yaw is not None:
             q[h.qadr + 3:h.qadr + 7] = (math.cos(yaw / 2), 0, 0, math.sin(yaw / 2))
         self.data.qvel[h.dadr:h.dadr + 6] = 0
@@ -388,7 +426,7 @@ class SimArm:
         if p is None or self.base is scene.ORIGIN:
             return p
         x, y = self.base.to_local((p.x, p.y))
-        return skills.ObjPose(x, y, p.z, self.base.yaw_to_local(p.yaw), p.size)
+        return skills.ObjPose(x, y, p.z, self.base.yaw_to_local(p.yaw), p.size, p.shape, p.length, p.handle)
 
     def obj(self, oid: str) -> skills.ObjPose | None:
         return self._local(self.world.pose(oid))
@@ -399,9 +437,12 @@ class SimArm:
     def where(self, oid: str) -> str:
         return self.world.where(oid, self.world.held_by())
 
-    def place(self, pid: str) -> tuple[float, float] | None:
+    def place(self, pid: str) -> tuple[float, ...] | None:
         xy = self.world.place_xy(pid, self.world.held_by(), self.id)
-        return xy if xy is None or self.base is scene.ORIGIN else self.base.to_local(xy)[:2]
+        if xy is None or self.base is scene.ORIGIN:
+            return xy
+        local = self.base.to_local(xy[:2])
+        return local + (self.base.yaw_to_local(xy[2]),) if len(xy) > 2 else local
 
     def hands(self) -> list[HandObs]:
         if self.base is scene.ORIGIN:
@@ -526,7 +567,8 @@ class SimArm:
         housing (link_6's box, 19 cm wide along the closing axis), as they stand in the model."""
         d = np.asarray(shift, dtype=float)
         oid = self.held()
-        r = self.world.blocks[oid].size / math.sqrt(2) if oid else 0.0
+        h = self.world.blocks[oid] if oid else None
+        r = 0.0 if h is None else (h.length / 2 if h.shape == "rod" else h.size / math.sqrt(2))
         shapes: list[tuple[np.ndarray, Callable[[np.ndarray], float]]] = [(np.asarray(self.ee_common()) + d, lambda u, r=r: r)]
         for g in (self.wrist_geom, self.bar_geom):
             c = np.array(self.data.geom_xpos[g]) + d

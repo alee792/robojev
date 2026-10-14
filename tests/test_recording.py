@@ -9,6 +9,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from robojev import catalog
+
 from robojev.protocol import RobotEvent
 from robojev.recording import lerobot_export as lx
 from robojev.recording.recorder import JsonlRecorder
@@ -76,7 +78,7 @@ def test_synthetic_schema_and_episodes(synthetic, tmp_path):
     assert (s.episodes, s.frames, s.skipped_frames, s.tasks) == (3, 11, 1, 3)
     info = lx.load_info(out)
     assert info["fps"] == 50 and info["total_episodes"] == 3 and info["total_frames"] == 11
-    assert info["catalog_version"] == "0.1" and info["robot_type"] == "test"
+    assert info["catalog_version"] == catalog.CATALOG_VERSION and info["robot_type"] == "test"
     assert info["features"]["observation.state"]["names"] == list(lx.STATE_NAMES)
     assert info["features"]["action"]["shape"] == [6]
 
@@ -185,7 +187,7 @@ def test_task_text():
 @pytest.fixture(scope="module")
 def k2(tmp_path_factory) -> Path:
     out = tmp_path_factory.mktemp("k2") / "ds"
-    s = lx.export(K2, out, robot_type="widowx-sim")
+    s = lx.export(K2, out, robot_type="widowx-sim", catalog_version="0.1")   # recorded under catalog 0.1 (before insert/reorient)
     assert (s.episodes, s.frames, s.skipped_frames, s.unmatched_lines) == (20, 7014, 0, 0)
     return out
 
@@ -230,7 +232,7 @@ def test_k2_replay_is_frame_accurate(k2):
 
 def test_k2_export_is_deterministic(k2, tmp_path):
     again = tmp_path / "again"
-    lx.export(K2, again, robot_type="widowx-sim")
+    lx.export(K2, again, robot_type="widowx-sim", catalog_version="0.1")
     assert _tree(again) == _tree(k2)
 
 

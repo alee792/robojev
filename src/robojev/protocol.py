@@ -73,18 +73,22 @@ class ObjectObs:
     label: str | None = None            # a number or letter read off it
     size: float | None = None           # characteristic size, m
     claimed_by: str | None = None       # arm id that has claimed it (two-arm coordination)
+    yaw: float | None = None            # rad, the direction the object's front points (a tool's handle, a block's marked
+                                        # face), about +z in the base frame; None when perception cannot tell
+    shape: str | None = None            # "cube" | "rod" (a handle-like elongated object) | None: picks the grasp strategy
 
 
 @dataclass
 class PlaceObs:
     id: str
     name: str                           # "tray slot 3 (the leftmost slot)"
-    kind: str                           # slot | bin | table | person | group | zone
+    kind: str                           # slot | bin | table | person | group | zone | holder (a tight fit: insert's target)
     x: float
     y: float
     capacity: int                       # 1 = one object; 0 = any number
     members: tuple[str, ...] = ()       # a group lists its slots
     radius: float = 0.03                # an object whose centre is this close is "in" the place
+    yaw: float | None = None            # rad, a holder's opening direction (the way an inserted object's front points)
 
 
 @dataclass

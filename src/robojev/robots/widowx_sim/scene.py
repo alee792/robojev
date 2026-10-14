@@ -1,7 +1,15 @@
 """The sim scenes: the WidowX AI follower from trossen_arm_mujoco on a table with free-body blocks
-and a tray of slots (K1), and the two-arm pair of docs/widowx-pair.md (K5): two followers facing
-each other with a shared zone between them. Physics, not kinematic attachment: the fingers'
-collision boxes hold the blocks.
+and a tray of slots (K1), the two-arm pair of docs/widowx-pair.md (K5): two followers facing each
+other with a shared zone between them, and the surgical-tool scene (`tools_scene`): handle-like rods
+(`Tool`: scalpel, forceps, scissors) and a rack of tight-fitting holders (`Rack`) for `insert` and
+`reorient`. Physics, not kinematic attachment: the fingers' collision boxes hold the objects.
+
+Objects have a shape and a front. A cube's front is the +x face of its body (the marked face); a
+rod's is its handle end, a second, slightly wider geom at +x of its body, so "the way it points" is
+one direction, not two. The world reports the body yaw as `ObjectObs.yaw` for both. A holder is a
+slot between two low thin walls, `clearance` wider than the rod on each side (3 mm: a tight fit the
+arm must align to), open along its `yaw`; a seated rod lies along the walls with its handle
+protruding at the `yaw` end, where the fingers pinch it, so the fingertips never enter the slot.
 
 Frames. Every coordinate in a SceneSpec, and everything the server reports, is in the COMMON frame:
 arm_0's base frame as on the real arm, +x forward, +y left, +z up, metres, the table at z = TABLE_Z.
@@ -97,6 +105,39 @@ class Block:
     mass: float = 0.03                # kg (a 4 cm wooden cube)
     rgba: tuple = (0.85, 0.25, 0.2, 1)
     label: str | None = None          # what is read off it: a letter ("A") or a number; None = from the name's tail
+    shape: str = "cube"
+
+
+TOOL_LABELS = ("scalpel", "forceps", "scissors")
+
+
+@dataclass
+class Tool:
+    """A handle-like rod: a box `length` long and `thickness` square along its own x, with the
+    handle, `handle_len` long and `handle_w` wide (same height, so it lies flat), at the +x end. The
+    front is the handle's direction; the fingers pinch across the handle at its midpoint (`handle`
+    from the centre). 12 x 1.2 x 1.2 cm and 30 g: a surgical instrument's size and weight."""
+    name: str
+    xy: tuple[float, float]
+    yaw: float = 0.0                  # rad about +z: the direction the handle points
+    label: str = "scalpel"            # one of TOOL_LABELS: what a person calls it
+    length: float = 0.12
+    thickness: float = 0.012
+    handle_len: float = 0.03
+    handle_w: float = 0.014
+    mass: float = 0.03
+    rgba: tuple = (0.72, 0.74, 0.78, 1)
+    shape: str = "rod"
+
+    @property
+    def handle(self) -> float:
+        """the pinch point, from the centre along the front"""
+        return self.length / 2 - self.handle_len / 2
+
+    @property
+    def size(self) -> float:
+        """the width the fingers close to"""
+        return self.handle_w
 
 
 def label_of(block: Block) -> str | None:
@@ -128,6 +169,18 @@ def block_name(block: Block, letter_name: str | None) -> str:
     """The name the world reports for a block: its letter name when it has one, else the K1 form
     ("block_5" -> "block 5")."""
     return letter_name if letter_name is not None else block.name.replace("_", " ")
+
+
+def tool_names(tools: Sequence[Tool]) -> list[str]:
+    """How people call each tool, in order: "the scalpel"; duplicates "the second scalpel"."""
+    ordinal = ("", "second ", "third ", "fourth ", "fifth ", "sixth ")
+    seen: dict[str, int] = {}
+    out = []
+    for t in tools:
+        k = seen.get(t.label, 0)
+        seen[t.label] = k + 1
+        out.append(f"the {ordinal[k] if k < len(ordinal) else f'{k + 1}th '}{t.label}")
+    return out
 
 
 # The letter layout (docs/showcase-demo.md: letter cubes in the arm's half, a row of positions in
@@ -215,6 +268,66 @@ def positions(n: int = 6, origin: tuple[float, float] = (0.36, 0.20), step: tupl
     return Tray(origin, step, n, label="position", suffix=", counting from the left")
 
 
+@dataclass
+class Rack:
+    """A row of `n` holders, `pitch` apart along the direction across `yaw`, centred on `origin`.
+    Each holder is a slot for a rod lying flat: two walls `length` long, `wall_h` high and `wall_t`
+    thick, their inner faces `rod_w + 2 * clearance` apart, running along the holder's yaw (per
+    holder from `yaws` when given). A seated rod's centre is at the holder's centre, its front along
+    the yaw, its handle protruding past the walls' end. Ids are `<slot_id>_<i>` (kind "holder",
+    capacity 1, `yaw` = the opening direction) and the group `<id>`; the names say which is which
+    ("rack slot 1 (the leftmost)"). `clearance` is a parameter so a test can make a slot too narrow."""
+    origin: tuple[float, float] = (0.36, 0.0)
+    yaw: float = math.pi               # the handles point back at the robot, as on a surgeon's tray
+    yaws: tuple[float, ...] | None = None
+    n: int = 3
+    pitch: float = 0.08                # 8 cm: the open jaws stay clear of a neighbour's rod
+    rod_w: float = 0.012
+    clearance: float = 0.003           # per side between a rod and a wall
+    length: float = 0.06
+    wall_h: float = 0.015
+    wall_t: float = 0.003
+    id: str = "rack"
+    slot_id: str = "holder"
+    label: str = "rack slot"
+
+    def holder_yaw(self, i: int) -> float:
+        return self.yaws[i] if self.yaws is not None else self.yaw
+
+    def row(self) -> tuple[float, float]:
+        """The unit direction the row runs along, across the rack's yaw, pointed to the robot's left
+        (+y), or away from it when the row runs along x: holder 0 is the leftmost or the farthest."""
+        px, py = -math.sin(self.yaw), math.cos(self.yaw)
+        if py < -1e-9 or (abs(py) <= 1e-9 and px < 0):
+            px, py = -px, -py
+        return (px, py)
+
+    def holder_xy(self, i: int) -> tuple[float, float]:
+        px, py = self.row()
+        k = (self.n - 1) / 2 - i
+        return (self.origin[0] + px * k * self.pitch, self.origin[1] + py * k * self.pitch)
+
+    def _tag(self, i: int) -> str:
+        px, py = self.row()
+        ends = ("leftmost", "rightmost") if abs(py) >= abs(px) else ("farthest", "nearest")
+        return f" (the {ends[0]})" if i == 0 else f" (the {ends[1]})" if i == self.n - 1 else ""
+
+    @property
+    def opening(self) -> float:
+        """between the walls' inner faces"""
+        return self.rod_w + 2 * self.clearance
+
+    def places(self) -> dict[str, PlaceObs]:
+        out: dict[str, PlaceObs] = {}
+        for i in range(self.n):
+            x, y = self.holder_xy(i)
+            hid = f"{self.slot_id}_{i}"
+            out[hid] = PlaceObs(hid, f"{self.label} {i}{self._tag(i)}", "holder", x, y, 1, radius=self.length / 2, yaw=self.holder_yaw(i))
+        ids = tuple(out)
+        out[self.id] = PlaceObs(self.id, f"the {self.id} (any free slot)", "group", self.origin[0], self.origin[1], self.n, ids)
+        return out
+
+
 @dataclass(frozen=True)
 class FreeSpots:
     """The "table" place: a free spot on the table, chosen when something is to be put down there
@@ -299,6 +412,8 @@ class SceneSpec:
     zone_width: float | None = PAIR_ZONE_WIDTH
     stage: Tray | None = None
     free_spots: FreeSpots | None = None      # a "table" place for putting things down anywhere free (the spelling demo)
+    tools: list[Tool] = field(default_factory=list)
+    rack: Rack | None = None
 
     @property
     def single(self) -> bool:
@@ -340,6 +455,8 @@ class SceneSpec:
             out.update(z.places())
         if self.free_spots is not None:
             out[self.free_spots.id] = self.free_spots.place()
+        if self.rack is not None:
+            out.update(self.rack.places())
         return out
 
     def trays(self) -> tuple[Tray, ...]:
@@ -354,6 +471,32 @@ def pair(blocks: list[Block] | None = None, spacing: float = PAIR_SPACING, zone_
     tray = Tray((spacing - PAIR_TRAY_X, PAIR_TRAY_Y0), (0.0, PAIR_TRAY_PITCH), n_slots)
     stage = Tray((PAIR_STAGE_X, PAIR_STAGE_Y), (0.0, -2 * PAIR_STAGE_Y), 2, id="stage", slot_id="stage", label="staging spot")
     return SceneSpec(list(blocks or []), tray, (ARM_0, ARM_1), spacing, zone_width, stage)
+
+
+TOOL_X = 0.23                         # the tools' row, between the base and the rack: a rod's half-length clear of both
+TOOL_YS = (0.15, 0.0, -0.15)          # 15 cm apart: two 12 cm rods at any yaws never touch
+TOOL_YAWS = (0.4, -1.3, 2.6)          # varied: one near the rack's yaw, one across it, one nearly opposite
+
+
+def tools(labels: Sequence[str] = TOOL_LABELS, x: float = TOOL_X, ys: Sequence[float] = TOOL_YS,
+          yaws: Sequence[float] = TOOL_YAWS) -> list[Tool]:
+    """One tool per label in a row at `x`, left (+y) to right, at the given yaws. Ids are the labels
+    (`scalpel`, `forceps`, `scissors`; a duplicate label gets `_2`, `_3`)."""
+    counts: dict[str, int] = {}
+    out = []
+    for lab, y, yaw in zip(labels, ys, yaws):
+        if lab not in TOOL_LABELS:
+            raise ValueError(f"a tool is one of {', '.join(TOOL_LABELS)}, not {lab!r}")
+        k = counts.get(lab, 0) + 1
+        counts[lab] = k
+        out.append(Tool(lab + (f"_{k}" if k > 1 else ""), (x, y), yaw, lab))
+    return out
+
+
+def tools_scene(rack: Rack | None = None, tray: Tray | None = None) -> SceneSpec:
+    """The surgical-tool scene: three tools on the table at varied yaws and a three-holder rack,
+    all within the one arm's reach; the tray too when asked (a rod can be pick_and_placed to a slot)."""
+    return SceneSpec(tray=tray, tools=tools(), rack=rack or Rack())
 
 
 def _add_table(s, spec: SceneSpec) -> None:
@@ -385,6 +528,45 @@ def _add_marks(s, spec: SceneSpec) -> None:
             x, y = z.spot_xy(i)
             w.add_geom(name=f"zone_{i}", type=mujoco.mjtGeom.mjGEOM_CYLINDER, size=[z.spot_radius, 0.0005],
                        pos=[x, y, TABLE_Z + 0.0005], rgba=[0.3, 0.3, 0.2, 1], contype=0, conaffinity=0)
+
+
+def _add_rack(s, spec: SceneSpec) -> None:
+    """The holders' walls: fixed boxes on the table, wood friction, plus a floor mark per slot. A
+    wall is a real obstacle: a misaligned rod rests on top of it, and that is what insert reads as
+    blocked."""
+    import mujoco
+    r = spec.rack
+    if r is None:
+        return
+    w = s.worldbody
+    for i in range(r.n):
+        x, y = r.holder_xy(i)
+        yaw = r.holder_yaw(i)
+        c, sn = math.cos(yaw), math.sin(yaw)
+        quat = [math.cos(yaw / 2), 0, 0, math.sin(yaw / 2)]
+        w.add_geom(name=f"{r.slot_id}_{i}", type=mujoco.mjtGeom.mjGEOM_BOX, size=[r.length / 2, r.opening / 2, 0.0005],
+                   pos=[x, y, TABLE_Z + 0.0005], quat=quat, rgba=[0.2, 0.2, 0.25, 1], contype=0, conaffinity=0)
+        off = r.opening / 2 + r.wall_t / 2
+        for side, name in ((1, "left"), (-1, "right")):
+            w.add_geom(name=f"{r.slot_id}_{i}_wall_{name}", type=mujoco.mjtGeom.mjGEOM_BOX,
+                       size=[r.length / 2, r.wall_t / 2, r.wall_h / 2],
+                       pos=[x - sn * side * off, y + c * side * off, TABLE_Z + r.wall_h / 2], quat=quat,
+                       rgba=[0.55, 0.55, 0.6, 1], friction=[0.5, 0.01, 0.001], condim=4)
+
+
+def _add_tools(s, spec: SceneSpec) -> None:
+    """Each tool: a free body with the rod geom along its x and the handle geom at its +x end; two
+    thirds of the mass in the rod, a third in the handle."""
+    import mujoco
+    for t in spec.tools:
+        body = s.worldbody.add_body(name=t.name, pos=[t.xy[0], t.xy[1], TABLE_Z + t.thickness / 2],
+                                    quat=[np.cos(t.yaw / 2), 0, 0, np.sin(t.yaw / 2)])
+        body.add_freejoint(name=t.name + "_free")
+        body.add_geom(name=t.name + "_g", type=mujoco.mjtGeom.mjGEOM_BOX, size=[t.length / 2, t.thickness / 2, t.thickness / 2],
+                      mass=t.mass * 2 / 3, rgba=list(t.rgba), friction=[0.5, 0.01, 0.001], condim=4)
+        body.add_geom(name=t.name + "_handle", type=mujoco.mjtGeom.mjGEOM_BOX,
+                      size=[t.handle_len / 2, t.handle_w / 2, t.thickness / 2], pos=[t.handle, 0, 0],
+                      mass=t.mass / 3, rgba=[0.25, 0.25, 0.3, 1], friction=[0.5, 0.01, 0.001], condim=4)
 
 
 def _add_blocks(s, spec: SceneSpec) -> None:
@@ -436,7 +618,9 @@ def build(spec: SceneSpec):
                 type=mujoco.mjtLightType.mjLIGHT_DIRECTIONAL)
     _add_table(s, spec)
     _add_marks(s, spec)
+    _add_rack(s, spec)
     _add_blocks(s, spec)
+    _add_tools(s, spec)
     # finger pads: high friction, torsional resistance, so a held block doesn't spin or slip
     for g in s.geoms:
         if g.parent.name in ("left_carriage_link", "right_carriage_link") or "carriage" in (g.parent.name or ""):

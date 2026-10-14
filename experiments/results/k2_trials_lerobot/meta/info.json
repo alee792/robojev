@@ -108,7 +108,7 @@
     }
   },
   "catalog_version": "0.1",
-  "catalog_version_source": "assumed: catalog.py at export time",
+  "catalog_version_source": "argument",
   "units": "m, rad, s; positions in the arm's base frame",
   "timing": {
     "period_s": 0.02,

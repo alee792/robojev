@@ -385,7 +385,7 @@ class SkillServer:
             return why
         w, travel_z = self.world_view, self.travel_z
         held = self._held_by()
-        if skill in ("pick_and_place", "stack_on", "hand_over"):
+        if skill in ("pick_and_place", "stack_on", "hand_over", "insert", "reorient"):
             why = self._grasp_why_not(a, args["object"], held)
             if why:
                 return why
@@ -394,6 +394,8 @@ class SkillServer:
             pl = w.places.get(pid)
             if pl is None:
                 return f"precondition: there is no place {pid} in the world"
+            if self._holder(pl):
+                return f"precondition: {pl.name} is a holder: insert seats things there"
             occ = w.occupant(pid, held)
             if pl.kind == "slot" and occ and occ != oid:
                 return f"blocked: {pl.name} is occupied by {occ}"
@@ -441,7 +443,39 @@ class SkillServer:
             ox, oy = self.params.offer_xy
             if not a.reachable((ox, oy, self.params.offer_z)):
                 return f"unreachable: the hand-over point ({ox:.2f}, {oy:.2f}) is outside the arm's workspace"
+        if skill == "insert":
+            oid, pid = args["object"], args["place"]
+            o = a.obj(oid)
+            pl = w.places.get(pid)
+            if pl is None:
+                return f"precondition: there is no place {pid} in the world"
+            if not self._holder(pl):
+                return f"precondition: {pl.name} is not a holder; insert seats things in a tight fit"
+            if o.shape != "rod":
+                return f"precondition: {oid} is a {o.shape}; only a rod seats in a holder"
+            occ = w.occupant(pid, held)
+            if pl.kind == "holder" and occ and occ != oid:
+                return f"precondition: {pl.name} is occupied by {occ}"
+            d = a.place(pid)
+            if d is None:
+                return f"blocked: {pl.name} has no free holder"
+            x, y = d[0] + o.handle * math.cos(d[2]), d[1] + o.handle * math.sin(d[2])
+            if not a.reachable((x, y, travel_z)):
+                return f"unreachable: the handle at {pid} would be at ({x:.2f}, {y:.2f}), outside the arm's workspace"
+        if skill == "reorient":
+            o = a.obj(args["object"])
+            f = skills.front_of(args["direction"])
+            x, y = o.x + o.handle * math.cos(f), o.y + o.handle * math.sin(f)
+            if not a.reachable((x, y, travel_z)):
+                return f"unreachable: turned {args['direction']}, {args['object']} would be held at ({x:.2f}, {y:.2f}), outside the arm's workspace"
         return None
+
+    def _holder(self, pl: PlaceObs) -> bool:
+        """A holder, or a group of them (a rack)."""
+        if pl.kind == "holder":
+            return True
+        members = [self.world_view.places.get(m) for m in pl.members]
+        return pl.kind == "group" and bool(members) and all(m is not None and m.kind == "holder" for m in members)
 
     def _grasp_why_not(self, a: ServedArm, oid: str, held: dict[str, str]) -> str | None:
         """What stops this arm picking `oid` up: unknown, too wide, in another gripper, this gripper

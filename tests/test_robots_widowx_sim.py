@@ -79,7 +79,7 @@ def test_manifest_conforms_to_the_catalog():
     man = srv.manifest()
     assert man.catalog == catalog.CATALOG_VERSION
     assert catalog.check_manifest_skills(man.skills) == []
-    assert {s.name for s in man.skills} == {"pick_and_place", "stack_on", "push", "hand_over", "hold", "survey"}
+    assert {s.name for s in man.skills} == {"pick_and_place", "stack_on", "push", "hand_over", "insert", "reorient", "hold", "survey"}
     arm = man.arms[0]
     assert arm.id == ARM_ID and arm.gripper.max_width == pytest.approx(0.088) and arm.travel_z == TRAVEL_Z
     w = srv.world()
