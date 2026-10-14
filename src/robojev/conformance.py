@@ -8,6 +8,9 @@ real arm (D1) the positions are typed in and the judge reads the server's own bo
     uv run --frozen robojev-conformance --robot real --robot-ip 192.168.1.5 --blocks blocks.json \\
         --teleop-off-ack "your name" --skill pick_and_place --n 20
     uv run --frozen robojev-conformance --robot real --driver fake --blocks blocks.json --skill pick_and_place --n 5
+    uv run --frozen robojev-conformance --robot franka --driver fake --blocks blocks.json --skill pick_and_place --n 5
+    uv run --frozen robojev-conformance --robot franka --robot-ip 172.16.0.2 --blocks blocks.json \\
+        --preflight-ack "your name" --skill pick_and_place --n 20
     uv run --frozen robojev-conformance --arms 2 --skill pick_and_place --n 10
     uv run --frozen robojev-conformance --arms 2 --skill handover_via_zone --n 10
 
@@ -31,6 +34,10 @@ Real: one `RealRobotServer` for the whole run (staging the arm once), the blocks
 says (robots/widowx_real/world.load_blocks), re-laid by a person between trials at the prompt; the
 destination slot, push direction and distance are drawn as in sim. `--driver fake` runs the same
 loop here against `FakeTrossenDriver`, with no prompt.
+
+Franka (`--robot franka`): the same loop on one `FrankaRobotServer` (robots/franka) with the blocks
+from `--blocks`; `--driver fake` runs it here on `FakeFrankaDriver`, `--driver franky` (the default)
+imports the real driver module, which is a later file, and needs `--preflight-ack NAME`.
 
 Success is judged by `judge_trial()` from the world state alone, never from what the skill says
 about itself: the object rests where the skill was to leave it (in the slot's radius; "on:" the
@@ -453,16 +460,22 @@ def main(argv=None) -> int:
     ap.add_argument("--out", type=Path, default=None,
                     help="JSONL of every policy tick and event; default: none, so a check run can't overwrite "
                          f"the committed seed-0 log at {RESULTS}")
-    ap.add_argument("--robot", choices=("sim", "real"), default="sim", help="MuJoCo (default) or the real follower")
-    real = ap.add_argument_group("real", "the real arm (robots/widowx_real); see docs/day-one.md")
-    real.add_argument("--robot-ip", default=None, help="the follower's address (default 192.168.1.5)")
+    ap.add_argument("--robot", choices=("sim", "real", "franka"), default="sim",
+                    help="MuJoCo (default), the real WidowX follower, or a Franka arm")
+    real = ap.add_argument_group("real", "a real arm (robots/widowx_real, robots/franka); see docs/day-one.md")
+    real.add_argument("--robot-ip", default=None, help="the arm's address (default 192.168.1.5 for the follower, 172.16.0.2 for the Franka)")
     real.add_argument("--blocks", type=Path, default=None,
                       help="JSON of the typed-in block positions and tray (robots/widowx_real/world.load_blocks)")
-    real.add_argument("--driver", choices=("trossen", "fake"), default="trossen",
-                      help="the trossen_arm driver, or the fake to run the real server here with no arm")
+    real.add_argument("--driver", choices=("trossen", "fake", "franky"), default=None,
+                      help="trossen: the trossen_arm driver (--robot real's default); franky: the Franka driver (--robot "
+                           "franka's default); fake: run the server here with no arm")
     real.add_argument("--teleop-off-ack", metavar="NAME", default=None,
                       help="your name: you have checked that no teleop process is running on the leader")
     real.add_argument("--no-prompt", action="store_true", help="do not wait for Enter between trials")
+    franka = ap.add_argument_group("franka", "the Franka arm (robots/franka)")
+    franka.add_argument("--preflight-ack", metavar="NAME", default=None,
+                        help="your name: FCI is active, the stop button is in your hand, the workspace is clear and the "
+                             "control box runs the RT kernel")
     a = ap.parse_args(argv)
     rng = random.Random(a.seed)
     rec = None if a.out is None else JsonlRecorder(a.out)
@@ -495,6 +508,8 @@ def main(argv=None) -> int:
             verdicts.append(v)
             print(_line(i, trial, v, "sim"))
         return _report(a.skill, a.n, a.seed, verdicts, rec)
+    if a.robot == "franka":
+        return _main_franka(a, ap, rng, rec)
     return _main_real(a, ap, rng, rec)
 
 
@@ -507,6 +522,9 @@ def _main_real(a, ap: argparse.ArgumentParser, rng: random.Random, rec: JsonlRec
 
     if a.blocks is None:
         ap.error("--robot real needs --blocks FILE with the typed-in block positions")
+    a.driver = a.driver or "trossen"
+    if a.driver == "franky":
+        ap.error("--driver franky is the Franka's: use --robot franka")
     factory = None
     if a.driver == "fake":
         factory = FakeDriverFactory(lambda: srv.world_src)       # follows set_world between trials
@@ -533,6 +551,72 @@ def _main_real(a, ap: argparse.ArgumentParser, rng: random.Random, rec: JsonlRec
         for trial in trials:
             if a.driver != "fake" and not a.no_prompt:
                 input(f"trial {trial.index}: lay out {layout(trial)}, clear the tray, then press Enter (Ctrl-C aborts and parks) ")
+            if rec is not None:
+                rec.tag = {"trial": trial.index}
+            v = run_trial(trial, rec, srv=srv, world=StaticWorld(trial.blocks, tray, table_z), table_z=table_z,
+                          timeout_s=REAL_TIMEOUT_S)
+            verdicts.append(v)
+            print(_line(trial.index, trial, v, "arm"))
+    return _report(a.skill, a.n, a.seed, verdicts, rec)
+
+
+def _main_franka(a, ap: argparse.ArgumentParser, rng: random.Random, rec: JsonlRecorder | None) -> int:
+    """The real-arm loop on a FrankaRobotServer: the fake driver here, or the real driver module,
+    which is a later file (robots/franka/driver.py says what it must do)."""
+    import importlib
+
+    from robojev.robots.franka.arm import FRANKA_LIMITS
+    from robojev.robots.franka.driver import FRANKA_IP, REAL_DRIVER_CLASS, REAL_DRIVER_MODULE
+    from robojev.robots.franka.fake_driver import FakeFrankaDriver
+    from robojev.robots.franka.server import FrankaRobotServer
+    from robojev.robots.widowx_real.world import StaticWorld, load_blocks
+
+    if a.blocks is None:
+        ap.error("--robot franka needs --blocks FILE with the typed-in block positions and the table height")
+    driver = a.driver or "franky"
+    if driver == "trossen":
+        ap.error("--driver trossen is the WidowX's: use --robot real")
+    blocks, tray, table_z = load_blocks(a.blocks)
+    limits = FRANKA_LIMITS.for_table(table_z)
+    if driver == "fake":
+        factory = lambda: FakeFrankaDriver(lambda: srv.world_src)       # follows set_world between trials
+        ack = a.preflight_ack or "fake driver: no arm exists"
+    else:
+        ack = a.preflight_ack
+        if not ack:
+            ap.error("--robot franka --driver franky needs --preflight-ack NAME: FCI active in Desk, the stop button in your "
+                     "hand, the workspace clear, the control box on the RT kernel; then pass your name")
+        path = "src/" + REAL_DRIVER_MODULE.replace(".", "/") + ".py"
+        try:
+            mod = importlib.import_module(REAL_DRIVER_MODULE)
+        except ModuleNotFoundError as e:
+            if e.name == REAL_DRIVER_MODULE:
+                ap.error(f"the real Franka driver is not written yet: write {path} with a class {REAL_DRIVER_CLASS}(ip) "
+                         "implementing robojev.robots.franka.driver.FrankaDriver (its docstring says how franky maps onto it), "
+                         "or run with --driver fake")
+            ap.error(f"{path} needs the package {e.name!r}, which is not installed on this machine: {e}")
+        cls = getattr(mod, REAL_DRIVER_CLASS, None)
+        if cls is None:
+            ap.error(f"{path} has no class {REAL_DRIVER_CLASS}")
+        ip = a.robot_ip or FRANKA_IP
+        factory = lambda: cls(ip)
+    n_slots = tray.n if tray else 0
+    try:
+        trials = [sample_laid_out(rng, i, blocks, n_slots, a.skill, limits.workspace, table_z) for i in range(a.n)]
+    except ValueError as e:
+        ap.error(str(e))
+    srv = FrankaRobotServer(factory, StaticWorld(blocks, tray, table_z), recorder=rec, limits=limits)
+    srv.preflight(ack, fci_active=True, stop_in_hand=True, workspace_clear=True, rt_kernel=True,
+                  notes=f"robojev-conformance --robot franka --skill {a.skill} --n {a.n} --driver {driver}")
+    print(REAL_JUDGE_NOTE)
+    if rec is not None:
+        rec.note(kind="judge", text=REAL_JUDGE_NOTE)
+    verdicts = []
+    with srv:
+        for trial in trials:
+            if driver != "fake" and not a.no_prompt:
+                input(f"trial {trial.index}: lay out {layout(trial)}, clear the tray, then press Enter (Ctrl-C aborts; "
+                      "the stop button parks) ")
             if rec is not None:
                 rec.tag = {"trial": trial.index}
             v = run_trial(trial, rec, srv=srv, world=StaticWorld(trial.blocks, tray, table_z), table_z=table_z,

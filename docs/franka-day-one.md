@@ -44,7 +44,24 @@ the conformance tool's error until it exists) over whichever library the control
 - [ ] Before the server: move the arm between two poses 50 times with the library alone, interrupt
   one motion and hold, open and close the gripper (S4). Note the time from the stop call to the arm
   standing still.
-- [ ] Write `franky_driver.py` against the interface; `--driver franky --preflight-ack "<name>"`.
+- [ ] Write `franky_driver.py` against the interface (`FrankyDriver(ip)`); then
+  `--driver franky --preflight-ack "<name>"`. What its author needs to know, and where it comes from:
+  - the robot and system version (Desk), hence the libfranka version (Panda 0.9.x; 0.10+ is FR3
+    only) and the franky or panda-py build to install (their releases pages carry builds for older
+    libfranka; the default PyPI wheel targets the newest);
+  - the flange-to-fingertip offset for the installed hand and fingers, so `read()` reports the
+    fingertip point (about 0.1034 m to the hand plus the fingers), and the closing-axis direction in
+    the end-effector frame, which sets the sign of the yaw;
+  - the grasp epsilons: the policies close 8 mm narrower than the block, so `epsilon_outer` must be
+    at least 0.01 m or libfranka reports a held block as a failed grasp; force 20-30 N to start;
+  - the collision thresholds (Desk or `set_collision_behavior`), what the error strings look like,
+    and whether `recover_from_errors` works from software alone;
+  - a safe park joint pose reachable from everywhere in the box without sweeping the tray;
+  - whether franky's asynchronous move with a changed target preempts cleanly when the same target
+    is re-sent at 50 Hz (a repeat must be a no-op, or it restarts the trajectory every tick).
+- [ ] The fake cannot show: joint limits and self-collision at the box's edges for a straight-down
+  tool, the real arrival behaviour (sag, overshoot), the gripper's latency, what a reflex looks like,
+  how long the park takes and what it sweeps through. Each is a **verify** below.
 
 ## 3. Workspace box and the table
 

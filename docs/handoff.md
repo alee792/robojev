@@ -586,3 +586,44 @@ open, `caffeinate -dims`, the TLS check before each run as last time.
 
 **Rules:** never print API keys; don't change brain rules to improve numbers; fix real bugs in their
 own commits and say so; commit to `claude/widowx-pair`, no history rewriting.
+
+# Handoff 10: the Franka session
+
+Paste the block below into a Claude Code session on the machine that will drive the arm (the
+control box if it has a Python environment; otherwise the Mac, with the server to move to the box
+later). Keys as before (`OPENAI_API_KEY`, `TYPESAFE_API_KEY`) only for section 6.
+
+---
+
+You are running robojev's first session on a Franka arm. The brain and the skill policies are
+hardware agnostic; the Franka sits behind `src/robojev/robots/franka/` (a `FrankaRobotServer` over
+a small driver interface, `driver.py`, built and tested against `fake_driver.py`). The real driver
+does not exist yet: it is the one file you write today. Read `docs/franka-day-one.md` top to
+bottom first, then `src/robojev/robots/franka/driver.py` (the interface and how franky maps onto it)
+and `tests/test_robots_franka.py` (what the fake passes; the real arm must pass the same).
+
+**Setup:** `git fetch origin claude/widowx-pair && git checkout claude/widowx-pair && uv sync --extra mcp`;
+`uv run --frozen python -m pytest tests/test_robots_franka.py -q` (12 pass with no arm). Dry run:
+`uv run --frozen robojev-conformance --robot franka --driver fake --blocks blocks.json --skill pick_and_place --n 2`.
+
+**Order of the day** (`docs/franka-day-one.md` has the checklist and the verify items):
+0. Write down the three answers in its section 0 (control computer, robot and system version,
+   camera) before touching anything.
+1. Robot, FCI, network, `communication_test` for 10 minutes.
+2. The library alone: 50 moves between two poses, an interrupted move held, the gripper.
+3. `src/robojev/robots/franka/franky_driver.py`: `class FrankyDriver(ip)` implementing
+   `FrankaDriver`. Measure the fingertip offset and the yaw sign before the first streamed goal.
+   Commit it on its own.
+4. Touch-off for `table_z`; `blocks.json`; walk the workspace box against the table.
+5. STOP, the activation device, a reflex, hold/pause/resume, each once with the table clear.
+6. Conformance: pick_and_place, stack_on, push, 20 each, `--out experiments/results/franka/`.
+7. If time: one slice scenario with live models; the demo's beats 1-4 with typed lines.
+8. Frames for the multimodal spike (section 8), labelled, under `experiments/results/frames/`.
+
+**Report, as a comment on PR #3 and a new `docs/franka-results.md`:** the three answers; the
+driver's measured constants (fingertip offset, yaw sign, epsilons, park pose, stop-to-still time);
+the conformance tables; every verify item ticked or turned into a change; what the fake got wrong.
+
+**Rules:** the activation device in hand for every motion; never print API keys; fix real bugs in
+their own commits and say so; commit to `claude/widowx-pair`, no history rewriting; no change to
+the brain's rules.
