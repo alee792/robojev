@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 import cv2
 import numpy as np
 
-from robojev.brain import Brain
+from robojev.v1_brain import Brain
 from robojev.config import Config
 from robojev.events import ChangeDetector
 from robojev.jev import JevClient

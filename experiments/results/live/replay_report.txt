@@ -1,0 +1,57 @@
+
+## Errors and latency (replay, 660 requests in parallel)
+jev        errors 0/660  latency p50 101 p95 149 max 304 ms; server p50 nan p95 nan ms; refusals 0
+decisions  errors 0/660  latency p50 143 p95 395 max 1130 ms; server p50 69 p95 153 ms; refusals 0
+
+## Agreement and accuracy (same requests; truth = e12v2's oracle where it offered an answer)
+| group | n | Jev = Decisions | Jev right | Decisions right | Jev (Sept log) right |
+|---|---|---|---|---|---|
+| right_now | 552 | 83.5% | 87.1% | 89.5% | 87.3% |
+| in_plan_fix | 258 | 93.8% | 95.0% | 96.5% | 95.0% |
+| route | 561 | 85.2% | 89.1% | 88.2% | 87.9% |
+
+## The gate on each one's confidence (e12v2's gate_sweep: right-now, and in-plan fixes when routed stay_local)
+
+Jev
+| gate | answers | wrong | caught | caught % | escalated/fallback % | acted-on accuracy % |
+|---|---|---|---|---|---|---|
+| 0.5 | 776 | 93 | 56 | 60 | 12.0 | 94.6 |
+| 0.6 | 776 | 93 | 67 | 72 | 17.3 | 96.0 |
+| 0.7 | 776 | 93 | 81 | 87 | 23.2 | 98.0 |
+| 0.8 | 776 | 93 | 88 | 95 | 30.9 | 99.1 |
+| 0.9 | 776 | 93 | 92 | 99 | 46.5 | 99.8 |
+
+Decisions (formula)
+| gate | answers | wrong | caught | caught % | escalated/fallback % | acted-on accuracy % |
+|---|---|---|---|---|---|---|
+| 0.5 | 744 | 64 | 51 | 80 | 23.5 | 97.7 |
+| 0.6 | 744 | 64 | 57 | 89 | 29.3 | 98.7 |
+| 0.7 | 744 | 64 | 59 | 92 | 36.0 | 98.9 |
+| 0.8 | 744 | 64 | 63 | 98 | 45.4 | 99.8 |
+| 0.9 | 744 | 64 | 64 | 100 | 58.7 | 100.0 |
+
+Decisions (API field)
+| gate | answers | wrong | caught | caught % | escalated/fallback % | acted-on accuracy % |
+|---|---|---|---|---|---|---|
+| 0.5 | 744 | 64 | 51 | 80 | 23.4 | 97.7 |
+| 0.6 | 744 | 64 | 55 | 86 | 28.9 | 98.3 |
+| 0.7 | 744 | 64 | 59 | 92 | 36.0 | 98.9 |
+| 0.8 | 744 | 64 | 63 | 98 | 45.2 | 99.8 |
+| 0.9 | 744 | 64 | 64 | 100 | 58.6 | 100.0 |
+
+Decisions API confidence field vs (p_max-1/n)/(1-1/n): n 1371, |diff| p50 0.003 p95 0.005 max 0.005; equal within 0.01: 100.0%
+
+## H4: the plan check (plan_arrived; a plan is sent back if any check Noul is >= 0.5 or unsure, |2p-1| < 0.5)
+| backend | good plans | sent back | % | planted bad plans | caught | % |
+|---|---|---|---|---|---|---|
+| jev | 165 | 0 | 0% | 60 | 59 | 98% |
+| decisions | 165 | 0 | 0% | 60 | 47 | 78% |
+
+## H4 as e12v2 counted it: a new plan the oracle says to keep (route truth stay_local) that combine() at the
+default gates sends back to the LLM anyway (plan-check problem, a replan route, or stay_local under 0.8)
+| backend | good plans | sent back | % | of which unsure stay_local | confident replan | plan check | planted bad plans | caught | % |
+|---|---|---|---|---|---|---|---|---|---|
+| jev (Sept log) | 185 | 91 | 49% | 61 | 30 | 0 |  |  |  |
+| jev (now) | 185 | 91 | 49% | 67 | 24 | 0 | 60 | 60 | 100% |
+| decisions | 185 | 123 | 66% | 92 | 31 | 0 | 60 | 59 | 98% |
+| jev (Sept log, same requests) | 165 | 0 | 0% | | | |

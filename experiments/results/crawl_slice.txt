@@ -1,0 +1,27 @@
+Crawl slice: one brain, two WidowX arms in one MuJoCo scene, mock decisions and the mock pair planner
+(tests/test_crawl_slice.py, realtime=True, 2026-10-11). Judged from world(). Numbers from one run; the
+four scenarios also passed on the previous run.
+
+sort (3 blocks across the table, every block through the shared zone)
+  wall 51.5 s; 6 steps, 6 done, 0 failed; 1 plan; 0 safety trips
+  arm_0: block_1 -> zone_0, block_3 -> zone_1, block_5 -> zone_0; arm_1: each zone spot -> slot_0..2
+  both arms with a skill in flight: 3 spells, 17.6 s in total
+  zone waits: arm_0 once 1.9 s; arm_1 twice, 15.5 s in total (arm_1 waits while arm_0 is in the zone)
+
+correction ("actually, highest on the left", while arm_1 carries block_1)
+  text -> decision: arm_0 0.172 s, arm_1 0.244 s; text -> arm_1 holding 0.251 s   [bar 0.5 s]
+  2 plans; 7 steps started, 6 done, 0 failed; final order 5, 3, 1; no drops; nothing left in the zone
+  wall 51.7 s
+
+hand (0.15 m ahead of arm_1's gripper mid-carry, as a perception override)
+  hand -> arm_1 paused 0.268 s [bar 0.5 s]; leave -> resume 0.11 s; closest approach 0.099 m
+  arm_0 stayed "running" throughout; sort completed; wall 51.4 s
+
+stop (both arms holding a block)
+  stop -> both parked 5.91 s (home crawl at 0.03 m/s); both blocks still in the grippers at z 0.11
+  one stop() call; nothing sent afterwards; 0 drops
+
+What broke, what changed
+  Only one mismatch: the two-arm sim reported a skill's heading (the "in the arm's path" fact) in the
+  arm's own frame while the protocol's resources speak the common frame; status() now converts it.
+  The test helper (ScriptedPerception) gained a per-arm mode log. Nothing in the brain changed.

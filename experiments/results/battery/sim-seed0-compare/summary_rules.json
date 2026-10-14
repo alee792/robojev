@@ -1,0 +1,29 @@
+{
+ "decider": "rules",
+ "planner": "mock",
+ "world": "sim",
+ "n": 4,
+ "mean_score": 1.0,
+ "finish_rate": 1.0,
+ "judged": 4,
+ "time_to_change_s": {
+  "go_on": 0.003,
+  "letter_added": 0.452,
+  "letter_nudged": 0.43,
+  "new_word": 0.002,
+  "wait_go_on": 0.002
+ },
+ "planner_calls": 1.5,
+ "replans": 0.5,
+ "decisions": 8.8,
+ "decision_ms_p50": 1.0,
+ "drops": 0,
+ "hands": 0,
+ "contacts": 0,
+ "stops": 0,
+ "stops_ok": 0,
+ "wall_s": 47.7,
+ "outcomes": {
+  "done": 4
+ }
+}

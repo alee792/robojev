@@ -1,0 +1,560 @@
+Handoff 8 slice runs, Tue Oct 13 10:38:55 PDT 2026; AC power, caffeinate -dims
+=== jev run 1 (b, e) 10:38:55
+F
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_jev-openai_test_b_correction_mid_carry_holds_then_reverses_the_order_20261013-103856.jsonl', 'frames': 0, 'events': 0}
+F
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_jev-openai_test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task_20261013-103856.jsonl', 'frames': 0, 'events': 0}
+
+=================================== FAILURES ===================================
+__________ test_b_correction_mid_carry_holds_then_reverses_the_order ___________
+
+srv = <robojev.brain.mocks.ScriptedPerception object at 0x10b587da0>
+
+    def test_b_correction_mid_carry_holds_then_reverses_the_order(srv):
+        user = ScriptedUser([Line(carrying(srv, "block_1"), CORRECTION)])
+        r, wall = episode(brain(srv, [ASCENDING, DESCENDING], {CORRECTION: Utt("correction", version=1)}, user))
+>       t_text = user.t0 + user.said[0][0]
+                           ^^^^^^^^^^^^
+E       IndexError: list index out of range
+
+tests/test_slice.py:183: IndexError
+_______ test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task ________
+
+srv = <robojev.brain.mocks.ScriptedPerception object at 0x10c026030>
+
+    def test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task(srv):
+        """A transient "wait" pauses the arm and "go on" resumes it; neither is part of the task, so no
+        restated task (a plan's reading) may mention them (H5)."""
+        user = ScriptedUser([Line(carrying(srv, "block_1"), WAIT),
+                             Line(lambda: bool(user.said) and time.monotonic() - user.t0 - user.said[0][0] >= 2.0, GO_ON)])
+        r, wall = episode(brain(srv, [ASCENDING], {WAIT: Utt("wait"), GO_ON: Utt("go_on")}, user))
+>       t_wait, t_go = (user.t0 + t for t, _ in user.said[:2])
+        ^^^^^^^^^^^^
+E       ValueError: not enough values to unpack (expected 2, got 0)
+
+tests/test_slice.py:277: ValueError
+=========================== short test summary info ============================
+FAILED tests/test_slice.py::test_b_correction_mid_carry_holds_then_reverses_the_order
+FAILED tests/test_slice.py::test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task
+2 failed, 3 deselected in 0.59s
+=== jev run 2 (b, e) 10:38:56
+F
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_jev-openai_test_b_correction_mid_carry_holds_then_reverses_the_order_20261013-103857.jsonl', 'frames': 0, 'events': 0}
+F
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_jev-openai_test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task_20261013-103857.jsonl', 'frames': 0, 'events': 0}
+
+=================================== FAILURES ===================================
+__________ test_b_correction_mid_carry_holds_then_reverses_the_order ___________
+
+srv = <robojev.brain.mocks.ScriptedPerception object at 0x1084cba10>
+
+    def test_b_correction_mid_carry_holds_then_reverses_the_order(srv):
+        user = ScriptedUser([Line(carrying(srv, "block_1"), CORRECTION)])
+        r, wall = episode(brain(srv, [ASCENDING, DESCENDING], {CORRECTION: Utt("correction", version=1)}, user))
+>       t_text = user.t0 + user.said[0][0]
+                           ^^^^^^^^^^^^
+E       IndexError: list index out of range
+
+tests/test_slice.py:183: IndexError
+_______ test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task ________
+
+srv = <robojev.brain.mocks.ScriptedPerception object at 0x108f45e20>
+
+    def test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task(srv):
+        """A transient "wait" pauses the arm and "go on" resumes it; neither is part of the task, so no
+        restated task (a plan's reading) may mention them (H5)."""
+        user = ScriptedUser([Line(carrying(srv, "block_1"), WAIT),
+                             Line(lambda: bool(user.said) and time.monotonic() - user.t0 - user.said[0][0] >= 2.0, GO_ON)])
+        r, wall = episode(brain(srv, [ASCENDING], {WAIT: Utt("wait"), GO_ON: Utt("go_on")}, user))
+>       t_wait, t_go = (user.t0 + t for t, _ in user.said[:2])
+        ^^^^^^^^^^^^
+E       ValueError: not enough values to unpack (expected 2, got 0)
+
+tests/test_slice.py:277: ValueError
+=========================== short test summary info ============================
+FAILED tests/test_slice.py::test_b_correction_mid_carry_holds_then_reverses_the_order
+FAILED tests/test_slice.py::test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task
+2 failed, 3 deselected in 0.49s
+=== jev run 3 (b, e) 10:38:57
+F
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_jev-openai_test_b_correction_mid_carry_holds_then_reverses_the_order_20261013-103857.jsonl', 'frames': 0, 'events': 0}
+F
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_jev-openai_test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task_20261013-103857.jsonl', 'frames': 0, 'events': 0}
+
+=================================== FAILURES ===================================
+__________ test_b_correction_mid_carry_holds_then_reverses_the_order ___________
+
+srv = <robojev.brain.mocks.ScriptedPerception object at 0x10754bc80>
+
+    def test_b_correction_mid_carry_holds_then_reverses_the_order(srv):
+        user = ScriptedUser([Line(carrying(srv, "block_1"), CORRECTION)])
+        r, wall = episode(brain(srv, [ASCENDING, DESCENDING], {CORRECTION: Utt("correction", version=1)}, user))
+>       t_text = user.t0 + user.said[0][0]
+                           ^^^^^^^^^^^^
+E       IndexError: list index out of range
+
+tests/test_slice.py:183: IndexError
+_______ test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task ________
+
+srv = <robojev.brain.mocks.ScriptedPerception object at 0x107fe76b0>
+
+    def test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task(srv):
+        """A transient "wait" pauses the arm and "go on" resumes it; neither is part of the task, so no
+        restated task (a plan's reading) may mention them (H5)."""
+        user = ScriptedUser([Line(carrying(srv, "block_1"), WAIT),
+                             Line(lambda: bool(user.said) and time.monotonic() - user.t0 - user.said[0][0] >= 2.0, GO_ON)])
+        r, wall = episode(brain(srv, [ASCENDING], {WAIT: Utt("wait"), GO_ON: Utt("go_on")}, user))
+>       t_wait, t_go = (user.t0 + t for t, _ in user.said[:2])
+        ^^^^^^^^^^^^
+E       ValueError: not enough values to unpack (expected 2, got 0)
+
+tests/test_slice.py:277: ValueError
+=========================== short test summary info ============================
+FAILED tests/test_slice.py::test_b_correction_mid_carry_holds_then_reverses_the_order
+FAILED tests/test_slice.py::test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task
+2 failed, 3 deselected in 0.49s
+=== jev run 4 (b, e) 10:38:58
+F
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_jev-openai_test_b_correction_mid_carry_holds_then_reverses_the_order_20261013-103858.jsonl', 'frames': 0, 'events': 0}
+F
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_jev-openai_test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task_20261013-103858.jsonl', 'frames': 0, 'events': 0}
+
+=================================== FAILURES ===================================
+__________ test_b_correction_mid_carry_holds_then_reverses_the_order ___________
+
+srv = <robojev.brain.mocks.ScriptedPerception object at 0x10986fa40>
+
+    def test_b_correction_mid_carry_holds_then_reverses_the_order(srv):
+        user = ScriptedUser([Line(carrying(srv, "block_1"), CORRECTION)])
+        r, wall = episode(brain(srv, [ASCENDING, DESCENDING], {CORRECTION: Utt("correction", version=1)}, user))
+>       t_text = user.t0 + user.said[0][0]
+                           ^^^^^^^^^^^^
+E       IndexError: list index out of range
+
+tests/test_slice.py:183: IndexError
+_______ test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task ________
+
+srv = <robojev.brain.mocks.ScriptedPerception object at 0x10a25f7d0>
+
+    def test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task(srv):
+        """A transient "wait" pauses the arm and "go on" resumes it; neither is part of the task, so no
+        restated task (a plan's reading) may mention them (H5)."""
+        user = ScriptedUser([Line(carrying(srv, "block_1"), WAIT),
+                             Line(lambda: bool(user.said) and time.monotonic() - user.t0 - user.said[0][0] >= 2.0, GO_ON)])
+        r, wall = episode(brain(srv, [ASCENDING], {WAIT: Utt("wait"), GO_ON: Utt("go_on")}, user))
+>       t_wait, t_go = (user.t0 + t for t, _ in user.said[:2])
+        ^^^^^^^^^^^^
+E       ValueError: not enough values to unpack (expected 2, got 0)
+
+tests/test_slice.py:277: ValueError
+=========================== short test summary info ============================
+FAILED tests/test_slice.py::test_b_correction_mid_carry_holds_then_reverses_the_order
+FAILED tests/test_slice.py::test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task
+2 failed, 3 deselected in 0.49s
+=== jev run 5 (b, e) 10:38:58
+F
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_jev-openai_test_b_correction_mid_carry_holds_then_reverses_the_order_20261013-103859.jsonl', 'frames': 0, 'events': 0}
+F
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_jev-openai_test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task_20261013-103859.jsonl', 'frames': 0, 'events': 0}
+
+=================================== FAILURES ===================================
+__________ test_b_correction_mid_carry_holds_then_reverses_the_order ___________
+
+srv = <robojev.brain.mocks.ScriptedPerception object at 0x109db36b0>
+
+    def test_b_correction_mid_carry_holds_then_reverses_the_order(srv):
+        user = ScriptedUser([Line(carrying(srv, "block_1"), CORRECTION)])
+        r, wall = episode(brain(srv, [ASCENDING, DESCENDING], {CORRECTION: Utt("correction", version=1)}, user))
+>       t_text = user.t0 + user.said[0][0]
+                           ^^^^^^^^^^^^
+E       IndexError: list index out of range
+
+tests/test_slice.py:183: IndexError
+_______ test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task ________
+
+srv = <robojev.brain.mocks.ScriptedPerception object at 0x10a7dfcb0>
+
+    def test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task(srv):
+        """A transient "wait" pauses the arm and "go on" resumes it; neither is part of the task, so no
+        restated task (a plan's reading) may mention them (H5)."""
+        user = ScriptedUser([Line(carrying(srv, "block_1"), WAIT),
+                             Line(lambda: bool(user.said) and time.monotonic() - user.t0 - user.said[0][0] >= 2.0, GO_ON)])
+        r, wall = episode(brain(srv, [ASCENDING], {WAIT: Utt("wait"), GO_ON: Utt("go_on")}, user))
+>       t_wait, t_go = (user.t0 + t for t, _ in user.said[:2])
+        ^^^^^^^^^^^^
+E       ValueError: not enough values to unpack (expected 2, got 0)
+
+tests/test_slice.py:277: ValueError
+=========================== short test summary info ============================
+FAILED tests/test_slice.py::test_b_correction_mid_carry_holds_then_reverses_the_order
+FAILED tests/test_slice.py::test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task
+2 failed, 3 deselected in 0.49s
+=== decisions run 1 (b, e) 10:38:59
+F
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_decisions-openai_test_b_correction_mid_carry_holds_then_reverses_the_order_20261013-103900.jsonl', 'frames': 0, 'events': 0}
+F
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_decisions-openai_test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task_20261013-103900.jsonl', 'frames': 0, 'events': 0}
+
+=================================== FAILURES ===================================
+__________ test_b_correction_mid_carry_holds_then_reverses_the_order ___________
+
+srv = <robojev.brain.mocks.ScriptedPerception object at 0x10a207c50>
+
+    def test_b_correction_mid_carry_holds_then_reverses_the_order(srv):
+        user = ScriptedUser([Line(carrying(srv, "block_1"), CORRECTION)])
+        r, wall = episode(brain(srv, [ASCENDING, DESCENDING], {CORRECTION: Utt("correction", version=1)}, user))
+>       t_text = user.t0 + user.said[0][0]
+                           ^^^^^^^^^^^^
+E       IndexError: list index out of range
+
+tests/test_slice.py:183: IndexError
+_______ test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task ________
+
+srv = <robojev.brain.mocks.ScriptedPerception object at 0x10ad34800>
+
+    def test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task(srv):
+        """A transient "wait" pauses the arm and "go on" resumes it; neither is part of the task, so no
+        restated task (a plan's reading) may mention them (H5)."""
+        user = ScriptedUser([Line(carrying(srv, "block_1"), WAIT),
+                             Line(lambda: bool(user.said) and time.monotonic() - user.t0 - user.said[0][0] >= 2.0, GO_ON)])
+        r, wall = episode(brain(srv, [ASCENDING], {WAIT: Utt("wait"), GO_ON: Utt("go_on")}, user))
+>       t_wait, t_go = (user.t0 + t for t, _ in user.said[:2])
+        ^^^^^^^^^^^^
+E       ValueError: not enough values to unpack (expected 2, got 0)
+
+tests/test_slice.py:277: ValueError
+=========================== short test summary info ============================
+FAILED tests/test_slice.py::test_b_correction_mid_carry_holds_then_reverses_the_order
+FAILED tests/test_slice.py::test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task
+2 failed, 3 deselected in 0.70s
+=== decisions run 2 (b, e) 10:39:00
+F
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_decisions-openai_test_b_correction_mid_carry_holds_then_reverses_the_order_20261013-103901.jsonl', 'frames': 0, 'events': 0}
+F
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_decisions-openai_test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task_20261013-103901.jsonl', 'frames': 0, 'events': 0}
+
+=================================== FAILURES ===================================
+__________ test_b_correction_mid_carry_holds_then_reverses_the_order ___________
+
+srv = <robojev.brain.mocks.ScriptedPerception object at 0x1095a79b0>
+
+    def test_b_correction_mid_carry_holds_then_reverses_the_order(srv):
+        user = ScriptedUser([Line(carrying(srv, "block_1"), CORRECTION)])
+        r, wall = episode(brain(srv, [ASCENDING, DESCENDING], {CORRECTION: Utt("correction", version=1)}, user))
+>       t_text = user.t0 + user.said[0][0]
+                           ^^^^^^^^^^^^
+E       IndexError: list index out of range
+
+tests/test_slice.py:183: IndexError
+_______ test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task ________
+
+srv = <robojev.brain.mocks.ScriptedPerception object at 0x108fc49b0>
+
+    def test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task(srv):
+        """A transient "wait" pauses the arm and "go on" resumes it; neither is part of the task, so no
+        restated task (a plan's reading) may mention them (H5)."""
+        user = ScriptedUser([Line(carrying(srv, "block_1"), WAIT),
+                             Line(lambda: bool(user.said) and time.monotonic() - user.t0 - user.said[0][0] >= 2.0, GO_ON)])
+        r, wall = episode(brain(srv, [ASCENDING], {WAIT: Utt("wait"), GO_ON: Utt("go_on")}, user))
+>       t_wait, t_go = (user.t0 + t for t, _ in user.said[:2])
+        ^^^^^^^^^^^^
+E       ValueError: not enough values to unpack (expected 2, got 0)
+
+tests/test_slice.py:277: ValueError
+=========================== short test summary info ============================
+FAILED tests/test_slice.py::test_b_correction_mid_carry_holds_then_reverses_the_order
+FAILED tests/test_slice.py::test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task
+2 failed, 3 deselected in 0.64s
+=== decisions run 3 (b, e) 10:39:01
+F
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_decisions-openai_test_b_correction_mid_carry_holds_then_reverses_the_order_20261013-103902.jsonl', 'frames': 0, 'events': 0}
+F
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_decisions-openai_test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task_20261013-103902.jsonl', 'frames': 0, 'events': 0}
+
+=================================== FAILURES ===================================
+__________ test_b_correction_mid_carry_holds_then_reverses_the_order ___________
+
+srv = <robojev.brain.mocks.ScriptedPerception object at 0x10787bb90>
+
+    def test_b_correction_mid_carry_holds_then_reverses_the_order(srv):
+        user = ScriptedUser([Line(carrying(srv, "block_1"), CORRECTION)])
+        r, wall = episode(brain(srv, [ASCENDING, DESCENDING], {CORRECTION: Utt("correction", version=1)}, user))
+>       t_text = user.t0 + user.said[0][0]
+                           ^^^^^^^^^^^^
+E       IndexError: list index out of range
+
+tests/test_slice.py:183: IndexError
+_______ test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task ________
+
+srv = <robojev.brain.mocks.ScriptedPerception object at 0x1081ab320>
+
+    def test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task(srv):
+        """A transient "wait" pauses the arm and "go on" resumes it; neither is part of the task, so no
+        restated task (a plan's reading) may mention them (H5)."""
+        user = ScriptedUser([Line(carrying(srv, "block_1"), WAIT),
+                             Line(lambda: bool(user.said) and time.monotonic() - user.t0 - user.said[0][0] >= 2.0, GO_ON)])
+        r, wall = episode(brain(srv, [ASCENDING], {WAIT: Utt("wait"), GO_ON: Utt("go_on")}, user))
+>       t_wait, t_go = (user.t0 + t for t, _ in user.said[:2])
+        ^^^^^^^^^^^^
+E       ValueError: not enough values to unpack (expected 2, got 0)
+
+tests/test_slice.py:277: ValueError
+=========================== short test summary info ============================
+FAILED tests/test_slice.py::test_b_correction_mid_carry_holds_then_reverses_the_order
+FAILED tests/test_slice.py::test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task
+2 failed, 3 deselected in 0.75s
+=== decisions run 4 (b, e) 10:39:02
+F
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_decisions-openai_test_b_correction_mid_carry_holds_then_reverses_the_order_20261013-103903.jsonl', 'frames': 0, 'events': 0}
+F
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_decisions-openai_test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task_20261013-103903.jsonl', 'frames': 0, 'events': 0}
+
+=================================== FAILURES ===================================
+__________ test_b_correction_mid_carry_holds_then_reverses_the_order ___________
+
+srv = <robojev.brain.mocks.ScriptedPerception object at 0x108503950>
+
+    def test_b_correction_mid_carry_holds_then_reverses_the_order(srv):
+        user = ScriptedUser([Line(carrying(srv, "block_1"), CORRECTION)])
+        r, wall = episode(brain(srv, [ASCENDING, DESCENDING], {CORRECTION: Utt("correction", version=1)}, user))
+>       t_text = user.t0 + user.said[0][0]
+                           ^^^^^^^^^^^^
+E       IndexError: list index out of range
+
+tests/test_slice.py:183: IndexError
+_______ test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task ________
+
+srv = <robojev.brain.mocks.ScriptedPerception object at 0x108fc42f0>
+
+    def test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task(srv):
+        """A transient "wait" pauses the arm and "go on" resumes it; neither is part of the task, so no
+        restated task (a plan's reading) may mention them (H5)."""
+        user = ScriptedUser([Line(carrying(srv, "block_1"), WAIT),
+                             Line(lambda: bool(user.said) and time.monotonic() - user.t0 - user.said[0][0] >= 2.0, GO_ON)])
+        r, wall = episode(brain(srv, [ASCENDING], {WAIT: Utt("wait"), GO_ON: Utt("go_on")}, user))
+>       t_wait, t_go = (user.t0 + t for t, _ in user.said[:2])
+        ^^^^^^^^^^^^
+E       ValueError: not enough values to unpack (expected 2, got 0)
+
+tests/test_slice.py:277: ValueError
+=========================== short test summary info ============================
+FAILED tests/test_slice.py::test_b_correction_mid_carry_holds_then_reverses_the_order
+FAILED tests/test_slice.py::test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task
+2 failed, 3 deselected in 0.57s
+=== decisions run 5 (b, e) 10:39:03
+F
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_decisions-openai_test_b_correction_mid_carry_holds_then_reverses_the_order_20261013-103904.jsonl', 'frames': 0, 'events': 0}
+F
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_decisions-openai_test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task_20261013-103904.jsonl', 'frames': 0, 'events': 0}
+
+=================================== FAILURES ===================================
+__________ test_b_correction_mid_carry_holds_then_reverses_the_order ___________
+
+srv = <robojev.brain.mocks.ScriptedPerception object at 0x10c4c3590>
+
+    def test_b_correction_mid_carry_holds_then_reverses_the_order(srv):
+        user = ScriptedUser([Line(carrying(srv, "block_1"), CORRECTION)])
+        r, wall = episode(brain(srv, [ASCENDING, DESCENDING], {CORRECTION: Utt("correction", version=1)}, user))
+>       t_text = user.t0 + user.said[0][0]
+                           ^^^^^^^^^^^^
+E       IndexError: list index out of range
+
+tests/test_slice.py:183: IndexError
+_______ test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task ________
+
+srv = <robojev.brain.mocks.ScriptedPerception object at 0x10cfe3a10>
+
+    def test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task(srv):
+        """A transient "wait" pauses the arm and "go on" resumes it; neither is part of the task, so no
+        restated task (a plan's reading) may mention them (H5)."""
+        user = ScriptedUser([Line(carrying(srv, "block_1"), WAIT),
+                             Line(lambda: bool(user.said) and time.monotonic() - user.t0 - user.said[0][0] >= 2.0, GO_ON)])
+        r, wall = episode(brain(srv, [ASCENDING], {WAIT: Utt("wait"), GO_ON: Utt("go_on")}, user))
+>       t_wait, t_go = (user.t0 + t for t, _ in user.said[:2])
+        ^^^^^^^^^^^^
+E       ValueError: not enough values to unpack (expected 2, got 0)
+
+tests/test_slice.py:277: ValueError
+=========================== short test summary info ============================
+FAILED tests/test_slice.py::test_b_correction_mid_carry_holds_then_reverses_the_order
+FAILED tests/test_slice.py::test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task
+2 failed, 3 deselected in 0.76s
+=== jev full five 10:39:04
+
+L1 sort [jev-openai]: wall 0.1 s; events {}; steps started/done/failed 0/0/0; plans 2 (stale 0, failed 2, loops 0); verdict block_1 is table, 15.6 cm from slot_0; block_3 is table, 18.9 cm from slot_1; block_5 is table, 18.9 cm from slot_2; starts []; plan_ms [13, 70]; decision_ms []
+F
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_jev-openai_test_a_three_block_sort_on_physics_20261013-103905.jsonl', 'frames': 0, 'events': 0}
+F
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_jev-openai_test_b_correction_mid_carry_holds_then_reverses_the_order_20261013-103905.jsonl', 'frames': 0, 'events': 0}
+F
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_jev-openai_test_c_hand_near_the_gripper_pauses_within_half_a_second_and_resumes_20261013-103905.jsonl', 'frames': 0, 'events': 0}
+F
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_jev-openai_test_d_stop_mid_carry_parks_the_arm_and_never_drops_the_block_20261013-103906.jsonl', 'frames': 0, 'events': 0}
+F
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_jev-openai_test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task_20261013-103906.jsonl', 'frames': 0, 'events': 0}
+
+=================================== FAILURES ===================================
+______________________ test_a_three_block_sort_on_physics ______________________
+
+srv = <robojev.brain.mocks.ScriptedPerception object at 0x107903950>
+
+    def test_a_three_block_sort_on_physics(srv):
+        r, wall = episode(brain(srv, [ASCENDING]))
+        ok, why = judge_sort(srv, ASCENDING)
+        summary("sort", r, wall, srv, verdict=why, starts=[c[2][2] for c in tools(srv, "start")])
+>       assert r.outcome == "done", r.log
+E       AssertionError: [{'t': 0.0, 'note': 'llm_request', 'request': 'plan', 'route': 'fast_llm'}, {'t': 0.013, 'note': 'plan_failed', 'reque...tificate verify failed: self-signed certificate (_ssl.c:1010)')"]]}, {'t': 0.084, 'note': 'end', 'outcome': 'gave_up'}]
+E       assert 'gave_up' == 'done'
+E         
+E         - done
+E         + gave_up
+
+tests/test_slice.py:166: AssertionError
+__________ test_b_correction_mid_carry_holds_then_reverses_the_order ___________
+
+srv = <robojev.brain.mocks.ScriptedPerception object at 0x108426210>
+
+    def test_b_correction_mid_carry_holds_then_reverses_the_order(srv):
+        user = ScriptedUser([Line(carrying(srv, "block_1"), CORRECTION)])
+        r, wall = episode(brain(srv, [ASCENDING, DESCENDING], {CORRECTION: Utt("correction", version=1)}, user))
+>       t_text = user.t0 + user.said[0][0]
+                           ^^^^^^^^^^^^
+E       IndexError: list index out of range
+
+tests/test_slice.py:183: IndexError
+_____ test_c_hand_near_the_gripper_pauses_within_half_a_second_and_resumes _____
+
+srv = <robojev.brain.mocks.ScriptedPerception object at 0x108df0560>
+
+    def test_c_hand_near_the_gripper_pauses_within_half_a_second_and_resumes(srv):
+        srv.hand_when(carrying(srv), for_s=1.5, dist=0.15)
+        r, wall = episode(brain(srv, [ASCENDING]))
+>       appeared = next(t for t, what in srv.hand_log if what == "appears")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       StopIteration
+
+tests/test_slice.py:213: StopIteration
+________ test_d_stop_mid_carry_parks_the_arm_and_never_drops_the_block _________
+
+srv = <robojev.brain.mocks.ScriptedPerception object at 0x108f66ae0>
+
+    def test_d_stop_mid_carry_parks_the_arm_and_never_drops_the_block(srv):
+        user = ScriptedUser([Line(carrying(srv, "block_1"), PRESS_STOP)])
+        r, wall = episode(brain(srv, [ASCENDING], user=user))
+>       t_stop = tools(srv, "stop")[0][0]
+                 ^^^^^^^^^^^^^^^^^^^^^
+E       IndexError: list index out of range
+
+tests/test_slice.py:240: IndexError
+_______ test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task ________
+
+srv = <robojev.brain.mocks.ScriptedPerception object at 0x108def9b0>
+
+    def test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task(srv):
+        """A transient "wait" pauses the arm and "go on" resumes it; neither is part of the task, so no
+        restated task (a plan's reading) may mention them (H5)."""
+        user = ScriptedUser([Line(carrying(srv, "block_1"), WAIT),
+                             Line(lambda: bool(user.said) and time.monotonic() - user.t0 - user.said[0][0] >= 2.0, GO_ON)])
+        r, wall = episode(brain(srv, [ASCENDING], {WAIT: Utt("wait"), GO_ON: Utt("go_on")}, user))
+>       t_wait, t_go = (user.t0 + t for t, _ in user.said[:2])
+        ^^^^^^^^^^^^
+E       ValueError: not enough values to unpack (expected 2, got 0)
+
+tests/test_slice.py:277: ValueError
+=========================== short test summary info ============================
+FAILED tests/test_slice.py::test_a_three_block_sort_on_physics - AssertionErr...
+FAILED tests/test_slice.py::test_b_correction_mid_carry_holds_then_reverses_the_order
+FAILED tests/test_slice.py::test_c_hand_near_the_gripper_pauses_within_half_a_second_and_resumes
+FAILED tests/test_slice.py::test_d_stop_mid_carry_parks_the_arm_and_never_drops_the_block
+FAILED tests/test_slice.py::test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task
+5 failed in 1.34s
+=== decisions full five 10:39:06
+
+L1 sort [decisions-openai]: wall 0.0 s; events {}; steps started/done/failed 0/0/0; plans 2 (stale 0, failed 2, loops 0); verdict block_1 is table, 15.6 cm from slot_0; block_3 is table, 18.9 cm from slot_1; block_5 is table, 18.9 cm from slot_2; starts []; plan_ms [5, 11]; decision_ms []
+F
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_decisions-openai_test_a_three_block_sort_on_physics_20261013-103906.jsonl', 'frames': 0, 'events': 0}
+F
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_decisions-openai_test_b_correction_mid_carry_holds_then_reverses_the_order_20261013-103907.jsonl', 'frames': 0, 'events': 0}
+F
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_decisions-openai_test_c_hand_near_the_gripper_pauses_within_half_a_second_and_resumes_20261013-103907.jsonl', 'frames': 0, 'events': 0}
+F
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_decisions-openai_test_d_stop_mid_carry_parks_the_arm_and_never_drops_the_block_20261013-103907.jsonl', 'frames': 0, 'events': 0}
+F
+recorded: {'path': '/Users/anthonylee/code/robojev/.claude/worktrees/robojev-slice-live-scenarios-6e918b/experiments/results/live/slice_decisions-openai_test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task_20261013-103907.jsonl', 'frames': 0, 'events': 0}
+
+=================================== FAILURES ===================================
+______________________ test_a_three_block_sort_on_physics ______________________
+
+srv = <robojev.brain.mocks.ScriptedPerception object at 0x10c5477a0>
+
+    def test_a_three_block_sort_on_physics(srv):
+        r, wall = episode(brain(srv, [ASCENDING]))
+        ok, why = judge_sort(srv, ASCENDING)
+        summary("sort", r, wall, srv, verdict=why, starts=[c[2][2] for c in tools(srv, "start")])
+>       assert r.outcome == "done", r.log
+E       AssertionError: [{'t': 0.0, 'note': 'llm_request', 'request': 'plan', 'route': 'fast_llm'}, {'t': 0.006, 'note': 'plan_failed', 'reque...tificate verify failed: self-signed certificate (_ssl.c:1010)')"]]}, {'t': 0.017, 'note': 'end', 'outcome': 'gave_up'}]
+E       assert 'gave_up' == 'done'
+E         
+E         - done
+E         + gave_up
+
+tests/test_slice.py:166: AssertionError
+__________ test_b_correction_mid_carry_holds_then_reverses_the_order ___________
+
+srv = <robojev.brain.mocks.ScriptedPerception object at 0x10d0654f0>
+
+    def test_b_correction_mid_carry_holds_then_reverses_the_order(srv):
+        user = ScriptedUser([Line(carrying(srv, "block_1"), CORRECTION)])
+        r, wall = episode(brain(srv, [ASCENDING, DESCENDING], {CORRECTION: Utt("correction", version=1)}, user))
+>       t_text = user.t0 + user.said[0][0]
+                           ^^^^^^^^^^^^
+E       IndexError: list index out of range
+
+tests/test_slice.py:183: IndexError
+_____ test_c_hand_near_the_gripper_pauses_within_half_a_second_and_resumes _____
+
+srv = <robojev.brain.mocks.ScriptedPerception object at 0x10d0778c0>
+
+    def test_c_hand_near_the_gripper_pauses_within_half_a_second_and_resumes(srv):
+        srv.hand_when(carrying(srv), for_s=1.5, dist=0.15)
+        r, wall = episode(brain(srv, [ASCENDING]))
+>       appeared = next(t for t, what in srv.hand_log if what == "appears")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       StopIteration
+
+tests/test_slice.py:213: StopIteration
+________ test_d_stop_mid_carry_parks_the_arm_and_never_drops_the_block _________
+
+srv = <robojev.brain.mocks.ScriptedPerception object at 0x10d07ea80>
+
+    def test_d_stop_mid_carry_parks_the_arm_and_never_drops_the_block(srv):
+        user = ScriptedUser([Line(carrying(srv, "block_1"), PRESS_STOP)])
+        r, wall = episode(brain(srv, [ASCENDING], user=user))
+>       t_stop = tools(srv, "stop")[0][0]
+                 ^^^^^^^^^^^^^^^^^^^^^
+E       IndexError: list index out of range
+
+tests/test_slice.py:240: IndexError
+_______ test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task ________
+
+srv = <robojev.brain.mocks.ScriptedPerception object at 0x10d8e0a10>
+
+    def test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task(srv):
+        """A transient "wait" pauses the arm and "go on" resumes it; neither is part of the task, so no
+        restated task (a plan's reading) may mention them (H5)."""
+        user = ScriptedUser([Line(carrying(srv, "block_1"), WAIT),
+                             Line(lambda: bool(user.said) and time.monotonic() - user.t0 - user.said[0][0] >= 2.0, GO_ON)])
+        r, wall = episode(brain(srv, [ASCENDING], {WAIT: Utt("wait"), GO_ON: Utt("go_on")}, user))
+>       t_wait, t_go = (user.t0 + t for t, _ in user.said[:2])
+        ^^^^^^^^^^^^
+E       ValueError: not enough values to unpack (expected 2, got 0)
+
+tests/test_slice.py:277: ValueError
+=========================== short test summary info ============================
+FAILED tests/test_slice.py::test_a_three_block_sort_on_physics - AssertionErr...
+FAILED tests/test_slice.py::test_b_correction_mid_carry_holds_then_reverses_the_order
+FAILED tests/test_slice.py::test_c_hand_near_the_gripper_pauses_within_half_a_second_and_resumes
+FAILED tests/test_slice.py::test_d_stop_mid_carry_parks_the_arm_and_never_drops_the_block
+FAILED tests/test_slice.py::test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task
+5 failed in 1.04s
+=== end 10:39:07

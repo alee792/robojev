@@ -1,0 +1,13 @@
+# Recorded runs under the rules added after the live re-run (offline count; module doc has the columns)
+
+| run | files | step_done | step_done replans | routine: now local | paused_idle re-asks | stayed paused | hand (code resumes) | other (user asked) | plans sent back | unsure-only (spare) | words: unsure lines | failed replans |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| battery jev | 10 | 51 | 42 | 28 | 41 | 41 | 0 | 41 | 17 | 15 | 2 | 0 |
+| battery decisions | 10 | 52 | 38 | 17 | 43 | 42 | 42 | 0 | 4 | 4 | 3 | 0 |
+| battery rules | 10 | 59 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| battery always_llm | 10 | 68 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| slice decisions | 16 | 49 | 34 | 9 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 6 |
+| slice jev | 19 | 52 | 34 | 13 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 9 |
+
+- battery jev: episodes with 2+ paused_idle re-asks that stayed paused: ep_1_005_jev.jsonl (41)
+- battery decisions: episodes with 2+ paused_idle re-asks that stayed paused: ep_1_005_decisions.jsonl (43)

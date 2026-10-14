@@ -1,0 +1,10 @@
+# Recorded runs under the rules added after the live re-run (offline count; module doc has the columns)
+
+| run | files | step_done | step_done replans | routine: now local | paused_idle re-asks | stayed paused | hand (code resumes) | other (user asked) | plans sent back | unsure-only (spare) | words: unsure lines | failed replans |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| battery jev | 10 | 57 | 0 | 0 | 0 | 0 | 0 | 0 | 2 | 1 | 3 | 0 |
+| battery decisions | 10 | 56 | 15 | 0 | 0 | 0 | 0 | 0 | 4 | 3 | 3 | 1 |
+| slice decisions | 9 | 26 | 4 | 0 | 8 | 8 | 0 | 8 | 0 | 0 | 0 | 0 |
+| slice jev | 6 | 18 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+
+- slice decisions: episodes with 2+ paused_idle re-asks that stayed paused: slice_decisions-openai_test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task_20261013-170732.jsonl.gz (2), slice_decisions-openai_test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task_20261013-170818.jsonl.gz (2), slice_decisions-openai_test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task_20261013-170903.jsonl.gz (2), slice_decisions-openai_test_e_wait_then_go_on_pauses_resumes_and_never_enters_the_task_20261013-170953.jsonl.gz (2)
