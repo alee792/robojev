@@ -683,7 +683,7 @@ Brain rules unchanged; no bug fixes this time.
 | | runs | pass | "ok, go on" | go-on to resume | asks | gave_up |
 |---|---|---|---|---|---|---|
 | Jev | 3 | **3** | resume, stay_local | 0.085-0.096 s | 0 | 0 |
-| Decisions API | 6 | **2** (0 / 6 in Handoff 8) | resume 0.88 in runs 1-2; 0.27-0.49 (unsure) in runs 3-6 | 0.437, 0.255 s; then 14.7-18.4 s via the ask | 4 | **0** |
+| Decisions API | 6 | **2** (0 / 6 in Handoff 8) | resume 0.88 in runs 1-2; 0.27-0.49 (unsure) in runs 3-6 | 0.437, 0.255 s; 14.7-18.4 s via the ask in runs 3-5 (run 6: the go-on was decided before the wait, not measured) | 4 | **0** |
 
 All six Decisions API runs ended `done`. In the four that failed, the go-on came back unsure, the
 arm stayed paused, after two re-asks the brain asked "Should it go on?", the scripted user said "ok,
@@ -732,9 +732,9 @@ new rule for a line the planner changed the plan for was not needed to keep it i
 | Jev | A2 0.68, D 0.90: kept | **A3 0.04, "is something the task asks about"**: sent back | D 0.92: kept |
 | Decisions API | A2 0.98, D 1.0: kept | A3 0.48 (unsure): sent back | A3 0.82, D 1.0: kept |
 
-One send-back each in ep 0 (Jev: three in Handoff 8, then the loop limit). The two other Jev and
-Decisions API send-backs: the letter D unsure (API eps 1 and 7; D is in none of the words) and, at
-the end of API ep 8, "the letter I is something the task asks about but the plan leaves out" on a
+One send-back each in ep 0 (Jev: three in Handoff 8, then the loop limit). The others: Jev's first
+plan in ep 9 (a spare letter, as before); the Decisions API's letter D unsure (eps 1 and 7; D is in
+none of the words) and, at the end of its ep 8, "the letter I is something the task asks about but the plan leaves out" on a
 plan with no steps left, after IDEA was spelled (I was in place; a false flag, harmless).
 
 **The Decisions API's ep 4 is the one miss**: PINE then an O in position 4 (score 0.80). Its first
