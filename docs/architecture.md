@@ -206,4 +206,32 @@ as things happen. Recorded runs of the hand-written skills are the training data
 | Skill | The next arm position | 10-100 times a second | Hand-written, learned later |
 | Motor controller | Motor currents | ~1 kHz | Inside the arm |
 
-Not decided yet: the demo script, speech input, learned policies.
+Not decided yet: speech input, learned policies.
+
+## Who may start a script (2026-10-14)
+
+The user's picture, in our names: a third loop surveys the scene continuously (perception at camera
+rate, feeding the world state; it owns no decisions); a prompt makes the planner, the slow reasoner,
+write a sequence of scripts (catalog skills); the fast loop reacts to every event and may itself
+choose a script when the choice is obvious and code can check it, and hands anything else up. The
+rule that stitches it together: at every stage prefer the fast confident path, with a code-checked
+gate, over the slow reasoning path, and never let a model's guess move the arm unchecked.
+
+What that adds to today's loop, all of it generic (nothing inside knows letters from scalpels):
+
+- **The fast loop can swap the script's target.** "Actually, the scalpel" mid-reach: code finds the
+  objects the words name, offers each as a `swap_target` fix, validates the swap against the plan
+  (reachable, not already placed, the destination still free) and only then cancels the running
+  skill and starts the rewritten step. Not valid, or not confident: the planner, as before. This is
+  the pattern for every future fast-path script choice: a code-generated, code-validated menu.
+- **Skills with a required orientation and a tight fit**: `insert` (a tool into a rack slot) and
+  `reorient` (turn a thing so its front points a given way). Both are composed by the planner and
+  steered by the fast loop like any other; both need the world to carry each object's front
+  (`ObjectObs.yaw`, `shape`) and a holder's opening (`PlaceObs.yaw`), which perception must supply.
+- **Grasp strategy by shape, inside the skill**: a cube is pinched from above, a rod across its
+  handle. The planner never sees it; the catalog does not grow a skill per object.
+- **A learned policy is a skill too.** A dexterous grasp (scissors) that no script does well slots
+  in behind the same catalog entry, with the same contract: done, failed with a reason, interruptible.
+  Which skills get a learned policy is decided by failure rates in the battery, not in advance.
+- **Two scenes, one brain.** Letter cubes and a surgical tray stay side by side in the simulator and
+  the battery so that nothing that works is specific to either.

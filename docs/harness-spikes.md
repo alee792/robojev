@@ -75,6 +75,21 @@ sim.
 | D3 | If there's a second arm: is it a follower or a leader, and can it grasp? | W1 and W7 from `docs/widowx-pair.md` as scripts | Arm |
 | D4 ◐ prepared | First real closed-loop run | `docs/day-one.md`: power, teleop off, workspace box from a touch-off, STOP tested, then the conformance trials and the slice | Arm |
 
+### Harder tasks (2026-10-14, in progress)
+
+The user's direction: tasks beyond pick and place, two scenes kept for diversity (letters and a
+surgical tray), a generalizable approach where system two composes scripts and system one steers and
+may pick one. `docs/architecture.md`, "Who may start a script".
+
+| # | Question | Pass when | Runs |
+|---|---|---|---|
+| T1 | Can the sim do `insert` (a tool into a tight rack slot, aligned) and `reorient` (turn a thing so its front points a given way) as scripts, on rods and cubes? | 19/20 each in conformance, including starts that need a regrasp; `blocked` reported when the fit fails | Here |
+| T2 | Can the fast loop swap a script's target on a correction without the planner, safely? | A correction naming another object mid-reach changes the target in under 0.5 s with no planner call; a swap that does not fit goes to the planner; a remark naming an object does nothing | Here, then live |
+| T3 | Does the brain plan and run the new skills unchanged? | A plan with insert and reorient validates, runs on the stub and the sim, done conditions on orientation judged | Here |
+| T4 | Does the battery exercise the fast path? | An `other_letter` event scored on time to change and planner calls, outcome unchanged | Here, then live |
+| T5 | Can the arm keep the world current between tasks (a wrist-camera sweep as a `survey` script, perception filling yaw and shape)? | The world state updates while idle; a tool moved by hand is seen before the next prompt | Mac + camera |
+| T6 | Which skill needs a learned policy? | Decided from battery failure rates on the tool scene, not in advance | Later |
+
 ## Order (revised after review, 2026-10-10)
 
 Build a thin end-to-end slice first, then widen — interface mismatches between harness and skills

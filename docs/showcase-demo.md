@@ -29,6 +29,16 @@ finishes the job. The fast loop (Decisions API, ~150 ms) decides what to do righ
 The volunteer lines are suggestions. Any phrasing works; that's the point. Rehearse with improvised
 ones too.
 
+## The same run on a surgical tray (kept for diversity, 2026-10-14)
+
+Same brain, same skills, different props: a rack with three slots and three instruments (forceps,
+scalpel, scissors) lying at odd angles. "Set up the tray: forceps, scalpel, scissors, left to right"
+is three `insert`s with a `reorient` where a handle points the wrong way. The correction beat is
+"actually, the scalpel first" mid-reach: the fast loop swaps the target itself when the swap fits
+(T2), the planner only when it does not. The theft is a tool taken off the table; the hand beat is
+the same; the finale is "hand me the scalpel", handle first (`reorient` then `hand_over`). Both
+scripts live in the battery so neither scene is the special case.
+
 ## On screen
 
 - Left: the tray as the camera sees it, with the current plan step.
