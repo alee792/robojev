@@ -4,6 +4,10 @@ Plan for running robojev on the bay's leader/follower WidowX AI pair: two arms s
 together, first under one controller, then each with its own brain. It replaces the Panda as the main
 line; the Panda notes (`docs/panda-setup.md`) stay for reference.
 
+**2026-10-14: the demo will have one arm.** Crawl is the mode in use (one brain, one arm); walk and
+run are shelved, kept here as the plan for whenever a second arm exists. The Franka session uses the
+same brain through `src/robojev/robots/franka/` (`docs/franka-day-one.md`).
+
 ## What we have
 
 | | Follower | Leader |

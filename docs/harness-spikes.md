@@ -217,6 +217,15 @@ Small, recorded so they aren't lost; none blocks the next spike.
   advances (`widowx_real/clock.py`); assertions unchanged, the frame trace byte-identical every run,
   10/10 under the load that reproduced the failure, and the file runs in 11 s instead of 50.
 
+## One arm (2026-10-14)
+
+The demo will have one arm, and a Franka is available for a test session. Decisions: the brain runs
+in its crawl mode (one brain, one arm), which is what every live run has used; the two-arm code
+stays (`tests/test_brain_two_arms.py`, the pair scene) but the walk and run stages
+(`docs/widowx-pair.md`) are shelved; the Franka gets a robot server behind the same protocol
+(`src/robojev/robots/franka/`, built against a fake driver first) and its own checklist
+(`docs/franka-day-one.md`). The WidowX day-one kit stays as written for whenever that arm is at hand.
+
 ## Follow-ups from the live re-run (2026-10-13)
 
 The re-run's rule gaps are fixed in code (`docs/live-results.md`, "Rules added after the re-run"):
