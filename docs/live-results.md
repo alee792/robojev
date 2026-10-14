@@ -666,3 +666,94 @@ an unsure stay_local, not a replan the decider chose). A rule that overrode the 
 replan on a finished step would make the router meaningless on the event it is most often asked
 about; if the live rate stays where it is, the fix belongs in the route criteria's text, not in a
 gate. Handoff 9 re-runs (e) with the Decisions API, and the battery for both.
+
+## Handoff 9: the wait and the correction after the rule 5 fix (2026-10-13, live)
+
+After 3314cfb: rule 5's text only goes out on plan-progress events, a line the planner changed the
+plan for joins `user_words`, the slice's user answers "Should it go on?" with "ok, go on", and the
+count question says how many of the label are in view. The Mac was on battery this time, so
+`caffeinate -dims`, the TLS check before every run, and the wall clock per run (no run's wall was
+longer than pytest's own count, so no sleep). Files: `experiments/results/live/slice_*20261013-17*.jsonl.gz`,
+`pytest_slice_runs_20261013_h9.txt`; `experiments/results/battery/20261013-171549-sim-jev/`,
+`20261013-172528-sim-decisions/`, `live_tables_h9_*.txt`; `replay_rules_after_20261013-170000.txt`.
+Brain rules unchanged; no bug fixes this time.
+
+### 1. (e), wait then go on
+
+| | runs | pass | "ok, go on" | go-on to resume | asks | gave_up |
+|---|---|---|---|---|---|---|
+| Jev | 3 | **3** | resume, stay_local | 0.085-0.096 s | 0 | 0 |
+| Decisions API | 6 | **2** (0 / 6 in Handoff 8) | resume 0.88 in runs 1-2; 0.27-0.49 (unsure) in runs 3-6 | 0.437, 0.255 s; then 14.7-18.4 s via the ask | 4 | **0** |
+
+All six Decisions API runs ended `done`. In the four that failed, the go-on came back unsure, the
+arm stayed paused, after two re-asks the brain asked "Should it go on?", the scripted user said "ok,
+go on", and the arm resumed and finished (the ask rule now exercised, as intended). They fail the
+test on its 0.5 s bars: the pause on "hang on a second" took 0.70, 1.58, 1.13 and 2.51 s.
+
+**Why runs 3-6 differ from 1-2: the Decisions API's latency, not rule 5.** Its decisions in those
+four runs had p50 349-1,242 ms and max 1.05-2.75 s (runs 1-2: p50 161-252 ms); the planner, on the
+same OpenAI account, answered at its usual 2-8 s in the same runs, and Jev ran at p50 92-118 ms over
+the same network a minute later, so the slow window (17:07-17:10) was the API's own, as in Handoff
+8's ep 8. A slow pause let the arm move on before it stopped, and the go-on request then described a
+different moment: run 1's said "paused: carrying block_1 to slot_0", run 4's "paused: lowering
+block_1 at slot_0, not yet released" (the only differences between the two requests' states, besides
+a nearby block), and the API is unsure about resuming mid-lowering. In run 6 the wait took 2.5 s
+and the go-on (typed 2 s after it) was decided first.
+
+**The ablation on the new recording** (run 1's "ok, go on" request, 5 calls each): as sent now,
+resume 0.88; every variant 0.88. Rule 5's text is no longer in the request (the only field that
+still differs from last run's request is the route's `ask_about`, which it does not move).
+
+### 2. (b), the correction
+
+| | runs | hold | conf | text to hold | correction in `user_words` | order, drops |
+|---|---|---|---|---|---|---|
+| Jev | 3 | 3 / 3 | 0.77-0.85 | 0.091-0.120 s | **3 / 3** | 5, 3, 1; 0 |
+| Decisions API | 3 | 3 / 3 | **0.88-0.93** (0.58-0.74 in Handoff 8) | 0.108-0.151 s | **3 / 3** (4 / 6 in Handoff 8) | 5, 3, 1; 0 |
+
+The Decisions API's route on the correction was its own `fast_llm` in all three (0.76-0.84), so the
+new rule for a line the planner changed the plan for was not needed to keep it in.
+
+### 3. The battery (the same 10 episodes)
+
+| | Jev | Decisions API |
+|---|---|---|
+| mean score, finish rate | **1.000, 1.00** (1.000, 1.00) | 0.978, 0.89 (1.000, 1.00) |
+| s to first change: new_word / wait / go-on / hand | 0.14 / 0.13 / 0.10 / 0.10 | 0.12 / 0.30 / 0.13 / 0.13 |
+| planner calls / episode | 2.3 (2.0) | 4.6 (4.9) |
+| decision latency p50 / p95 / max | 142 / 181 / 204 ms | 133 / 228 / 399 ms |
+| new plans sent back | **1 / 9** (3 / 9) | 2 / 21 (5 / 22) |
+| drops / contacts / STOP ok / asks | 0 / 0 / 1 of 1 / 0 | 0 / 0 / 1 of 1 / 0 |
+
+(Handoff 8 in brackets.) The taken-cube episode, ep 0, `check.*` answers on each plan:
+
+| | first plan | 2nd | 3rd |
+|---|---|---|---|
+| Jev | A2 0.68, D 0.90: kept | **A3 0.04, "is something the task asks about"**: sent back | D 0.92: kept |
+| Decisions API | A2 0.98, D 1.0: kept | A3 0.48 (unsure): sent back | A3 0.82, D 1.0: kept |
+
+One send-back each in ep 0 (Jev: three in Handoff 8, then the loop limit). The two other Jev and
+Decisions API send-backs: the letter D unsure (API eps 1 and 7; D is in none of the words) and, at
+the end of API ep 8, "the letter I is something the task asks about but the plan leaves out" on a
+plan with no steps left, after IDEA was spelled (I was in place; a false flag, harmless).
+
+**The Decisions API's ep 4 is the one miss**: PINE then an O in position 4 (score 0.80). Its first
+replan after "Could you spell PINE instead?" failed validation (the arm was holding P and the plan
+did not put it down first), `plan_retry` asked once more (the hold kept, as the rule says), and the
+retried plan moved the O from position 0 to position 4 rather than off the row. The plan check asks
+about objects a plan leaves out; an object it misplaces is not its question, so the plan ran, and
+the brain declared done on its done conditions. A planner error the brain has no check for, not a
+rule effect (Jev's run of the same episode, and both of Handoff 8's, spelled PINE).
+
+### 4. Worse than Handoff 8
+
+- The Decisions API's (e) latency window above (its decisions only).
+- The Decisions API's ep 4 (a misplaced letter, no check covers it).
+- Still: the Decisions API sends routine step_done to the planner on its own `fast_llm` (15 in the
+  battery, 4 in the slice; Jev 0), which the routine rule does not cover.
+- Nothing worse for Jev: (e) 3 / 3, (b) 3 / 3, the battery 1.000 at 2.3 planner calls, max decision
+  204 ms.
+
+**Default decider: Jev, unchanged.** The rule 5 fix brought the Decisions API's go-on back (0.88 when
+its decisions are quick, and the ask path now ends a stuck pause), but its latency tail decided
+four of six (e) runs this time, and it is the tail, not the rules, that keeps it second.
