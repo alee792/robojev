@@ -26,8 +26,9 @@ from .core import plan as P
 from ..protocol import ArmSpec
 from ..protocol import WorldState as RobotWorld
 
-GRASPING = ("move_object", "stack_on", "hand_over")
+GRASPING = P.GRASPING
 NO_OBJECT = ("survey", "hold")
+POINT_PLACES = ("slot", "bin", "holder")      # places that are one point an arm either reaches or not
 
 
 def reaches(spec: ArmSpec, x: float, y: float) -> bool:
@@ -53,7 +54,7 @@ class Reach:
                 self.at[o.id] = "arm:" + o.where[8:]
             elif o.where == "person":
                 self.at[o.id] = "person"
-            elif p is not None and p.kind in ("slot", "bin"):
+            elif p is not None and p.kind in POINT_PLACES:
                 self.at[o.id] = (p.x, p.y)
             else:
                 self.at[o.id] = (o.x, o.y)
@@ -79,7 +80,7 @@ class Reach:
 
     def target_arms(self, step: dict) -> list[str]:
         """Arms that reach where the step puts its object."""
-        if step["skill"] == "move_object":
+        if step["skill"] in ("move_object", "insert"):
             return self.place_arms(step["target"])
         if step["skill"] == "stack_on":
             return self.object_arms(step["target"])
@@ -95,9 +96,9 @@ class Reach:
         sk, o, t = step["skill"], step["object"], step["target"]
         if sk in NO_OBJECT or o not in self.at:
             return
-        if sk == "move_object":
+        if sk in ("move_object", "insert"):
             p = self.places.get(t)
-            self.at[o] = (p.x, p.y) if p is not None and p.kind in ("slot", "bin") else f"arm:{arm}"
+            self.at[o] = (p.x, p.y) if p is not None and p.kind in POINT_PLACES else f"arm:{arm}"
         elif sk == "stack_on":
             self.at[o] = self.at.get(t, f"arm:{arm}")
         elif sk == "hand_over":
@@ -118,7 +119,7 @@ def reach_errors(order: Iterable[dict], world: RobotWorld, specs: Mapping[str, A
         if arm not in r.object_arms(o):
             errs.append(f"step {s['id']}: {arm} cannot reach {o} where it will be then ({r.where(o)}); "
                         f"arms that can: {', '.join(r.object_arms(o)) or 'none'}")
-        if s["skill"] in ("move_object", "stack_on") and arm not in r.target_arms(s):
+        if s["skill"] in ("move_object", "stack_on", "insert") and arm not in r.target_arms(s):
             errs.append(f"step {s['id']}: {arm} cannot reach {s['target']}; arms that can: {', '.join(r.target_arms(s)) or 'none'}")
         r.apply(s, arm)
     return errs
@@ -135,7 +136,7 @@ def holding_errors(order: Iterable[dict], holdings: Mapping[str, str | None]) ->
             errs.append(f"{arm} is holding {held}: the plan needs a step on {arm} that puts it somewhere")
         elif first["object"] != held or first["skill"] not in GRASPING:
             errs.append(f"{arm} is holding {held}: its first step must put it somewhere "
-                        f"(pick_and_place, stack_on or hand_over of {held})")
+                        f"(pick_and_place, stack_on, hand_over or insert of {held})")
     return errs
 
 

@@ -68,7 +68,8 @@ class Perception(ScriptedPerception):
 @dataclass
 class Fired:
     """One thing the Director did: `what` is text | go_on | taken | returned | added | nudged |
-    placed | skipped | hand | stop, at wall time `t` (time.monotonic) and `t_s` on the episode clock."""
+    placed | skipped | hand | stop, at wall time `t` (time.monotonic) and `t_s` on the episode clock.
+    For an other_letter line, `object` is the cube the arm was reaching for and `note` its free twin."""
     t: float
     t_s: float
     index: int
@@ -133,6 +134,27 @@ def placed(word: str, world: WorldState, positions: list[str]) -> int:
     """How many positions of `word` read right in `world`: position i holds a cube labelled word[i]."""
     occ = {o.where: o.label for o in world.objects.values()}
     return sum(1 for i, ch in enumerate(word) if i < len(positions) and occ.get(positions[i]) == ch)
+
+
+def reaching(world: WorldState, server: RobotServer, calls: list) -> tuple[str, str] | None:
+    """(arm, object id) for an arm that is reaching for an object and has not grasped it: the arm's
+    skill on the server (ArmObs.skill, phase "reach"), or, where a server does not name it, the
+    last start() the perception layer logged for that arm while the arm runs with an empty gripper."""
+    for a in world.arms.values():
+        if a.holding is not None or a.mode != "running":
+            continue
+        if a.skill is not None:
+            try:
+                st = server.status(a.skill)
+            except KeyError:
+                continue
+            if st.phase == "reach" and st.args.get("object"):
+                return a.id, st.args["object"]
+            continue
+        last = next((c for c in reversed(calls) if c[1] == "start" and c[2][0] == a.id), None)
+        if last is not None and last[2][2].get("object"):
+            return a.id, last[2][2]["object"]
+    return None
 
 
 def carrying(world: WorldState, server: RobotServer) -> bool:
@@ -216,7 +238,25 @@ class Director:
         n = placed(self.word, world, self.lay.positions)
         if w.kind == "placed":
             return n >= w.k
+        if w.kind == "reaching":
+            ev = self.ep.events[self._i]
+            return n >= w.k and self._twin_reach(world, ev.label) is not None
         return n >= w.k and carrying(world, self.p.inner)
+
+    def _twin_reach(self, world: WorldState, label: str | None) -> tuple[str, str] | None:
+        """(the cube an arm is reaching for, its free twin): the reach is for a cube labelled `label`
+        (any label if None) and another visible cube with that label lies free on the table."""
+        r = reaching(world, self.p.inner, self.p.calls)
+        if r is None:
+            return None
+        oid = r[1]
+        o = world.objects.get(oid)
+        if o is None or oid in self.p.hidden or (label is not None and o.label != label):
+            return None
+        held = {a.holding for a in world.arms.values() if a.holding}
+        twin = next((x.id for x in world.objects.values() if x.id != oid and x.label == o.label and x.id not in self.p.hidden
+                     and x.where == "table" and x.id not in held), None)
+        return None if twin is None else (oid, twin)
 
     def _later(self, after_s: float, action: Callable[[], None]) -> None:
         with self._lock:
@@ -237,6 +277,13 @@ class Director:
         elif k == "chatter":
             self.user.say(ev.text)
             self._record(ev.index, k, "text", text=ev.text)
+        elif k == "other_letter":
+            pair = self._twin_reach(self.p.truth(), ev.label)
+            if pair is None:                          # the fallback time came with no such reach: the line would point at nothing
+                self._record(ev.index, k, "skipped", note=f"no reach for a {ev.label} with a free twin")
+                return
+            self.user.say(ev.text)
+            self._record(ev.index, k, "text", text=ev.text, object=pair[0], note=pair[1])
         elif k == "wait_go_on":
             self.user.say(ev.text)
             self._record(ev.index, k, "text", text=ev.text)

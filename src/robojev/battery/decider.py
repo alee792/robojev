@@ -11,8 +11,10 @@ does for the sort. Nothing here is read by the judge: the battery scores outcome
 
 What it answers, for the record (not a specification of right answers, only this mock's):
   user text   a new word: hold if the move in progress does not fit it, else carry on; route to the
-              planner, or to the user when no cube in view can spell the word. A wait: pause. A go-on:
-              resume. Chatter, a remark, a reply: carry on; a reply goes to the planner.
+              planner, or to the user when no cube in view can spell the word. "The other A" while
+              reaching for an A: the in-plan fix swap_target to the free twin (carry on, stay local).
+              A wait: pause. A go-on: resume. Chatter, a remark, a reply: carry on; a reply goes to
+              the planner.
   hand        very close: back off; coming closer or in the path: pause; gone: resume if paused for it.
   cubes       the current step's cube moved before the grasp: re-target. A cube taken: planner if a
               spare cube carries the letter, else the user. A cube put down: planner if the plan has no
@@ -143,6 +145,8 @@ def truth(ev, view: View, src: SpellTruth) -> dict:
                 T["right_now"] = ["hold", "resume", "carry_on"]
             letters = [o.label for o in world.objects.values() if o.label]
             T["route"] = ["fast_llm", "capable_llm"] if spellable(word, letters) else ["ask_user", "fast_llm"]
+        elif ln.kind == "other_letter":
+            T["in_plan_fix"] = [f"swap_target:{o}" for o in _twins(view, world)]      # offered only while still reaching
         elif ln.kind == "wait":
             T["right_now"] = ["pause"] if view.mode != "paused" else ["carry_on", "pause"]
         elif ln.kind == "go_on":
@@ -207,6 +211,18 @@ def truth(ev, view: View, src: SpellTruth) -> dict:
     elif k == "plan_done_unmet":
         T["route"] = ["fast_llm", "capable_llm"]
     return T
+
+
+def _twins(view: View, world: WorldState) -> list[str]:
+    """The free cubes carrying the same letter as the current step's cube, nearest the gripper first."""
+    cur = view.current
+    o = world.objects.get(cur["object"]) if cur else None
+    if o is None or not o.label:
+        return []
+    held = {a.holding for a in world.arms.values() if a.holding}
+    twins = [x for x in world.objects.values() if x.id != o.id and x.label == o.label and x.where == "table" and x.id not in held]
+    a = view.state.arm
+    return [x.id for x in sorted(twins, key=lambda x: (x.x * 100 - a.x) ** 2 + (x.y * 100 - a.y) ** 2)]
 
 
 def _mentioned(plan: dict) -> set[str]:

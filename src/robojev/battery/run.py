@@ -72,6 +72,7 @@ class Summary:
     finish_rate: float                   # exact and done, over the episodes without a STOP
     judged: int                          # episodes without a STOP
     time_to_change_s: dict[str, float | None]    # median per event kind (the first action of each event)
+    planner_called: dict[str, float]             # per event kind, the share of events a planner request followed
     planner_calls: float                 # per episode
     replans: float
     decisions: float
@@ -196,7 +197,7 @@ def _change_key(e) -> str | None:
         return "letter_returned"
     if e.kind == "reply":
         return "reply"
-    if e.what == "text" and e.kind not in ("new_word", "chatter", "wait_go_on"):
+    if e.what == "text" and e.kind not in ("new_word", "other_letter", "chatter", "wait_go_on"):
         return None
     return e.kind
 
@@ -205,10 +206,14 @@ def summarise(records: Sequence[Record]) -> Summary:
     r0 = records[0]
     judged = [r for r in records if r.stop is None]
     ttc: dict[str, list[float]] = defaultdict(list)
+    asked: dict[str, list[bool]] = defaultdict(list)
     for r in records:
         for e in r.events:
             key = _change_key(e)
-            if key is not None and e.time_to_change_s is not None:
+            if key is None:
+                continue
+            asked[key].append(bool(e.planner_called))
+            if e.time_to_change_s is not None:
                 ttc[key].append(e.time_to_change_s)
     lat = [r.decision_ms_p50 for r in records if r.decision_ms_p50 is not None]
     outcomes: dict[str, int] = defaultdict(int)
@@ -219,6 +224,7 @@ def summarise(records: Sequence[Record]) -> Summary:
                    round(statistics.mean(r.score for r in judged), 3) if judged else 0.0,
                    round(sum(r.exact and r.outcome == "done" for r in judged) / len(judged), 3) if judged else 0.0, len(judged),
                    {k: round(statistics.median(v), 3) for k, v in sorted(ttc.items())},
+                   {k: round(sum(v) / len(v), 2) for k, v in sorted(asked.items())},
                    round(statistics.mean(r.planner_calls for r in records), 2), round(statistics.mean(r.replans for r in records), 2),
                    round(statistics.mean(r.decisions for r in records), 1), round(statistics.median(lat), 1) if lat else None,
                    round(statistics.mean(r.drops for r in records), 2), sum(r.hand_seen for r in records),
@@ -268,6 +274,8 @@ def table(summaries: Sequence[Summary]) -> str:
     kinds = sorted({k for s in summaries for k in s.time_to_change_s})
     for k in kinds:
         row(f"median s to first change: {k}", lambda s, k=k: opt(s.time_to_change_s.get(k), ".2f"))
+    if any("other_letter" in s.planner_called for s in summaries):
+        row("planner asked after: other_letter", lambda s: opt(s.planner_called.get("other_letter"), ".2f"))
     row("planner calls / episode", lambda s: f"{s.planner_calls:.2f}")
     row("replans / episode", lambda s: f"{s.replans:.2f}")
     row("decisions / episode", lambda s: f"{s.decisions:.1f}")

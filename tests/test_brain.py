@@ -265,7 +265,7 @@ CHANGED = SkillSpec("pick_and_place", "pick", {"type": "object", "properties": {
 
 
 @pytest.mark.parametrize("manifest, why", [
-    (_manifest(catalog="0.2"), "catalog version"),
+    (_manifest(catalog="0.1"), "catalog version"),
     (_manifest(skills=(CHANGED,) + catalog.STANDARD[1:]), "schema differs from the catalog"),
     (_manifest(skills=catalog.STANDARD + (SkillSpec("wiggle", "", {"type": "object", "properties": {}}),),), "not prefixed"),
     (_manifest(skills=(replace(catalog.PUSH, arms=("arm_9",)),)), "arms that do not exist"),

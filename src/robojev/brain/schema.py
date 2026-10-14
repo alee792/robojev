@@ -29,6 +29,7 @@ from collections.abc import Mapping, Sequence
 
 from ..protocol import ArmSpec, Manifest, SkillSpec
 from ..protocol import WorldState as RobotWorld
+from .adapt import front_of
 from .arms import Reach, reaches
 from .steps import CORE_FIELDS, args_of, extra_fields, field_of, plannable, plannable_on
 
@@ -69,7 +70,7 @@ def reach_text(m: Manifest, ws: RobotWorld) -> str:
         groups = [p for p in ws.places.values() if p.members and all(
             q in ws.places and reaches(a, ws.places[q].x, ws.places[q].y) for q in p.members)]
         grouped = {q for g in groups for q in g.members}
-        singles = [p for p in ws.places.values() if p.kind in ("slot", "bin") and p.id not in grouped
+        singles = [p for p in ws.places.values() if p.kind in ("slot", "bin", "holder") and p.id not in grouped
                    and not any(p.id in g.members for g in ws.places.values()) and reaches(a, p.x, p.y)]
         loose = [o for o in ws.objects.values() if (o.where == "table" or o.where.startswith("on:")) and reaches(a, o.x, o.y)]
         got = [x for x in (ident(o.id, "") for o in loose + groups + singles) if x]
@@ -151,10 +152,12 @@ def instructions(m: Manifest, arm: str | None, world: RobotWorld | None = None) 
         return _instructions_arms(m, world)
     skills = plannable(m, arm)
     return ("You plan for a robot working on a table.\n\n" + describe_robot(m, arm) + "\n\n"
-            "The input's `world` lists every object (id, name, the label read off it, size in m, where it is, x/y in m) "
-            "and every place (tray slots that hold one object each, bins that hold any number, \"table\" for a free spot on "
-            "the table, \"person\" for handing an object to the person, and a group such as \"tray\" meaning any of its "
-            "slots, for conditions and constraints only). The skills are motor capabilities only; they do not know the task.\n\n"
+            "The input's `world` lists every object (id, name, the label read off it, size in m, its shape where known: a cube or "
+            "a rod, which way its front points where known, where it is, x/y in m) and every place (tray slots that hold one "
+            "object each, bins that hold any number, holders that seat one rod each with a tight fit (insert's target; the "
+            "seated rod's front follows the holder's opening), \"table\" for a free spot on the table, \"person\" for handing "
+            "an object to the person, and a group such as \"tray\" meaning any of its slots, for conditions and constraints "
+            "only). The skills are motor capabilities only; they do not know the task.\n\n"
             + _fields_text(skills) + "\n\n" + _RULES)
 
 
@@ -162,9 +165,11 @@ def _instructions_arms(m: Manifest, world: RobotWorld | None) -> str:
     arms = [a.id for a in m.arms]
     skills = plannable_on(m, arms)
     return ("You plan for a robot working on a table.\n\n" + describe_robot(m, None, world) + "\n\n"
-            "The input's `world` lists every object (id, name, the label read off it, size in m, where it is: a place id, "
+            "The input's `world` lists every object (id, name, the label read off it, size in m, its shape and which way its "
+            "front points where known, where it is: a place id, "
             "\"table\", \"on:<object id>\" or \"gripper:<arm id>\", x/y in m, and the arms that reach it now) and every place "
-            "(tray slots and shared-zone slots that hold one object each, bins that hold any number, \"table\" for a free spot "
+            "(tray slots and shared-zone slots that hold one object each, bins that hold any number, holders that seat one rod "
+            "each (insert's target), \"table\" for a free spot "
             "on the table, \"person\" for handing an object to the person, and groups such as \"tray\" or the shared zone "
             "meaning any of their slots, for conditions and constraints only), with the arms that reach each place. "
             "`world.arms` says what each arm holds. The skills are motor capabilities only; they do not know the task.\n\n"
@@ -215,15 +220,33 @@ def diff_schema(skills: list[SkillSpec], ids: dict, arms: Sequence[str] = ()) ->
     return s
 
 
+def _object_view(o, where: str) -> dict:
+    """One object for the planner. Shape and front appear only when perception reports them, so a
+    world without them reads exactly as before."""
+    d = {"id": o.id, "name": o.name, "label": o.label, "size_m": o.size}
+    if getattr(o, "shape", None):
+        d["shape"] = o.shape
+    front = front_of(getattr(o, "yaw", None))
+    if front:
+        d["front_points"] = front
+    return {**d, "where": where, "x": round(o.x, 3), "y": round(o.y, 3)}
+
+
+def _place_view(p) -> dict:
+    d = {"id": p.id, "name": p.name, "kind": p.kind, "holds": "one object" if p.capacity == 1 else "any number"}
+    front = front_of(getattr(p, "yaw", None))
+    if p.kind == "holder" and front:
+        d["opening_points"] = front
+    return d
+
+
 def world_view(ws: RobotWorld, arm: str) -> dict:
     """What the planner reads of the world: protocol-native, in metres, the driven arm's gripper as "gripper"."""
     def where(w: str) -> str:
         return "gripper" if w == f"gripper:{arm}" else w
     return {
-        "objects": [{"id": o.id, "name": o.name, "label": o.label, "size_m": o.size, "where": where(o.where),
-                     "x": round(o.x, 3), "y": round(o.y, 3)} for o in ws.objects.values()],
-        "places": [{"id": p.id, "name": p.name, "kind": p.kind, "holds": "one object" if p.capacity == 1 else "any number"}
-                   for p in ws.places.values()],
+        "objects": [_object_view(o, where(o.where)) for o in ws.objects.values()],
+        "places": [_place_view(p) for p in ws.places.values()],
         "arm": {"holding": ws.arms[arm].holding or "nothing"},
     }
 
@@ -233,9 +256,8 @@ def world_view_arms(ws: RobotWorld, specs: Mapping[str, ArmSpec]) -> dict:
     says which arms reach it now, and `arms` says what each holds."""
     r = Reach(ws, specs)
     return {
-        "objects": [{"id": o.id, "name": o.name, "label": o.label, "size_m": o.size, "where": o.where,
-                     "x": round(o.x, 3), "y": round(o.y, 3), "reached_by": r.object_arms(o.id)} for o in ws.objects.values()],
-        "places": [{"id": p.id, "name": p.name, "kind": p.kind, "holds": "one object" if p.capacity == 1 else "any number",
+        "objects": [{**_object_view(o, o.where), "reached_by": r.object_arms(o.id)} for o in ws.objects.values()],
+        "places": [{**_place_view(p),
                     "reached_by": r.place_arms(p.id) if not p.members else
                     [a for a in specs if all(a in r.place_arms(q) for q in p.members)]}
                    for p in ws.places.values()],

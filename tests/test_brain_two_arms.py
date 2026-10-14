@@ -166,7 +166,7 @@ def test_reach_check_refuses_a_step_on_an_arm_that_cannot_reach():
     assert "s1: arm_1 cannot reach block_1 where it will be then (x 0.18 m, y 0.00 m); arms that can: arm_0" in errs[0]
     assert "s2: arm_0 cannot reach tray_slot_1; arms that can: arm_1" in errs[1]   # block 1 is in the zone by then
     assert holding_errors(ok, {"arm_1": "block_3"}) == ["arm_1 is holding block_3: its first step must put it somewhere "
-                                                        "(pick_and_place, stack_on or hand_over of block_3)"]
+                                                        "(pick_and_place, stack_on, hand_over or insert of block_3)"]
 
 
 def test_planner_retries_a_plan_with_an_armless_or_unreachable_step(pair):
@@ -372,9 +372,11 @@ def test_stub_refuses_a_grasp_on_the_other_arms_held_object(pair):
 # the one-arm stub manifests, taken before H2 changed the brain.
 # The one-arm requests as they are now. Re-pinned 2026-10-11 when the planner instructions and the
 # `reading` descriptions changed on purpose (the restatement holds only the end result, in the user's
-# words: docs/live-results.md "After the fixes"); the multi-arm code must still leave them untouched.
-ONE_ARM_REQUESTS = {"widowx-stub": "b5633cbb4916d267ad0f1103c271b8b13ca21405e0ee16661b760f5d67a7228f",
-                    "pusher-stub": "50e35bfb2fcba3e87e6b419f6ad83ff5857dbae77e5705168c06e30ee3a24a78"}
+# words: docs/live-results.md "After the fixes"), and again 2026-10-14 for catalog 0.2 (insert and
+# reorient in the widowx skill list; the world description names holders, shapes and fronts); the
+# multi-arm code must still leave them untouched.
+ONE_ARM_REQUESTS = {"widowx-stub": "b663228d021ce2f17dbccfa0df7058c15ee6004a2587eef7647f0eb14130cb47",
+                    "pusher-stub": "8a265012fc5fc51807de575bf944f5f9abb8dc7df4b3fa2c66dc8b57bb2acfb9"}
 
 
 def _one_arm_requests(manifest) -> list:

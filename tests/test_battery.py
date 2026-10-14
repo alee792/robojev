@@ -22,7 +22,7 @@ import pytest
 from robojev.battery import cli, paraphrase
 from robojev.battery.controls import AlwaysLLM, RulesOnly
 from robojev.battery.decider import SpellTruth, truth
-from robojev.battery.generate import EVENT_KINDS, Episode, Event, Generator, Grammar, When, episodes, first_with, spellable
+from robojev.battery.generate import EVENT_KINDS, Episode, Event, Generator, Grammar, When, duplicated, episodes, first_with, spellable
 from robojev.battery.judge import read_row, score_row
 from robojev.battery.phrasings import OPENING, PHRASINGS, SPLITS, check_tables
 from robojev.battery.run import CONTROLS, Options, compare, run, run_episode, table
@@ -59,9 +59,9 @@ def test_generator_is_deterministic_and_seeds_differ():
     assert all(0 <= len([e for e in ep.events if e.kind != "stop"]) <= 3 for ep in eps)
 
 
-def _phrasing_of(text: str, kind: str, split: str, word: str | None) -> bool:
+def _phrasing_of(text: str, kind: str, split: str, word: str | None, label: str | None = None) -> bool:
     table = OPENING if kind == "opening" else PHRASINGS[kind]
-    return any(text == t.replace("{W}", word or "") for t in table[split])
+    return any(text == t.replace("{W}", word or "").replace("{L}", label or "") for t in table[split])
 
 
 def test_every_line_comes_from_its_split_and_the_end_state_is_the_latest_word():
@@ -79,6 +79,10 @@ def test_every_line_comes_from_its_split_and_the_end_state_is_the_latest_word():
                     assert _phrasing_of(e.text, "chatter", split, None)
                 elif e.kind == "wait_go_on":
                     assert _phrasing_of(e.text, "wait", split, None) and _phrasing_of(e.go_on_text, "go_on", split, None)
+                elif e.kind == "other_letter":
+                    assert _phrasing_of(e.text, "other_letter", split, None, e.label), (e.kind, e.text)
+                    assert e.label in latest and e.when.kind == "reaching"         # a letter of the word in force ...
+                    assert ep.pool.count(e.label) >= 2                            # ... with a twin on the table
                 elif e.text is not None:
                     assert _phrasing_of(e.text, e.kind, split, None), (e.kind, e.text)
                 if e.return_text:
@@ -108,6 +112,17 @@ def test_grammar_refuses_words_its_letters_cannot_spell():
 def test_first_with_finds_shapes_without_listing_them():
     ep = first_with(["new_word", "letter_taken"], seed=1)
     assert {"new_word", "letter_taken"} <= {e.kind for e in ep.events}
+
+
+def test_other_letter_is_about_a_letter_with_a_twin_and_leaves_the_end_state_alone():
+    assert duplicated("PANDA", "OPENAAID") == ["A"] and duplicated("OPENAI", "OPENAAIDN") == ["N", "A"] and duplicated("DIP", "OPENAAID") == []
+    ep = first_with(["other_letter"], seed=0)
+    e = next(x for x in ep.events if x.kind == "other_letter")
+    assert e.label and ep.pool.count(e.label) >= 2 and e.text and ep.lines[e.text].kind == "other_letter"
+    words = ep.words
+    before = [x for x in ep.events[:e.index] if x.kind == "new_word"]
+    assert e.label in (before[-1].word if before else ep.word)
+    assert ep.expected_word == words[-1]                                        # no word of its own: the end state is the latest word
 
 
 def test_paraphrase_hook_is_a_no_op_offline_and_keeps_the_word_when_live():
@@ -233,6 +248,9 @@ def test_rules_were_written_from_the_train_phrasings():
             assert decide(t) == ("carry_on", "stay_local"), (kind, t)
     for t in PHRASINGS["reply"]["train"]:
         assert decide(t) == ("carry_on", "fast_llm"), t
+    for t in PHRASINGS["other_letter"]["train"]:                                 # the rules have no swap: the planner, no fix
+        c = r.decide(CoreEvent(1, 0, "user_text", "x", data={"text": t.replace("{L}", "A")}), None)["combined"]
+        assert (c.route, c.fix) == ("fast_llm", "none"), t
 
 
 def test_always_llm_sends_every_non_routine_event_to_the_planner():
@@ -279,7 +297,60 @@ def test_mock_decider_routes_a_taken_letter_to_the_user_only_when_no_spare_carri
     assert T["right_now"][0] == "carry_on"                                    # A to position 1 fits PANDA too
 
 
+def test_mock_decider_answers_the_other_letter_with_a_swap_to_the_free_twin():
+    text = "use the other A"
+    ep = Episode(0, 0, "train", "spell OPENAI", "OPENAI", "OPENAAID", "", 6,
+                 (Event(0, "other_letter", When("reaching", 0, 8.0), text=text, label="A"),), "whatever you can manage", "OPENAI")
+    step = {"id": "s5", "skill": "move_object", "object": "letter_A_t", "target": "slot_4", "direction": "none"}
+    plan = {"reading": "spell OPENAI", "steps": [step], "done_when": [], "constraints": []}
+    ev = CoreEvent(6, 0, "user_text", f'the user typed: "{text}"', data={"text": text})
+    world = _world({0: "O", 1: "P", 2: "E", 3: "N"}, extra_table=("A", "A", "I", "D"))
+    v = _view(world, plan, {"s5": "running"}, ["s5"], current=step, messages=[text])
+    T = truth(ev, v, SpellTruth(ep, lambda: world))
+    assert T["in_plan_fix"] == ["swap_target:letter_A_t1"] and T["route"] == ["stay_local"] and T["right_now"] == ["carry_on"]
+    # the brain offers exactly that fix on the line (the free twin, never the current cube)
+    from robojev.brain.core.decision import build_questions
+    qs = build_questions(ev, v)
+    assert [k for k in qs["in_plan_fix"]["criteria"] if k.startswith("swap_target")] == ["swap_target:letter_A_t1"]
+    world2 = _world({0: "O", 1: "P", 2: "E", 3: "N"}, extra_table=("A", "I", "D"))                # no twin: nothing to swap to
+    assert truth(ev, _view(world2, plan, {"s5": "running"}, ["s5"], current=step, messages=[text]), SpellTruth(ep, lambda: world2))["in_plan_fix"] == []
+
+
 # ---------------------------------------------------------------- episodes on the stub
+
+
+def test_the_other_letter_swaps_in_the_fast_loop_and_the_controls_ask_the_planner():
+    """OPENAI with two A cubes; "use the other A" as the arm reaches for one. Every decider spells the
+    word (the end state is unchanged); the judge records how long the arm's target took to change
+    and whether a planner was asked for it: the mock swaps in-plan within its own latency, the
+    controls go round the planner."""
+    text = "use the other A"
+    ep = Episode(0, 0, "train", "spell OPENAI", "OPENAI", "OPENAAID", "", 6,
+                 (Event(0, "other_letter", When("reaching", 0, 8.0), text=text, label="A"),), "whatever you can manage", "OPENAI")
+    seen = {}
+    for decider in CONTROLS:
+        rec, dump = run_episode(ep, Options(world="stub", quiet=True, pick_s=0.8), decider)
+        assert rec.outcome == "done" and rec.exact and rec.row == list("OPENAI"), (decider, rec)
+        e = next(x for x in rec.events if x.kind == "other_letter")
+        assert e.what == "text", (decider, rec.notes)
+        seen[decider] = (e, dump)
+    e, dump = seen["mock"]
+    assert e.change and e.change.startswith("start pick_and_place(letter_A") and e.time_to_change_s is not None and e.time_to_change_s < 1.0   # 0.15 s unloaded; the live bar is 0.5
+    assert not e.planner_called and rec_calls(dump) == 1
+    fixes = [x for x in dump["brain_log"] if x.get("note") == "fix"]
+    assert len(fixes) == 1 and fixes[0]["fix"].startswith("swap_target:letter_A") and fixes[0]["ms"] < 1000
+    reached, twin = next((f["object"], f["note"]) for f in dump["fired"] if f["kind"] == "other_letter")
+    assert fixes[0]["fix"] == f"swap_target:{twin}" and reached != twin
+    for decider in ("rules", "always_llm"):
+        e, dump = seen[decider]
+        assert e.planner_called, decider
+        assert not [x for x in dump["brain_log"] if x.get("note") == "fix"]
+    print(f"\nOTHER_LETTER on the stub: mock target change {seen['mock'][0].time_to_change_s} s, planner asked: "
+          + ", ".join(f"{d} {seen[d][0].planner_called}" for d in CONTROLS))
+
+
+def rec_calls(dump: dict) -> int:
+    return len(dump["llm"])
 
 
 def test_the_offline_planner_spells_the_word_on_the_stub():
@@ -309,6 +380,7 @@ def test_six_episode_compare_on_the_stub_all_three_deciders_finish_most(tmp_path
     assert not FORBIDDEN.search(" ".join(judge))                 # the record's fields grade outcomes, not answers
     text = table(summaries)
     assert "mean outcome score" in text and "always_llm + mock" in text
+    assert all(isinstance(s.planner_called, dict) for s in summaries)
     print("\n" + text)
 
 

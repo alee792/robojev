@@ -6,9 +6,10 @@ unchanged. Outside it (the planner's schema, the LLM's answers, every start()) t
 and arguments are used. Two things differ, and are translated only here:
 
 - Names. e12v2 calls the catalog's `pick_and_place` "move_object"; every other standard skill has
-  the same name in both.
-- Argument slots. The catalog's `place` (pick_and_place) and `onto` (stack_on) both ride in e12v2's
-  `target`; `object` and `direction` keep their names. Any other argument (push's `distance`,
+  the same name in both (insert and reorient, catalog 0.2, were added to the core under their own
+  names).
+- Argument slots. The catalog's `place` (pick_and_place, insert) and `onto` (stack_on) all ride in
+  e12v2's `target`; `object` and `direction` keep their names. Any other argument (push's `distance`,
   hold's `seconds`) gets a step field of its own name, which e12v2's code carries along and ignores.
 
 Only standard skills are plannable. e12v2's validator replays each step's effect on a symbolic world
@@ -25,7 +26,7 @@ from .. import catalog
 from ..protocol import Manifest, SkillSpec
 
 CORE_NAME = {"pick_and_place": "move_object", "stack_on": "stack_on", "push": "push",
-             "hand_over": "hand_over", "survey": "survey", "hold": "hold"}
+             "hand_over": "hand_over", "insert": "insert", "reorient": "reorient", "survey": "survey", "hold": "hold"}
 CATALOG_NAME = {core: cat for cat, core in CORE_NAME.items()}
 CORE_FIELDS = ("object", "target", "direction")       # e12v2's own step fields, besides id and skill
 SLOT = {"object": "object", "place": "target", "onto": "target", "direction": "direction"}

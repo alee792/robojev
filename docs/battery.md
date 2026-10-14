@@ -49,6 +49,7 @@ Seeded; `episodes(n, seed, split)` gives the same `n` episodes every time. One e
 | event | what happens | when |
 |---|---|---|
 | `new_word` | a different word from the 20 the demo's letters spell (PANDA, PAID, IDEA, OPEN, ...) | mid-carry after k letters are in place, or at a time |
+| `other_letter` | "use the other A" / "take the other one instead": a letter of the word that has a twin free on the table; the word is unchanged, so the outcome score is too. The judge records how long the arm's target took to change (a `start()` for another cube) and whether a planner was asked for it (`planner_called`); the fast loop's in-plan fix `swap_target` answers it without one, the controls go round the planner | while the arm reaches for that letter, not yet grasped, after k letters are in place |
 | `letter_taken` | a cube the word still needs goes off the table; back 1-2 picks later if it must (`if_needed`) or anyway (`always`) | after k letters are in place |
 | `letter_added` | a parked cube is put on the table | after k letters, or at a time |
 | `letter_nudged` | a cube is moved 3 cm where it lies | after k letters |
@@ -67,8 +68,8 @@ something about (the opening, `new_word`, `chatter`, `wait`, `go_on`, the remark
 event, the letter's return, the reply to a question) has at least four `train` and four `held_out`
 phrasings, disjoint. Offline runs use `train`; the Mac uses `held_out`, and `--paraphrase` rewrites
 every line with a model first (`battery/paraphrase.py`; offline the hook is a no-op). Phrasing
-counts: opening 4 + 4; new_word 5 + 5; chatter 5 + 5; wait 5 + 5; go_on 5 + 5; six remark types at
-4 + 4 each; reply 4 + 4: 52 train, 52 held-out.
+counts: opening 4 + 4; new_word 5 + 5; other_letter 5 + 5; chatter 5 + 5; wait 5 + 5; go_on 5 + 5; six
+remark types at 4 + 4 each; reply 4 + 4: 57 train, 57 held-out.
 
 A world event carries a remark with probability 0.5 ("I'm borrowing this one"); a remark asks for
 nothing, the scene change is the event.
@@ -82,7 +83,7 @@ and arm modes with wall times. Per episode:
 |---|---|
 | `word`, `row`, `prefix`, `span`, `score`, `exact` | the latest word asked; the labels in the positions left to right; how many read the word from the left; how far the row extends; `score = prefix / span` (half a word is 0.5; the word plus a stray cube after it is 5/6; an empty row 0); exact = 1.0 with every gripper empty |
 | `outcome`, `wall_s`, `done_s` | the brain's outcome (done, timeout, gave_up, stopped) and time |
-| `events[]` | per thing the person did: kind, what, when, the phrasing; `time_to_change_s` and `change`: the first visible change in the robot's behaviour after it (a hold, pause, resume, retarget, a new start, STOP, or the server reporting an arm holding, paused, tripped or stopped), descriptively; `finished_right` |
+| `events[]` | per thing the person did: kind, what, when, the phrasing; `time_to_change_s` and `change`: the first visible change in the robot's behaviour after it (a hold, pause, resume, retarget, a new start, STOP, or the server reporting an arm holding, paused, tripped or stopped), descriptively (for `other_letter`: the arm's target changing, a start for another cube); `planner_called`: a planner request between the event and that change; `finished_right` |
 | `planner_calls`, `replans`, `failed_plans`, `decisions`, `decision_ms_p50`, steps started/done/failed | cost |
 | `drops` | spells a cube was in no gripper and 2 cm above the table for over 0.2 s (physics) |
 | `hand_seen`, `hand_min_dist_m`, `hand_contact` | closest approach of the gripper to a reported hand; contact under 5 cm |

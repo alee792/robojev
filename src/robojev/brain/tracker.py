@@ -3,7 +3,10 @@
 Pure bookkeeping, no I/O: the loop decides when, this module says what changes. The rules are
 e12v2's harness rules (docs/v2.md), lifted out of its tick loop:
   - statuses: pending | running | done | failed | skipped | dropped;
-  - in-plan fixes: retry, skip, re_queue, another_step_first, each touching only the queue;
+  - in-plan fixes: retry, skip, re_queue, another_step_first, each touching only the queue; and
+    swap_target, which rewrites the running step's object (and the done conditions that named it at
+    that destination) and leaves the queue alone (`swapped` writes the plan, the loop validates it,
+    `adopt_swap` installs it);
   - a diff from a replan: steps done since the request are not re-run, and a step whose object is
     in the gripper is never dropped (the plan was written before the grasp);
   - done: every measurable done condition true (code measures), every other one true by the
@@ -18,6 +21,7 @@ step (e12v2's position); with several it keeps the step ahead of any later step 
 """
 from __future__ import annotations
 
+import copy
 from collections import Counter
 from collections.abc import Mapping
 
@@ -151,6 +155,33 @@ class PlanTracker:
                 self.status[ev.step_id] = "pending"
                 self.queue.insert(at + 1, ev.step_id)
         return dropped
+
+    # ---------------------------------------------------------------- swap_target
+    def swapped(self, arm: str, oid: str) -> dict | None:
+        """The plan with `arm`'s running grasping step going for `oid` instead of its object, same
+        destination, and every done condition that put the old object there now naming `oid` (the
+        condition is about the destination; the object was the means). Not applied: the loop
+        validates it first. None when no grasping step runs on `arm` or `oid` is its object already."""
+        cur = self.running.get(arm)
+        if self.plan is None or cur is None or cur["skill"] not in P.GRASPING or oid == cur["object"]:
+            return None
+        old, goal = cur["object"], P.step_goal(cur)
+        newp = copy.deepcopy(self.plan)
+        for s in newp["steps"]:
+            if s["id"] == cur["id"]:
+                s["object"] = oid
+        for c in newp["done_when"]:
+            if c["object"] == old and goal is not None and c["target"] in (goal[1], goal[1][3:] if goal[1].startswith("on:") else None):
+                c["object"] = oid
+                c["text"] = c["text"].replace(old, oid)
+        return newp
+
+    def adopt_swap(self, arm: str, newp: dict) -> dict:
+        """Install a plan from `swapped` once it validated and the rewritten step has started. -> the step."""
+        cur = self.running[arm]
+        self.plan = newp
+        self.running[arm] = step = P.steps_by_id(newp)[cur["id"]]
+        return step
 
     # ---------------------------------------------------------------- a replan's diff
     def merge(self, diff: dict, t_request: float, holdings: Mapping[str, str | None]) -> tuple[dict, list[str], list[str]]:

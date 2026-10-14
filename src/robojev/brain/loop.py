@@ -36,10 +36,10 @@ stay_local was escalated by the confidence gate: remarks stay out of the task.
 
 Reconnecting. The server owns the state, so a new Brain on a server whose arm is mid-skill lets that
 skill run: it reads world() and the arm's mode, plans only once the arm is free (so the plan starts
-from the world the skill leaves, and nothing is redone), and never start()s over it. The protocol
-gives no way to learn that skill's id (ArmObs has no skill id and there is no list of skills), so
-the brain recognises its end as the first skill_done/skill_failed for that arm with an id it did not
-start, or, failing that, as the arm reading neither running, holding, paused nor tripped on a
+from the world the skill leaves, and nothing is redone), and never start()s over it. A server need
+not name that skill (ArmObs.skill is optional and there is no list of skills), so the brain
+recognises its end as the first skill_done/skill_failed for that arm with an id it did not start,
+or, failing that, as the arm reading neither running, holding, paused nor tripped on a
 heartbeat tick (an end event can race the subscription, and a server may report an arm frozen by
 an earlier hold() as "holding" with no skill on it at all). A held arm resumes after the usual
 hold; a paused or tripped one waits for a decision.
@@ -91,7 +91,7 @@ from .core import plan as P
 from .core.changes import hand_facts
 from .core.data import LLM_ROUTES, Event, Geometry, Obj
 from .core.data import WorldState as CoreWorld
-from .core.decision import View
+from .core.decision import SWAP, View, swap_object
 
 from .. import catalog
 from ..protocol import ArmSpec, RobotEvent, RobotServer
@@ -610,6 +610,7 @@ class Brain:
     def _user_said(self, text: str) -> None:
         self.user_messages.append(text)
         self.replans.user_spoke()
+        self._observe()         # the line is judged against the world now, not the last tick's (a grasp 150 ms ago matters for a swap)
         for arm in self.arms.values():
             if arm.mode == "paused" and (arm.pause_reason or "").startswith("waiting for the user's answer"):
                 self._arm_to(arm, "holding")          # the answer ends that pause; hold while it is decided
@@ -673,7 +674,7 @@ class Brain:
             if cur is not None and cur["object"] in arm.state.objects:
                 where = arm.state.objects[cur["object"]].where
                 goal = P.step_goal(cur)
-                if cur["skill"] == "push" or where == "gripper" or (goal is not None and where == goal[1]):
+                if cur["skill"] in ("push", "reorient") or where == "gripper" or (goal is not None and where == goal[1]):
                     out.add(cur["object"])
         if self.multi:
             out |= {o.id for o in self.world.objects.values() if o.where.startswith("gripper:")}
@@ -876,11 +877,65 @@ class Brain:
         out["reading"] = kept
 
     def _fix(self, arm: ArmRun, fix: str, ev: Event) -> None:
+        oid = swap_object(fix)
+        if oid is not None:
+            self._swap(arm, oid, ev)
+            return
         other = self._runnable_other(arm, ev) if fix == "another_step_first" else None
         if self.plan.apply_fix(fix, ev, arm.id, arm.state.arm.holding, other):
             arm.ctl.release()
         if fix != "none":
             self._note("fix", arm=arm.id, fix=fix, queue=list(self.plan.queue))
+
+    def _swap(self, arm: ArmRun, oid: str, ev: Event) -> None:
+        """The in-plan fix swap_target (core/decision.py): the running grasping step goes for `oid`
+        instead, same destination. Code, not the decider, says whether it fits: the rewritten plan
+        must validate from the world as it is now (the new object in view and not placed, the
+        destination still free, the arm not holding the old object: a grasp since the view was built
+        makes the first step put the held object down, which the swap does not) and the server must
+        accept the call. Then the new start() cancels the running skill (the protocol's busy-arm rule)
+        and the plan is adopted. Anything that does not fit goes to the planner with the reason, as a
+        correction would. Either way the line is about the end result: it joins user_words."""
+        text, fix = ev.data.get("text", ""), f"{SWAP}:{oid}"
+        cur = self.plan.current(arm.id)
+        newp = self.plan.swapped(arm.id, oid)
+        step = name = args = None
+        if newp is None:
+            errs = ([f"no step is running on {arm.id}"] if cur is None else
+                    [f"the running step ({P.step_text(cur, self.names)}) does not grasp anything"] if cur["skill"] not in P.GRASPING else
+                    [f"{self.name(oid)} is the step's object already"])
+        elif oid not in self.world.objects:
+            errs = [f"{oid} is not in view"]
+        else:
+            self._observe()
+            errs = self.planner.check(newp, self.state, self.world, list(self.plan.queue))
+            if not errs:
+                step = P.steps_by_id(newp)[cur["id"]]
+                name, args = self._call(step)
+                why = arm.ctl.precondition(name, args)
+                if why is None:
+                    try:
+                        arm.ctl.start(name, args)         # cancels the running skill on the server, no event
+                    except ValueError as e:
+                        why = str(e)
+                if why is not None:
+                    errs = [why]
+        if errs:
+            why = "the swap does not fit: " + "; ".join(errs[:3])
+            self._note("fix_refused", arm=arm.id, fix=fix, why=why)
+            self._user_words(text)
+            if self._once(ev, "replan"):
+                self._start_replan("fast_llm", f'{ev.text}; {why}', ev)
+            return
+        old = P.step_text(cur, self.names)
+        self.plan.adopt_swap(arm.id, newp)
+        self.r.steps_started += 1
+        if self._user_words(text):
+            self.words_planned = len(self.user_words)      # the plan now answers the line
+        if arm.mode in ("holding", "paused"):
+            arm.ctl.set_motion(arm.mode)                   # a start() runs the arm; the brain's mode still stands
+        self._note("fix", arm=arm.id, fix=fix, was=old, step=P.step_text(step, self.names), skill_id=arm.ctl.skill_id,
+                   ms=round((self.now() - ev.t) * 1000), queue=list(self.plan.queue))
 
     # ================================================================ the planner
     def _ref(self, ev: Event | None) -> dict:

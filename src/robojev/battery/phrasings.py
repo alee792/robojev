@@ -1,7 +1,7 @@
 """What the person says, by event type, in two halves: `train` phrasings are the ones the offline
 runs use and the ones the rules control was written from (controls.py); `held_out` phrasings are
 kept for the live runs on the Mac, so a decider meets wording nobody tuned for. Every type has at
-least four of each. `{W}` is the word.
+least four of each. `{W}` is the word; `{L}` the letter an `other_letter` line is about.
 
 Nothing here says what the robot should do about a line: that is the brain's, and the battery
 judges only what the row reads afterwards and how long things took (docs/battery.md).
@@ -23,6 +23,14 @@ PHRASINGS: dict[str, dict[str, tuple[str, ...]]] = {
                   "no wait, I meant {W}", "let's do {W} rather than that"),
         "held_out": ("hmm, on second thought, {W}", "can you switch to {W}?", "forget the first word, write {W}",
                      "new word: {W}", "do {W} instead please"),
+    },
+    # the other cube with the same letter, said while the arm reaches for one of two (the end result is
+    # unchanged; which cube spells the letter is the only thing that changes)
+    "other_letter": {
+        "train": ("use the other {L}", "take the other one instead", "not that one, the other {L}", "grab the other {L} please",
+                  "the other one, not that"),
+        "held_out": ("switch to the other {L}", "no, the other one", "I'd rather you took the other {L}", "leave that {L}, use the other",
+                     "the other {L} please"),
     },
     # talk that asks for nothing
     "chatter": {
@@ -74,7 +82,7 @@ PHRASINGS: dict[str, dict[str, tuple[str, ...]]] = {
     },
 }
 
-TEXT_EVENTS = ("new_word", "chatter", "wait")          # events that are a line the person types or says
+TEXT_EVENTS = ("new_word", "other_letter", "chatter", "wait")    # events that are a line the person types or says
 REMARK_EVENTS = ("letter_taken", "letter_added", "letter_nudged", "letter_placed", "hand_near")   # a remark may go with these
 
 
@@ -91,4 +99,6 @@ def check_tables() -> list[str]:
             out.append(f"{kind}: in both halves: {sorted(both)}")
         if kind in ("opening", "new_word") and any("{W}" not in t for s in SPLITS for t in halves[s]):
             out.append(f"{kind}: a phrasing has no {{W}}")
+        if kind == "other_letter" and not any("{L}" in t for s in SPLITS for t in halves[s]):
+            out.append(f"{kind}: no phrasing names the letter")
     return out

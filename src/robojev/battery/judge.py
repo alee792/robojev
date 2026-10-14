@@ -38,7 +38,11 @@ STILL_MODES = ("holding", "paused", "tripped", "stopped")    # arm modes that ar
 class EventRecord:
     """One thing the person did and what followed. `change` names the first visible change in the
     robot's behaviour after it, descriptively (a tool call, or an arm mode the server reported);
-    `time_to_change_s` is how long that took, None if nothing changed before the episode ended."""
+    `time_to_change_s` is how long that took, None if nothing changed before the episode ended. For
+    an other_letter line the change counted is the arm's target changing: a start() for a different
+    cube than the one it was reaching for. `planner_called` says whether a planner request went out
+    between the event and that change (or the episode's end): the cost of the reaction, not its
+    rightness."""
     index: int
     kind: str
     what: str
@@ -47,6 +51,7 @@ class EventRecord:
     time_to_change_s: float | None
     change: str | None
     finished_right: bool
+    planner_called: bool = False
 
 
 @dataclass
@@ -156,6 +161,19 @@ def first_change(perception: Perception, after: float) -> tuple[float, str] | No
     return min(cands, default=None)
 
 
+def target_change(perception: Perception, after: float, reaching: str | None) -> tuple[float, str] | None:
+    """The first start() after wall time `after` for an object other than `reaching`; (when, what)."""
+    for t, tool, args in perception.calls:
+        if t > after and tool == "start" and args[2].get("object") not in (None, reaching):
+            return t, f"start {args[1]}({', '.join(str(v) for v in args[2].values())})"
+    return None
+
+
+def planner_called(r: EpisodeResult, after_s: float, before_s: float | None) -> bool:
+    """Whether the brain asked a planner between `after_s` and `before_s` on its own clock (None: to the end)."""
+    return any(x.get("note") == "llm_request" and x["t"] > after_s and (before_s is None or x["t"] <= before_s) for x in r.log)
+
+
 def judge(ep: Episode, positions: list[str], world: WorldState, r: EpisodeResult, perception: Perception, fired: list[Fired],
           asks: int, t0: float, wall_s: float, decider: str, planner: str, world_name: str,
           parked_s: float | None = None) -> Record:
@@ -167,9 +185,10 @@ def judge(ep: Episode, positions: list[str], world: WorldState, r: EpisodeResult
     exact = score == 1.0 and empty
     events: list[EventRecord] = []
     for f in fired:
-        ch = first_change(perception, f.t)
-        events.append(EventRecord(f.index, f.kind, f.what, round(f.t_s, 3), f.text,
-                                  None if ch is None else round(ch[0] - f.t, 3), None if ch is None else ch[1], exact))
+        ch = target_change(perception, f.t, f.object) if f.kind == "other_letter" and f.what == "text" else first_change(perception, f.t)
+        dt = None if ch is None else round(ch[0] - f.t, 3)
+        events.append(EventRecord(f.index, f.kind, f.what, round(f.t_s, 3), f.text, dt, None if ch is None else ch[1], exact,
+                                  planner_called(r, f.t - t0, None if dt is None else f.t - t0 + dt)))
     stop = None
     stop_f = next((f for f in fired if f.what == "stop"), None)
     letter_ids = [o.id for o in world.objects.values()]

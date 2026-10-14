@@ -27,6 +27,8 @@ SKILLS = {
     "hand_over": "hand_over(object): pick the object up and hand it to the person (target \"person\"); done when the person has taken it.",
     "stack_on": "stack_on(object, target object): pick the object up and set it on top of the target object.",
     "push": "push(object, direction): slide the object about 6 cm in a direction (left, right, toward_robot, away_from_robot; the robot's point of view) with one fingertip, without grasping it.",
+    "insert": "insert(object, target place): pick the object (a rod) up and seat it in a holder (a rack slot, a stand), aligned to the holder's opening.",
+    "reorient": "reorient(object, direction): turn the object where it lies so its front (a tool's handle, a marked face) points left, right, toward_robot or away_from_robot; it stays where it is.",
     "survey": "survey(): lift the gripper and look over the table again.",
     "hold": "hold(): stay still for about a second.",
 }
@@ -42,6 +44,8 @@ CONSTRAINT_KINDS = {
     "keep_out_of": "the object must never be put into the place (\"tray\" = any tray slot); if it gets there, it must be taken out",
 }
 NONE = "none"
+GRASPING = ("move_object", "stack_on", "hand_over", "insert")   # the object ends up in the gripper before it goes anywhere
+MOVE_PLACES = ("slot", "bin", "table")                           # kinds of place move_object may put an object in
 
 
 # ---------------------------------------------------------------- ids for the schema enums
@@ -60,8 +64,8 @@ def _step_schema(ids: dict) -> dict:
             "skill": {"type": "string", "enum": list(SKILLS)},
             "object": {"type": "string", "enum": ids["objects"] + [NONE]},
             "target": {"type": "string", "enum": ids["places"] + ids["objects"] + [NONE],
-                       "description": "a place for move_object, \"person\" for hand_over, an object for stack_on, else none"},
-            "direction": {"type": "string", "enum": list(DIRECTIONS) + [NONE], "description": "push only, else none"},
+                       "description": "a place for move_object, a holder for insert, \"person\" for hand_over, an object for stack_on, else none"},
+            "direction": {"type": "string", "enum": list(DIRECTIONS) + [NONE], "description": "push and reorient only, else none"},
         },
     }
 
@@ -154,13 +158,19 @@ def step_text(step: dict, names: dict | None = None) -> str:
         return f"hand_over({on} to the person)"
     if sk == "push":
         return f"push({on} {step['direction']})"
+    if sk == "insert":
+        return f"insert({on} → {tn})"
+    if sk == "reorient":
+        return f"reorient({on} to face {step['direction']})"
     return f"{sk}()"
 
 
 def step_goal(step: dict) -> tuple | None:
-    """(object, where it ends up) for a step that moves an object."""
+    """(object, where it ends up) for a step that moves an object. A reorient has none: like a push,
+    it leaves the object where it is (it changes the object's front, which the symbolic world tracks
+    separately)."""
     sk = step["skill"]
-    if sk == "move_object":
+    if sk in ("move_object", "insert"):
         return step["object"], step["target"]
     if sk == "stack_on":
         return step["object"], f"on:{step['target']}"
@@ -203,11 +213,13 @@ def keep_out(plan: dict) -> list[tuple[str, str]]:
 
 
 class _Sym:
-    """A symbolic world: where each object is, with capacities, groups and stacks."""
+    """A symbolic world: where each object is, with capacities, groups and stacks, and which way each
+    object's front points (reorient changes it; insert aligns it to the holder's opening)."""
 
     def __init__(self, state: WorldState, holding: str | None):
         self.state = state
         self.where = {o.id: o.where for o in state.objects.values()}
+        self.front = {o.id: getattr(o, "front", None) for o in state.objects.values()}
         if holding:
             self.where[holding] = "gripper"
 
@@ -247,8 +259,20 @@ def _check_step(s: dict, st: WorldState, errs: list):
     if o not in objs:
         errs.append(f"step {s['id']}: unknown object {o}")
         return False
-    if sk == "move_object" and not (t in places and places[t].kind in ("slot", "bin", "table")):
+    if sk == "move_object" and not (t in places and places[t].kind in MOVE_PLACES):
         errs.append(f"step {s['id']}: move_object needs a slot, a bin or table as target, not {t}")
+        return False
+    if sk == "insert":
+        if not (t in places and places[t].kind == "holder"):
+            errs.append(f"step {s['id']}: insert needs a holder as target, not {t}")
+            return False
+        shape = getattr(objs[o], "shape", None)
+        if shape != "rod":
+            what = f"a {shape}" if shape else "of unknown shape"
+            errs.append(f"step {s['id']}: insert takes a rod, and {o} is {what}; a holder is a tight fit for a rod only")
+            return False
+    if sk == "reorient" and d not in DIRECTIONS:
+        errs.append(f"step {s['id']}: reorient needs a direction (one of {', '.join(DIRECTIONS)})")
         return False
     if sk == "stack_on" and (t not in objs or t == o):
         errs.append(f"step {s['id']}: stack_on needs another object as target, not {t}")
@@ -297,8 +321,8 @@ def validate(plan: dict, state: WorldState, holding: str | None = None, queue: l
     sym = _Sym(state, holding)
     if holding and order:
         first = by_id[order[0]]
-        if first["object"] != holding or first["skill"] not in ("move_object", "stack_on", "hand_over"):
-            errs.append(f"the arm is holding {holding}: the first step must put it somewhere (move_object, stack_on or hand_over of {holding})")
+        if first["object"] != holding or first["skill"] not in GRASPING:
+            errs.append(f"the arm is holding {holding}: the first step must put it somewhere (move_object, stack_on, hand_over or insert of {holding})")
     elif holding and not order:
         errs.append(f"the arm is holding {holding}: the plan needs a step that puts it somewhere")
     for sid in order:
@@ -314,7 +338,7 @@ def validate(plan: dict, state: WorldState, holding: str | None = None, queue: l
         top = sym.covered(o, but=NONE)
         if top and s["skill"] != "push":
             errs.append(f"step {sid}: {o} has {top} on top of it at that point")
-        if s["skill"] == "move_object":
+        if s["skill"] in ("move_object", "insert"):
             p = places[t]
             if p.capacity == 1:
                 occ = sym.occupant(t, but=o)
@@ -324,6 +348,12 @@ def validate(plan: dict, state: WorldState, holding: str | None = None, queue: l
                 if ko == o and (t == kp or t in getattr(places.get(kp), "members", ())):
                     errs.append(f"step {sid}: puts {o} into {t}, which a constraint forbids")
             sym.where[o] = t
+            if s["skill"] == "insert" and getattr(p, "yaw", None) is not None:
+                sym.front[o] = None            # the holder's opening sets it; the world reports the yaw once seated
+        elif s["skill"] == "reorient":
+            if sym.where.get(o) in ("person", "gripper"):
+                errs.append(f"step {sid}: {o} is not on the table to be turned")
+            sym.front[o] = s["direction"]
         elif s["skill"] == "stack_on":
             occ = sym.covered(t, but=o)
             if occ:

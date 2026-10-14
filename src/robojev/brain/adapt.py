@@ -6,12 +6,24 @@ keeps them unchanged: nothing past this module sees a metre, nothing before it s
 """
 from __future__ import annotations
 
+import math
+
 from .core.data import ArmObs, Geometry, HandObs, Obj, Place, WorldState
 
 from ..protocol import ArmSpec
 from ..protocol import WorldState as RobotWorld
 
 CM = 100.0
+FRONTS = ("away_from_robot", "left", "toward_robot", "right")   # by quadrant of the yaw: +x, +y, -x, -y in the base frame
+
+
+def front_of(yaw: float | None) -> str | None:
+    """The direction word for a yaw (rad about +z, 0 = +x away from the robot, +y to its left), by the
+    nearest quadrant: the planner and the decider talk in the catalog's four directions, not radians.
+    None when perception did not report one."""
+    if yaw is None:
+        return None
+    return FRONTS[round(yaw / (math.pi / 2)) % 4]
 
 
 def geometry(arm: ArmSpec, lookahead_s: float) -> Geometry:
@@ -41,10 +53,11 @@ def core_state(ws: RobotWorld, arm: str, geom: Geometry, lookahead_s: float) -> 
     arm's gripper is the one e12v2 reasons about."""
     a = ws.arms[arm]
     objs = {o.id: Obj(o.id, o.name, "", _number(o.label), f"{o.size * CM:.0f} cm" if o.size else "",
-                      o.x * CM, o.y * CM, o.z * CM, _where(o.where, arm), label=o.label or None)
-
+                      o.x * CM, o.y * CM, o.z * CM, _where(o.where, arm), label=o.label or None,
+                      shape=getattr(o, "shape", None), front=front_of(getattr(o, "yaw", None)))
             for o in ws.objects.values()}
-    places = {p.id: Place(p.id, p.name, p.kind, p.x * CM, p.y * CM, p.capacity, tuple(p.members), p.radius * CM)
+    places = {p.id: Place(p.id, p.name, p.kind, p.x * CM, p.y * CM, p.capacity, tuple(p.members), p.radius * CM,
+                          yaw=getattr(p, "yaw", None))
               for p in ws.places.values()}
     hand = None
     if ws.hands:

@@ -3,14 +3,19 @@
 A kinematic toy behind the real protocol (protocol.py), so the brain can be exercised on a real
 clock without MuJoCo or a model. A clock thread advances skills on wall time:
 
-- Grasping skills (pick_and_place, stack_on, hand_over) reach for the object for the first half of
-  their duration. At the midpoint they grasp if the object is still within `GRASP_TOLERANCE` of
-  where the arm aimed (where it was at start, or at the last retarget()), else they fail with
+- Grasping skills (pick_and_place, stack_on, hand_over, insert) reach for the object for the first
+  half of their duration. At the midpoint they grasp if the object is still within `GRASP_TOLERANCE`
+  of where the arm aimed (where it was at start, or at the last retarget()), else they fail with
   "grasp_failed". For the second half the object rides in the gripper; on completion it is set down
   at the destination. A one-object place that filled up meanwhile fails the skill with "blocked".
+  insert's destination is a holder; the seated object's yaw becomes the holder's opening yaw. An
+  occupied holder is refused at precondition() (the brain can see that before it starts).
 - push reaches the object, then on completion the object teleports `distance` m in the direction
   asked and lands in whichever slot or bin its centre is now inside (else on the table).
+- reorient reaches the object (first half), then turns it where it lies (second half): on completion
+  its yaw is the direction asked; it never leaves its place or enters the gripper.
 - survey and hold just take their time.
+- ArmObs.skill names the skill on each arm (None when idle), as the protocol allows.
 
 A scripted person can move an object, put a hand near either arm's gripper, or trip either arm's
 safety filter, at a time or when a condition on the world holds, so scene_change and safety_trip
@@ -81,10 +86,12 @@ from robojev.protocol import (ArmObs, ArmSpec, GripperSpec, HandObs, Manifest, O
 WORKSPACE = ((0.10, 0.50), (-0.30, 0.30), (-0.02, 0.35))
 HOME = (0.20, 0.0)
 TRAVEL_Z = 0.12
-GRASPING = ("pick_and_place", "stack_on", "hand_over")
+GRASPING = ("pick_and_place", "stack_on", "hand_over", "insert")     # the object rides in the gripper to a destination
+IN_PLACE = ("push", "reorient")                                        # the object is handled where it lies
 DIRECTION_XY = {"left": (0.0, 1.0), "right": (0.0, -1.0), "toward_robot": (-1.0, 0.0), "away_from_robot": (1.0, 0.0)}
+DIRECTION_YAW = {"away_from_robot": 0.0, "left": math.pi / 2, "toward_robot": math.pi, "right": -math.pi / 2}   # rad about +z
 GRASP_TOLERANCE = 0.02      # m: an object moved further than this since the arm aimed is missed
-DURATIONS = {"pick_and_place": 1.0, "stack_on": 1.0, "hand_over": 1.5, "push": 0.6, "survey": 0.5}
+DURATIONS = {"pick_and_place": 1.0, "stack_on": 1.0, "hand_over": 1.5, "insert": 1.2, "reorient": 0.8, "push": 0.6, "survey": 0.5}
 
 
 def widowx_like(robot: str = "widowx-stub") -> Manifest:
@@ -152,6 +159,22 @@ def sort_scene(numbers=(1, 3, 5), n_slots: int | None = None) -> tuple[list[Obje
                       PlaceObs("person", "the person", "person", 0.55, 0.0, 0)]
     objs = [ObjectObs(f"block_{k}", f"block {k}", 0.20, 0.15 - 0.10 * i, 0.0, "table", label=str(k), size=0.04)
             for i, k in enumerate(numbers)]
+    return objs, places
+
+
+def tools_scene() -> tuple[list[ObjectObs], list[PlaceObs]]:
+    """Three surgical tools (rods: a scalpel, forceps, scissors) lying in a row on the table, their
+    handles pointing different ways, in front of a rack of three holders whose openings face the
+    robot. A "rack" group, the table and the person are places too. Every object carries `yaw` and
+    `shape`, every holder `yaw`, so insert and reorient have something to work on."""
+    holders = [PlaceObs(f"holder_{i}", f"rack holder {i}" + (" (the leftmost)" if i == 1 else " (the rightmost)" if i == 3 else ""),
+                        "holder", 0.36, 0.10 - 0.10 * (i - 1), 1, yaw=math.pi) for i in (1, 2, 3)]
+    places = holders + [PlaceObs("rack", "the rack (any holder)", "group", 0.36, 0.0, 0, tuple(h.id for h in holders)),
+                        PlaceObs("table", "the table", "table", 0.22, -0.22, 0, radius=0.30),
+                        PlaceObs("person", "the person", "person", 0.55, 0.0, 0)]
+    tools = (("scalpel", 0.0), ("forceps", math.pi / 2), ("scissors", -math.pi / 2))
+    objs = [ObjectObs(name, f"the {name}", 0.20, 0.12 - 0.12 * i, 0.0, "table", label=name, size=0.12, yaw=yaw, shape="rod")
+            for i, (name, yaw) in enumerate(tools)]
     return objs, places
 
 
@@ -354,6 +377,7 @@ class StubRobotServer:
                 r.zone_reach = not r.grasped and self._in_zone(*r.aim)
                 r.zone_carry = self._in_zone(*self._dest(r))
             self._runs[sid] = r
+            a.skill = sid
             self._mode(arm, "running")
         return sid
 
@@ -385,6 +409,7 @@ class StubRobotServer:
                     o = self._objs[a.holding]
                     o.where, o.x, o.y, a.holding = "table", a.x, a.y, None
                 a.x, a.y, a.z = *self._homes[a.id], self._specs[a.id].travel_z
+                a.skill = None
                 self._mode(a.id, "stopped")
         self._emit(evs)
 
@@ -485,18 +510,18 @@ class StubRobotServer:
                 name = o.name if o is not None else r.args.get("object")
                 return [self._fail(r, f"grasp_failed: {name} is no longer where the arm reached for it")]
             r.grasped = True
-            if r.name != "push":
+            if r.name not in IN_PLACE:
                 o.where, a.holding = f"gripper:{r.arm}", o.id
             if not self._zone_free(r):            # the carry goes into the zone and the other arm is in it
                 r.elapsed = r.duration / 2
                 a.x, a.y = r.aim
-                if r.name != "push":
+                if r.name not in IN_PLACE:
                     o.x, o.y = a.x, a.y
                 return []
         dest = self._dest(r)
         k = max(0.0, (f - 0.5) / 0.5)
         a.x, a.y = r.aim[0] + (dest[0] - r.aim[0]) * k, r.aim[1] + (dest[1] - r.aim[1]) * k
-        if r.name != "push":
+        if r.name not in IN_PLACE:
             o.x, o.y = a.x, a.y
         return [self._finish(r)] if f >= 1.0 else []
 
@@ -504,6 +529,8 @@ class StubRobotServer:
         if r.name == "push":
             dx, dy = DIRECTION_XY[r.args["direction"]]
             return (r.aim[0] + r.args["distance"] * dx, r.aim[1] + r.args["distance"] * dy)
+        if r.name == "reorient":
+            return r.aim                          # turned where it lies
         if r.name == "hand_over":
             p = self._places.get("person")
             return (p.x, p.y) if p is not None else (0.5, 0.0)
@@ -531,12 +558,14 @@ class StubRobotServer:
         oid = r.args.get("object")
         if r.name in GRASPING:
             a, o = self._arms[r.arm], self._objs[oid]
-            if r.name == "pick_and_place":
+            if r.name in ("pick_and_place", "insert"):
                 p = self._places[r.args["place"]]
                 occ = next((x.name for x in self._objs.values() if x.where == p.id and x.id != oid), None)
                 if p.capacity == 1 and occ is not None:
                     return self._fail(r, f"blocked: {p.name} is occupied by {occ}")
                 where = p.id
+                if r.name == "insert" and p.yaw is not None:
+                    o.yaw = p.yaw                 # seated: the front follows the holder's opening
             elif r.name == "stack_on":
                 base = self._objs[r.args["onto"]]
                 where, o.z = f"on:{base.id}", base.z + (base.size or 0.04)
@@ -548,8 +577,11 @@ class StubRobotServer:
             o = self._objs[oid]
             o.x, o.y = self._dest(r)
             o.where = self._landed(o)
+        elif r.name == "reorient":
+            self._objs[oid].yaw = DIRECTION_YAW[r.args["direction"]]
         r.state = "done"
         self._leave_zone(r)
+        self._arms[r.arm].skill = None
         self._mode(r.arm, "idle")
         return self._ev("skill_done", f"{r.name} finished: {self._phase(r)}", skill_id=r.id, arm=r.arm, object=oid)
 
@@ -558,6 +590,7 @@ class StubRobotServer:
         reads "failed" until its next start (`idle=False`: the caller sets the arm's mode)."""
         r.state, r.reason = "failed", why
         self._leave_zone(r)
+        self._arms[r.arm].skill = None
         if idle:
             self._mode(r.arm, "failed")
         return self._ev("skill_failed", why, skill_id=r.id, arm=r.arm, object=r.args.get("object"), data={"reason": why})
@@ -622,7 +655,7 @@ class StubRobotServer:
         if not _inside(self._specs[arm].workspace, o.x, o.y):
             return f"unreachable: {o.name} is outside {arm}'s reach"
         top = next((x.name for x in self._objs.values() if x.where == f"on:{o.id}"), None)
-        if skill in GRASPING:
+        if skill in GRASPING or skill == "reorient":           # reorient regrasps the object where it lies
             g = self._specs[arm].gripper
             if g is None or not g.can_grasp:
                 return f"precondition: {arm} cannot grasp"
@@ -636,9 +669,20 @@ class StubRobotServer:
                 return f"precondition: {args['place']} is not a place to put things"
             if p.kind != "table" and not _inside(self._specs[arm].workspace, p.x, p.y):
                 return f"unreachable: {p.name} is outside {arm}'s reach"
+        if skill == "insert":
+            p = self._places.get(args["place"])
+            if p is None or p.kind != "holder":
+                return f"precondition: {args['place']} is not a holder"
+            if o.shape is not None and o.shape != "rod":
+                return f"precondition: {o.name} is a {o.shape}; a holder takes a rod"
+            if not _inside(self._specs[arm].workspace, p.x, p.y):
+                return f"unreachable: {p.name} is outside {arm}'s reach"
+            occ = next((x.name for x in self._objs.values() if x.where == p.id and x.id != o.id), None)
+            if occ is not None:
+                return f"precondition: {p.name} is occupied by {occ}"
         if skill == "stack_on" and (args["onto"] not in self._objs or args["onto"] == o.id):
             return f"precondition: {args['onto']} is not another object in view"
-        if skill == "push" and o.where.startswith("gripper:"):
+        if skill in IN_PLACE and o.where.startswith("gripper:"):
             return f"precondition: {o.name} is in the gripper"
         return None
 
@@ -660,19 +704,22 @@ class StubRobotServer:
             return "holding still"
         o = self._objs.get(r.args.get("object", ""))
         on = o.name if o is not None else r.args.get("object", "")
-        dest = (self._places[r.args["place"]].name if r.name == "pick_and_place" else
+        dest = (self._places[r.args["place"]].name if r.name in ("pick_and_place", "insert") else
                 self._objs[r.args["onto"]].name if r.name == "stack_on" else
-                "the person" if r.name == "hand_over" else r.args.get("direction", ""))
+                "the person" if r.name == "hand_over" else r.args.get("direction", "").replace("_", " "))
         if r.state == "done":
-            return f"{on} pushed {dest}" if r.name == "push" else f"{on} put down at {dest}"
+            return (f"{on} pushed {dest}" if r.name == "push" else f"{on} turned to face {dest}" if r.name == "reorient" else
+                    f"{on} seated in {dest}" if r.name == "insert" else f"{on} put down at {dest}")
         if r.zone_wait is not None and r.active:
-            what = (f"holding {on}" if r.grasped and r.name != "push" else
+            what = (f"holding {on}" if r.grasped and r.name not in IN_PLACE else
                     f"next to {on}" if r.grasped else f"not yet at {on}")
             return f"waiting outside the shared zone for {r.zone_wait} to leave it, {what}"
         if r.name == "push":
             return f"pushing {on} {dest}" if r.grasped else f"moving to {on} to push it {dest}, not yet touching it"
+        if r.name == "reorient":
+            return f"turning {on} to face {dest}" if r.grasped else f"moving to {on} to turn it {dest}, not yet grasped"
         if r.grasped:
-            return f"carrying {on} to {dest}, not yet released"
+            return f"carrying {on} to {dest}, not yet {'seated' if r.name == 'insert' else 'released'}"
         return f"moving to {on} to pick it up, not yet grasped"
 
     @staticmethod
@@ -685,7 +732,7 @@ class StubRobotServer:
             return "wait_zone"
         if not r.grasped:
             return "reach"
-        return "push" if r.name == "push" else "carry"
+        return {"push": "push", "reorient": "turn"}.get(r.name, "carry")
 
     def _heading(self, r: _Run) -> tuple[float, float] | None:
         if not r.active or r.aim is None:

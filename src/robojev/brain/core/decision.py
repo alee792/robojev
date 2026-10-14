@@ -6,7 +6,7 @@ what the event is about. Code does the arithmetic (distances become named bands,
 current step's), and offers only options it has checked apply. Questions:
 
   right_now      Spotter   Choice: carry_on / hold / pause / back_off / re_target / resume
-  in_plan_fix    Sequencer Choice: none / retry / skip / re_queue / another_step_first
+  in_plan_fix    Sequencer Choice: none / retry / skip / re_queue / another_step_first / swap_target:<object>
   route          Router    Choice: stay_local / fast_llm / capable_llm / ask_user
   done.<id>      progress  Noul per done condition code cannot measure ("is it true that ...?")
   check.<object> plan check Noul per object the plan never mentions (yes = something is wrong)
@@ -22,14 +22,25 @@ carrying on through such a correction (docs/live-results.md, section 1).
 On `plan_arrived` only `right_now` and the plan-check Nouls are asked: a new plan is presumed good
 and goes back to the planner only on a specific plan-check yes, never on the generic route question
 (docs/v2.md "The decision"; core/combine.py has the numbers).
+
+`swap_target:<object>` is the one in-plan fix built per event. Mid-reach the user says "actually, the
+scalpel": the right answer is to go for the other object now, same destination, nothing else in the
+plan touched, and it has to happen in the fast loop (about 150 ms), not after a planner call. Code
+offers it only when it is obvious: a typed line while a grasping step is running whose object is
+not yet in the gripper, for each other object (at most three) the line names (its name or label as
+a word; a one-letter label only as the capital written on it, "a" being an article) or, when the
+line says "other" or "another", each object sharing the current one's label (two A cubes). The
+decider picks one or none; the loop re-validates the rewritten plan in code and sends anything that
+does not fit to the planner instead.
 """
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 
 from .changes import hand_band
-from .plan import NONE, mentioned, step_goal, step_text, steps_by_id
+from .plan import GRASPING, NONE, mentioned, step_goal, step_text, steps_by_id
 from .data import WorldState, dxy, seg_dist
 
 # ---------------------------------------------------------------- what the harness shows a decider
@@ -114,6 +125,79 @@ FIX_CRITERIA = {
     },
 }
 
+SWAP = "swap_target"
+_OTHER_RE = re.compile(r"\b(other|another)\b", re.I)
+MAX_SWAP_CANDIDATES = 3
+
+
+def swap_fix(oid: str) -> str:
+    return f"{SWAP}:{oid}"
+
+
+def swap_object(fix: str) -> str | None:
+    """The object id a swap_target fix names, or None for any other fix."""
+    return fix[len(SWAP) + 1:] if fix.startswith(SWAP + ":") else None
+
+
+def _word_in(text: str, phrase: str | None, exact_case: bool = False) -> bool:
+    if not phrase:
+        return False
+    return re.search(rf"(?<!\w){re.escape(phrase)}(?!\w)", text, 0 if exact_case else re.I) is not None
+
+
+_LETTER_I = re.compile(r"\b(letter|the|other|an)\s+I(?!\w)", re.I)
+
+
+def names_in(text: str, o) -> bool:
+    """Whether a typed line names object `o`: its name as a phrase, or its label as a word. A
+    one-character label is matched as written (the capital on a letter cube), so the article "a"
+    does not name the letter A; the letter I is named only as "the I", "letter I", "the other I",
+    since a bare capital I is the pronoun."""
+    if _word_in(text, o.name):
+        return True
+    lab = o.label or ""
+    if len(lab) != 1:
+        return _word_in(text, lab)
+    if lab == "I":
+        return _LETTER_I.search(text) is not None
+    return _word_in(text, lab, exact_case=True)
+
+
+def swap_candidates(text: str, v: View) -> list[str]:
+    """Objects the running grasping step could go for instead (module doc): named in `text`, or, when
+    it says "other"/"another", sharing the current object's label. Never the current object, nothing
+    held or taken by the person; the named ones first, then by id; at most MAX_SWAP_CANDIDATES."""
+    cur = v.current
+    if not text or cur is None or cur["skill"] not in GRASPING or v.grasped or v.status.get(cur["id"]) != "running":
+        return []
+    cur_o = v.state.obj(cur["object"])
+    other = _OTHER_RE.search(text) is not None and cur_o is not None and bool(cur_o.label)
+    named, same = [], []
+    for oid, o in sorted(v.state.objects.items()):
+        if oid == cur["object"] or o.where in ("gripper", "person") or o.where.startswith("gripper:"):
+            continue
+        if names_in(text, o):
+            named.append(oid)
+        elif other and o.label == cur_o.label:
+            same.append(oid)
+    return (named + same)[:MAX_SWAP_CANDIDATES]
+
+
+def fix_criteria(fix: str, v: View) -> dict:
+    """The criteria text for one offered fix: the table above, or, for a swap, the text written for
+    this event's objects (Jev reads literally: it must name them)."""
+    oid = swap_object(fix)
+    if oid is None:
+        return FIX_CRITERIA[fix]
+    cur = v.name(v.current["object"]) if v.current else "the current object"
+    new = v.name(oid)
+    return {
+        "what": f"The user wants {new} handled instead of {cur}, for the same destination; the rest of the plan stands. "
+                f"The arm has not grasped {cur} yet, so it can go for {new} now.",
+        "not_for": f"a line that only mentions {new} (a remark, a question, a word about something else); the user wanting a "
+                   f"different destination or a different end result (that is a planner's job); {cur} already in the gripper",
+    }
+
 ROUTE_CRITERIA = {
     "stay_local": {
         "what": "The plan still holds as written, with at most the fix above: steps finishing, objects moved that their own steps will still handle, a placed object to be put back, hands, waits, remarks, temporary failures.",
@@ -178,6 +262,9 @@ def object_fact(v: View, oid: str) -> dict:
     a = v.state.arm
     st, s = object_step(v, oid)
     f = {"name": v.name(oid), "where": _where_text(v, o.where) if o else "not in view"}
+    what = _shape_text(o)
+    if what:
+        f["shape"] = what
     if o and o.where != "gripper":
         f["distance_from_gripper"] = hand_band(dxy((a.x, a.y), (o.x, o.y)))
         f["in_the_arms_path"] = "yes" if v.path_to and seg_dist((o.x, o.y), (a.x, a.y), v.path_to) < 6 and o.where != "gripper" else "no"
@@ -189,6 +276,17 @@ def object_fact(v: View, oid: str) -> dict:
         f["its_step"] = f"{step_text(s, v.names)}: {st}" + ("" if st != "done" else (", and it is still there" if at_goal else ", but it is no longer there"))
     f["is_the_current_steps_object"] = "yes" if v.current and v.current.get("object") == oid else "no"
     return f
+
+
+def _shape_text(o) -> str | None:
+    """"a rod, its front pointing left": what the object is and which way it faces, when known."""
+    if o is None:
+        return None
+    shape, front = getattr(o, "shape", None), getattr(o, "front", None)
+    bits = [f"a {shape}"] if shape else []
+    if front:
+        bits.append(f"its front pointing {front.replace('_', ' ')}")
+    return ", ".join(bits) or None
 
 
 def nearby(v: View, focus: set, k: int = 5) -> list[dict]:
@@ -340,6 +438,8 @@ def offered_fixes(event, v: View) -> list[str]:
             opts.append("re_queue")
     if event.kind == "step_failed" and v.runnable_other:
         opts.append("another_step_first")
+    if event.kind == "user_text":
+        opts += [swap_fix(o) for o in swap_candidates(event.data.get("text", ""), v)]
     return opts
 
 
@@ -363,7 +463,7 @@ def build_questions(event, v: View, groups=("right_now", "in_plan_fix", "route")
         qs["in_plan_fix"] = {
             "type": "choice",
             "instructions": {"question": "Can `event` be absorbed within the current plan with one of these fixes, without writing new steps or changing the task?"},
-            "criteria": {k: FIX_CRITERIA[k] for k in fixes},
+            "criteria": {k: fix_criteria(k, v) for k in fixes},
         }
     if "route" in groups and event.kind != "plan_arrived":     # a new plan: the plan check alone decides (module doc)
         qs["route"] = {

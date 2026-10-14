@@ -30,9 +30,10 @@ class Goal:
     assign: dict                                   # object -> place id | "on:<object>" | "person"
     constraints: list = field(default_factory=list)  # plan-format constraints (no ids)
     stays: list = field(default_factory=list)      # objects the task names that should not move (a tower's base)
+    fronts: dict = field(default_factory=dict)     # object -> the direction its front must point (a reorient; "other" done condition)
 
     def mentions(self) -> set:
-        m = set(self.assign) | {c["object"] for c in self.constraints} | set(self.stays)
+        m = set(self.assign) | {c["object"] for c in self.constraints} | set(self.stays) | set(self.fronts)
         m |= {v[3:] for v in self.assign.values() if v.startswith("on:")}
         return m
 
@@ -49,6 +50,9 @@ class Goal:
             if c["kind"] == "keep_out_of":
                 out.append({"id": f"d{j}", "text": f"{c['object']} is not in {c['place']}", "object": c["object"],
                             "relation": "not_in", "target": c["place"]})
+        for k, (o, d) in enumerate(self.fronts.items(), len(out) + 1):
+            # code cannot measure a front against the plan's words: Jev judges it from the state ("other")
+            out.append({"id": f"d{k}", "text": f"{o}'s front points {d.replace('_', ' ')}", "object": o, "relation": "other", "target": P.NONE})
         return out
 
     def plan_constraints(self) -> list[dict]:
@@ -57,7 +61,10 @@ class Goal:
 
 def achieved(goal: Goal, truth_state) -> bool:
     for c in goal.done_when():
-        if not P.measure(c, truth_state):
+        if c["relation"] == "other":
+            if getattr(truth_state.objects.get(c["object"]), "front", None) != goal.fronts.get(c["object"]):
+                return False
+        elif not P.measure(c, truth_state):
             return False
     return truth_state.arm.holding is None
 
@@ -112,6 +119,8 @@ def oracle_plan(goal: Goal, st, holding: str | None = None, reading: str = "") -
             add("stack_on", o, dest[3:])
         elif dest == "person":
             add("hand_over", o, "person")
+        elif places.get(dest) is not None and places[dest].kind == "holder":
+            add("insert", o, dest)
         else:
             add("move_object", o, dest)
         where[o] = dest
@@ -164,6 +173,10 @@ def oracle_plan(goal: Goal, st, holding: str | None = None, reading: str = "") -
         if blocker is None or blocker in forb:
             break
         move(blocker, "table")
+    # 5. fronts: turn each object the goal gives a direction, where it lies, unless it already points that way
+    for o, d in goal.fronts.items():
+        if o in st.objects and getattr(st.objects[o], "front", None) != d and where.get(o) not in ("gripper", "person"):
+            add("reorient", o, d=d)
     return {"reading": reading or "oracle plan", "steps": steps, "done_when": goal.done_when(), "constraints": goal.plan_constraints()}
 
 
@@ -299,7 +312,10 @@ def truth(ev, view, scenario, world) -> dict:
         if u is None:   # an answer to a question: treat as its correction, or as go on
             corr = next((x for x in scenario.utts.values() if x.clarify == ev.data.get("text")), None)
             kind = "correction" if corr else "go_on"
-        if kind == "correction":
+        if kind == "swap":
+            # the in-plan fix when code offers it (the step still reaching); else the planner, as any correction
+            T.update(in_plan_fix=[f"swap_target:{u.swap_to}"], route=["stay_local", "fast_llm"])
+        elif kind == "correction":
             wrong = _running_wrong(view, goal, ts)
             T.update(right_now=["hold"] if wrong else ["hold", "carry_on"], route=llm)
             if view.mode == "paused":
@@ -366,6 +382,10 @@ def _plan_reaches(plan: dict, queue: list, ts, goal: Goal) -> bool:
             where[g[0]] = g[1]
     for o, d in goal.assign.items():
         if where.get(o) != d:
+            return False
+    for o, d in goal.fronts.items():
+        turned = any(byid[sid]["skill"] == "reorient" and byid[sid]["object"] == o and byid[sid]["direction"] == d for sid in queue)
+        if not turned and getattr(ts.objects.get(o), "front", None) != d:
             return False
     for c in goal.constraints:
         if c["kind"] == "keep_out_of":

@@ -5,6 +5,8 @@ and 0-3 events, each at a time or on a condition, each with a phrasing drawn fro
 `train` half offline, `held_out` on the Mac). The event types:
 
     new_word        a different word, spellable from the letters on the table
+    other_letter    "use the other A": said while the arm reaches for a letter that has a duplicate free
+                    on the table; the word, and so the end state, is unchanged
     letter_taken    a letter is taken off the table, and comes back later or not (if a spare covers it)
     letter_added    a letter that was not on the table appears
     letter_nudged   a letter is moved a few cm where it lies
@@ -33,9 +35,9 @@ from dataclasses import asdict, dataclass, field
 
 from .phrasings import OPENING, PHRASINGS, REMARK_EVENTS, SPLITS
 
-EVENT_KINDS = ("new_word", "letter_taken", "letter_added", "letter_nudged", "letter_placed", "chatter", "wait_go_on",
+EVENT_KINDS = ("new_word", "other_letter", "letter_taken", "letter_added", "letter_nudged", "letter_placed", "chatter", "wait_go_on",
                "hand_near", "stop")
-LINE_KINDS = ("opening", "new_word", "chatter", "wait", "go_on", "remark", "reply")
+LINE_KINDS = ("opening", "new_word", "other_letter", "chatter", "wait", "go_on", "remark", "reply")
 
 # Words spellable from the demo's letters O P E N A A I D (docs/showcase-demo.md), as corrections.
 WORDS = ("PANDA", "PAID", "IDEA", "OPEN", "DEAN", "NOPE", "PINE", "PAIN", "PIANO", "DINE", "AIDE", "NAPE", "DOPE", "PANE",
@@ -52,13 +54,15 @@ def spellable(word: str, letters: Sequence[str]) -> bool:
 class When:
     """When an event fires. `kind` "at": `k` picks after the start; "placed": once `k` letters of the
     word in force read right in the positions; "carrying": once that holds and the arm is carrying a
-    letter. `by_picks`: fire anyway this many picks after the start."""
+    letter; "reaching": once that holds and an arm is reaching for the event's letter (not grasped
+    yet) with another cube of that letter free on the table. `by_picks`: fire anyway this many picks
+    after the start."""
     kind: str
     k: float
     by_picks: float
 
     def __post_init__(self) -> None:
-        if self.kind not in ("at", "placed", "carrying"):
+        if self.kind not in ("at", "placed", "carrying", "reaching"):
             raise ValueError(f"unknown When kind {self.kind!r}")
 
 
@@ -70,7 +74,7 @@ class Event:
     when: When
     text: str | None = None                  # the line typed (text events) or the remark that goes with a world event
     word: str | None = None                  # new_word: the word now asked for
-    label: str | None = None                 # letter_taken / letter_added / letter_nudged: the letter concerned
+    label: str | None = None                 # letter_taken / letter_added / letter_nudged / other_letter: the letter concerned
     position: int | None = None              # letter_placed: the position (index into the word in force)
     returns: str | None = None               # letter_taken: "if_needed" (back only if no spare covers it) | "always"
     return_after_picks: float | None = None  # letter_taken: how long after the taking it comes back
@@ -120,6 +124,8 @@ class Episode:
         for e in self.events:
             if e.kind == "new_word":
                 out[e.text] = Line("new_word", e.word)
+            elif e.kind == "other_letter":
+                out[e.text] = Line("other_letter")
             elif e.kind == "chatter":
                 out[e.text] = Line("chatter")
             elif e.kind == "wait_go_on":
@@ -150,7 +156,7 @@ class Grammar:
     positions: int = 6
     n_events: tuple[float, ...] = (0.2, 0.4, 0.3, 0.1)   # weights for 0, 1, 2, 3 events
     kinds: dict[str, float] = field(default_factory=lambda: {
-        "new_word": 3.0, "letter_taken": 2.0, "letter_added": 1.0, "letter_nudged": 1.5, "letter_placed": 1.5,
+        "new_word": 3.0, "other_letter": 1.0, "letter_taken": 2.0, "letter_added": 1.0, "letter_nudged": 1.5, "letter_placed": 1.5,
         "chatter": 2.0, "wait_go_on": 1.5, "hand_near": 1.5})
     caps: dict[str, int] = field(default_factory=lambda: {"new_word": 2})   # per episode; others at most once
     p_remark: float = 0.5
@@ -170,7 +176,17 @@ Paraphrase = Callable[[str, str], str]      # (text, line kind) -> the text rewr
 
 
 def _nominal(w: When) -> float:
-    return {"at": w.k, "placed": w.k + 0.5, "carrying": w.k + 0.7}[w.kind]
+    return {"at": w.k, "placed": w.k + 0.5, "reaching": w.k + 0.6, "carrying": w.k + 0.7}[w.kind]
+
+
+def duplicated(word: str, letters: Sequence[str]) -> list[str]:
+    """The letters of `word` that two or more of `letters` carry, in the word's order, once each."""
+    have = Counter(ch.upper() for ch in letters)
+    out: list[str] = []
+    for ch in word.upper():
+        if have[ch] >= 2 and ch not in out:
+            out.append(ch)
+    return out
 
 
 class Generator:
@@ -228,6 +244,12 @@ class Generator:
                 word = rng.choice(cands) if cands else current
                 e = Event(len(events), k, w, text=say("new_word", word), word=word)
                 current = word
+            elif k == "other_letter":
+                dups = duplicated(current, available)
+                if not dups:
+                    continue                                # no letter of the word has a twin on the table: nothing to swap to
+                lab = rng.choice(dups)
+                e = Event(len(events), k, w, text=say("other_letter").replace("{L}", lab), label=lab)
             elif k == "chatter":
                 e = Event(len(events), k, w, text=say("chatter"))
             elif k == "wait_go_on":
@@ -267,6 +289,9 @@ class Generator:
         if kind in ("wait_go_on", "hand_near"):
             k = rng.randrange(0, 3)
             return When("carrying", k, k + g.fallback_picks)
+        if kind == "other_letter":
+            k = rng.randrange(0, 3)
+            return When("reaching", k, k + g.fallback_picks)
         if kind == "letter_added" and rng.random() < 0.5:
             k = round(rng.uniform(1.0, 2.5), 2)
             return When("at", k, k + g.fallback_picks)
@@ -289,8 +314,9 @@ def _paraphrased(ep: Episode, para: Paraphrase) -> Episode:
         return new or t
     events = []
     for e in ep.events:
-        kind = {"new_word": "new_word", "chatter": "chatter", "wait_go_on": "wait"}.get(e.kind, "remark")
-        events.append(Event(e.index, e.kind, e.when, text(e.text, kind, e.word), e.word, e.label, e.position, e.returns,
+        kind = {"new_word": "new_word", "other_letter": "other_letter", "chatter": "chatter", "wait_go_on": "wait"}.get(e.kind, "remark")
+        keep = e.word or (e.label if e.kind == "other_letter" and e.text and e.label in e.text else None)   # a named letter must survive the rewrite
+        events.append(Event(e.index, e.kind, e.when, text(e.text, kind, keep), e.word, e.label, e.position, e.returns,
                             e.return_after_picks, text(e.return_text, "remark"), text(e.go_on_text, "go_on"),
                             e.go_on_after_s, e.nudge_m, e.hand_for_s, e.hand_dist_m))
     return Episode(ep.seed, ep.index, ep.split, text(ep.opening, "opening", ep.word), ep.word, ep.pool, ep.parked, ep.positions,

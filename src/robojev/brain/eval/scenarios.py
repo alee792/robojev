@@ -16,9 +16,10 @@ from .oracle import Goal
 
 @dataclass
 class Utt:
-    kind: str                     # correction | chatter | wait | go_on
-    version: int | None = None    # corrections: the task version it switches to
+    kind: str                     # correction | chatter | wait | go_on | swap (a correction the in-plan fix swap_target answers)
+    version: int | None = None    # corrections (and swaps): the task version it switches to
     clarify: str | None = None    # what the person answers if asked what they meant
+    swap_to: str | None = None    # swap: the object the running step should go for instead
 
     @property
     def expect_change(self) -> bool:

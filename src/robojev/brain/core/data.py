@@ -25,6 +25,9 @@ class Obj:
     z: float
     where: str
     label: str | None = None  # a letter or number read off it ("A"); objects sharing a label are interchangeable
+    shape: str | None = None  # "cube" | "rod" (handle-like); None when perception cannot tell. Only a rod fits a holder.
+    front: str | None = None  # where its front points (a tool's handle, a marked face): left | right | toward_robot |
+                              # away_from_robot, by quadrant of the reported yaw; None when the yaw is not known
 
 
 @dataclass
@@ -32,12 +35,13 @@ class Place:
 
     id: str
     name: str                 # "tray slot 3 (the leftmost slot)", "the red bin"
-    kind: str                 # slot | bin | table | person | group
+    kind: str                 # slot | bin | table | person | group | zone | holder (a tight fit: insert's target)
     x: float
     y: float
     capacity: int             # 1 = one object; 0 = any number
     members: tuple = ()       # a group ("tray") lists its slots
     radius: float = 3.0       # an object whose centre is this close is "in" the place
+    yaw: float | None = None  # rad, a holder's opening: the way an inserted object's front ends up pointing
 
 
 @dataclass
@@ -149,7 +153,7 @@ class Command:
 # ---------------------------------------------------------------- decisions
 
 RIGHT_NOW = ("carry_on", "hold", "pause", "back_off", "re_target", "resume")
-FIXES = ("none", "retry", "skip", "re_queue", "another_step_first")
+FIXES = ("none", "retry", "skip", "re_queue", "another_step_first", "swap_target")   # swap_target is offered as "swap_target:<object id>"
 ROUTES = ("stay_local", "fast_llm", "capable_llm", "ask_user")
 LLM_ROUTES = ("fast_llm", "capable_llm")
 
