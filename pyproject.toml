@@ -22,6 +22,7 @@ cameras = [
 mcp = [
     "mcp>=2,<3",
 ]
+franka = ["franky-control>=2.0.0"]   # the Franka driver (franky over libfranka); the wheel must match the robot's system version
 
 [project.scripts]
 robojev = "robojev.cli:main"

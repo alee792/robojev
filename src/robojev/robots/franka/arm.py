@@ -28,7 +28,7 @@ from robojev.robots.widowx_sim import scene, skills
 from robojev.robots.widowx_sim.server import TRAVEL_Z as SIM_TRAVEL_Z
 
 ARM_ID = "arm_0"
-BASE_FRAME = "panda_link0"        # the arm's base: +x forward, +y left, +z up, as libfranka reports O_T_EE
+BASE_FRAME = "fr3_link0"          # the arm's base (franka_description's name for the FR3; a Panda's is panda_link0): +x forward, +y left, +z up, as libfranka reports O_T_EE
 
 
 @dataclass(frozen=True)

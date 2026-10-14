@@ -31,34 +31,32 @@ marked **verify**. Keep the external activation device (the stop button) in hand
 
 ## 2. The driver
 
-The server talks to the arm through `robots/franka/driver.py`'s small interface: read the end
-effector, stream a Cartesian setpoint with a straight-down tool and a yaw, move the gripper, stop,
-recover, park. The fake implements it; the real one is one file (`franky_driver.py`, named by
-the conformance tool's error until it exists) over whichever library the control box has:
+The arm is an FR3 (2026-10-14), so the current libfranka line applies and franky's default wheel
+fits a robot on system 5.9.0 or later (`uv sync --extra franka` installs franky 2.0.0, built on
+libfranka 0.21.2). A robot on an older system needs the matching wheel from franky's releases page
+(the release notes have the table: system version -> libfranka -> wheel); install it into the same
+environment and the rest is unchanged. **verify** the system version in Desk before installing.
 
-- **franky**: `Robot.move(CartesianMotion(...), asynchronous=True)` for the setpoint,
-  `Gripper.move_async` / `grasp_async`, `Robot.recover_from_errors()`, `Robot.stop()`. Build must
-  match the libfranka version (their releases page has builds for older versions). **verify**
-- **panda-py**: the same shape with its own names.
+The real driver exists: `robots/franka/franky_driver.py` (`FrankyDriver(ip, ...)`), written against
+franky 2.0.0's API and tested with a stand-in for franky (`tests/test_franky_driver.py`); nothing in
+it has run on an arm. Every constant a real arm fixes is a constructor argument marked VERIFY:
 
-- [ ] Before the server: move the arm between two poses 50 times with the library alone, interrupt
-  one motion and hold, open and close the gripper (S4). Note the time from the stop call to the arm
+- `tip_offset` (m along the tool): 0 if Desk's end-effector frame is already the point between the
+  fingertips (the Franka Hand default, F_T_EE z = 0.1034 m); otherwise the touch-off tells you;
+- `closing_axis` ("y", the Franka Hand's finger axis in the EE frame): if the first yawed grasp
+  turns the wrist the wrong way, this is the knob;
+- `park_q` (Franka's "ready" pose): must clear the tray from everywhere in the workspace box;
+- `torque_threshold` / `force_threshold` (20 Nm / 20 N): a brush of a hand trips, a 4 cm cube does
+  not; franky's own defaults are 20 / 30;
+- `speed_cap` 0.25 m/s next to a person; `grasp_epsilon` 4 cm so a close that stops on the block
+  counts as grasped; `gripper_speed` 0.1 m/s.
+
+Order on the day:
+- [ ] Before the server: with franky alone, move the arm between two poses 50 times, interrupt one
+  motion and hold, open and close the gripper (S4). Note the time from the stop call to the arm
   standing still.
-- [ ] Write `franky_driver.py` against the interface (`FrankyDriver(ip)`); then
-  `--driver franky --preflight-ack "<name>"`. What its author needs to know, and where it comes from:
-  - the robot and system version (Desk), hence the libfranka version (Panda 0.9.x; 0.10+ is FR3
-    only) and the franky or panda-py build to install (their releases pages carry builds for older
-    libfranka; the default PyPI wheel targets the newest);
-  - the flange-to-fingertip offset for the installed hand and fingers, so `read()` reports the
-    fingertip point (about 0.1034 m to the hand plus the fingers), and the closing-axis direction in
-    the end-effector frame, which sets the sign of the yaw;
-  - the grasp epsilons: the policies close 8 mm narrower than the block, so `epsilon_outer` must be
-    at least 0.01 m or libfranka reports a held block as a failed grasp; force 20-30 N to start;
-  - the collision thresholds (Desk or `set_collision_behavior`), what the error strings look like,
-    and whether `recover_from_errors` works from software alone;
-  - a safe park joint pose reachable from everywhere in the box without sweeping the tray;
-  - whether franky's asynchronous move with a changed target preempts cleanly when the same target
-    is re-sent at 50 Hz (a repeat must be a no-op, or it restarts the trajectory every tick).
+- [ ] `--driver franky --preflight-ack "<name>"` on the conformance tool; pass the measured constants
+  by editing the defaults in `franky_driver.py` (one commit, "measured on the arm").
 - [ ] The fake cannot show: joint limits and self-collision at the box's edges for a straight-down
   tool, the real arrival behaviour (sag, overshoot), the gripper's latency, what a reflex looks like,
   how long the park takes and what it sweeps through. Each is a **verify** below.

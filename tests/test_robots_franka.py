@@ -147,7 +147,7 @@ def test_manifest_conforms_and_the_arm_starts_idle_at_the_hover_start(server):
     assert catalog.check_manifest_skills(man.skills) == []
     assert {"pick_and_place", "stack_on", "hand_over", "push"} <= {s.name for s in man.skills}
     arm = man.arms[0]
-    assert arm.id == ARM_ID and arm.base_frame == "panda_link0" and arm.gripper.max_width == pytest.approx(0.08)
+    assert arm.id == ARM_ID and arm.base_frame == "fr3_link0" and arm.gripper.max_width == pytest.approx(0.08)
     assert arm.workspace == ((0.25, 0.75), (-0.40, 0.40), (TABLE_Z + 0.004, TABLE_Z + 0.30))
     assert arm.travel_z == pytest.approx(TRAVEL_Z)
     w = srv.world()
@@ -326,7 +326,7 @@ def test_conformance_runs_on_the_fake_franka(tmp_path, capsys):
     assert FRANKA_PARAMS.settle_s >= 0.3
 
 
-def test_conformance_franka_refusals_name_what_is_missing(tmp_path, capsys):
+def test_conformance_franka_refusals_name_what_is_missing(tmp_path, capsys, monkeypatch):
     f = tmp_path / "blocks.json"
     f.write_text(json.dumps({"table_z": TABLE_Z, "blocks": [{"name": "block_1", "xy": [0.30, -0.08]}]}))
     with pytest.raises(SystemExit):
@@ -335,10 +335,16 @@ def test_conformance_franka_refusals_name_what_is_missing(tmp_path, capsys):
     with pytest.raises(SystemExit):
         trials.main(["--robot", "franka", "--blocks", str(f), "--n", "1"])          # the real driver is the default
     assert "--preflight-ack" in capsys.readouterr().err
+    # the real driver exists; with no arm its connect fails, and that must read as one line naming the address
+    from robojev.robots.franka import franky_driver
+
+    def no_arm(self, ip, **kw):
+        raise ConnectionError(f"no route to {ip}")
+    monkeypatch.setattr(franky_driver.FrankyDriver, "__init__", no_arm)
     with pytest.raises(SystemExit):
-        trials.main(["--robot", "franka", "--driver", "franky", "--blocks", str(f), "--preflight-ack", "me", "--n", "1"])
+        trials.main(["--robot", "franka", "--driver", "franky", "--blocks", str(f), "--preflight-ack", "me", "--n", "1", "--robot-ip", "10.0.0.9"])
     err = capsys.readouterr().err
-    assert "src/robojev/robots/franka/franky_driver.py" in err and "FrankyDriver" in err
+    assert "could not connect to the Franka at 10.0.0.9" in err and "no route to 10.0.0.9" in err and "FCI" in err
     with pytest.raises(SystemExit):
         trials.main(["--robot", "real", "--driver", "franky", "--blocks", str(f), "--n", "1"])
     assert "--robot franka" in capsys.readouterr().err

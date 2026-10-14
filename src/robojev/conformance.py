@@ -612,6 +612,13 @@ def _main_franka(a, ap: argparse.ArgumentParser, rng: random.Random, rec: JsonlR
     if rec is not None:
         rec.note(kind="judge", text=REAL_JUDGE_NOTE)
     verdicts = []
+    try:
+        srv.open()
+    except Exception as e:          # franky raises its own types; a failed connect must read as one line, not a traceback
+        if driver == "fake":
+            raise
+        ap.error(f"could not connect to the Franka at {a.robot_ip or FRANKA_IP}: {e.__class__.__name__}: {e}. Check FCI is active "
+                 "in Desk, the joints are unlocked, no other client holds the connection, and this box is on the robot's network")
     with srv:
         for trial in trials:
             if driver != "fake" and not a.no_prompt:

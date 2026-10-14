@@ -602,8 +602,8 @@ does not exist yet: it is the one file you write today. Read `docs/franka-day-on
 bottom first, then `src/robojev/robots/franka/driver.py` (the interface and how franky maps onto it)
 and `tests/test_robots_franka.py` (what the fake passes; the real arm must pass the same).
 
-**Setup:** `git fetch origin claude/widowx-pair && git checkout claude/widowx-pair && uv sync --extra mcp`;
-`uv run --frozen python -m pytest tests/test_robots_franka.py -q` (12 pass with no arm). Dry run:
+**Setup:** `git fetch origin claude/widowx-pair && git checkout claude/widowx-pair && uv sync --extra mcp --extra franka`;
+`uv run --frozen python -m pytest tests/test_robots_franka.py tests/test_franky_driver.py -q` (26 pass with no arm). Dry run:
 `uv run --frozen robojev-conformance --robot franka --driver fake --blocks blocks.json --skill pick_and_place --n 2`.
 
 **Order of the day** (`docs/franka-day-one.md` has the checklist and the verify items):
@@ -611,9 +611,11 @@ and `tests/test_robots_franka.py` (what the fake passes; the real arm must pass 
    camera) before touching anything.
 1. Robot, FCI, network, `communication_test` for 10 minutes.
 2. The library alone: 50 moves between two poses, an interrupted move held, the gripper.
-3. `src/robojev/robots/franka/franky_driver.py`: `class FrankyDriver(ip)` implementing
-   `FrankaDriver`. Measure the fingertip offset and the yaw sign before the first streamed goal.
-   Commit it on its own.
+3. The driver exists (`src/robojev/robots/franka/franky_driver.py`, written against franky 2.0.0,
+   untested on an arm; `uv sync --extra franka` installs franky for a robot on system 5.9.0+, else the
+   matching wheel from franky's releases). Measure its VERIFY constants (fingertip offset, yaw sign,
+   park pose, collision thresholds) before the first streamed goal and set them as the defaults.
+   Commit that on its own, "measured on the arm".
 4. Touch-off for `table_z`; `blocks.json`; walk the workspace box against the table.
 5. STOP, the activation device, a reflex, hold/pause/resume, each once with the table clear.
 6. Conformance: pick_and_place, stack_on, push, 20 each, `--out experiments/results/franka/`.
